@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Home Binger — Be Kind, Rewind</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230a0f2e'/><text x='32' y='42' font-size='34' text-anchor='middle' fill='%23ff3ea5' font-family='sans-serif' font-weight='900' font-style='italic'>HB</text></svg>">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- 3D store renders into this container -->
+  <div id="scene-container"></div>
+
+  <!-- crosshair (only while browsing) -->
+  <div id="crosshair" class="hidden"></div>
+
+  <!-- floating tooltip when a case is under the crosshair -->
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- top-left: title chip -->
+  <div id="brand-chip" title="Support this and other projects (copies the link)">
+    <span class="vb-logo">HOME BINGER</span>
+    <span class="vb-sub">virtual store</span>
+  </div>
+
+  <!-- top-right buttons -->
+  <div id="hud-buttons">
+    <button id="btn-help" class="hud-btn" title="Controls & help">? Help</button>
+    <button id="btn-menu" class="hud-btn accent" title="Settings & profile">☰ Menu</button>
+  </div>
+
+  <!-- TV QUEUE — what's on deck, shown above the remote while a list plays -->
+  <div id="tv-fs-hud" class="hidden">
+    <div id="tv-fs-top">
+      <span id="tv-fs-title"></span>
+      <button id="tv-fs-close" title="Exit full screen (Esc)">✕ Exit · Esc</button>
+    </div>
+    <div id="tv-fs-bottom">
+      <div id="tv-fs-seek"><div id="tv-fs-buffered"></div><div id="tv-fs-played"></div><div id="tv-fs-thumb"></div></div>
+      <div id="tv-fs-controls">
+        <button id="fs-prev" class="hud-btn" title="Previous">⏮</button>
+        <button id="fs-back" class="hud-btn" title="Back 10 seconds">⏪10</button>
+        <button id="fs-play" class="hud-btn" title="Play / Pause">⏸</button>
+        <button id="fs-fwd" class="hud-btn" title="Forward 10 seconds">10⏩</button>
+        <button id="fs-next" class="hud-btn" title="Next">⏭</button>
+        <input id="fs-vol" type="range" min="0" max="100" value="25" title="Volume">
+        <span id="fs-time">0:00 / 0:00</span>
+      </div>
+    </div>
+  </div>
+  <div id="carry-chip" class="hidden"><span>🎁</span><span id="carry-title"></span>
+    <button id="carry-info" class="hud-btn" title="Details">ℹ</button>
+    <button id="carry-putback" class="hud-btn" title="Put it back">✕</button></div>
+  <div id="shelf-pager" class="hidden"><span id="shelf-pager-label">Shelf</span><button id="shelf-prev" class="hud-btn" title="Previous page of this shelf">◀</button><span id="shelf-page-num">1/1</span><button id="shelf-next" class="hud-btn" title="Next page of this shelf">▶</button></div>
+  <div id="tv-queue" class="hidden"></div>
+
+  <!-- TV REMOTE — bottom bar, appears while something plays on the store TV -->
+  <div id="tv-remote" class="hidden">
+    <span id="remote-room">🎬 THEATER</span>
+    <button id="tv-stop" class="hud-btn" title="Stop — back to the idle screen">⏹</button>
+    <button id="tv-prev" class="hud-btn" title="Previous">⏮</button>
+    <button id="tv-skip-back" class="hud-btn" title="Back 10 seconds">⏪10</button>
+    <button id="tv-play" class="hud-btn" title="Play / Pause">⏸</button>
+    <button id="tv-skip-fwd" class="hud-btn" title="Forward 10 seconds">10⏩</button>
+    <button id="tv-next" class="hud-btn" title="Next">⏭</button>
+    <button id="tv-repeat" class="hud-btn" title="Repeat: off" style="display:none">➡️</button>
+    <input id="tv-vol" type="range" min="0" max="100" value="25" title="TV volume">
+    <span id="tv-time">0:00</span>
+    <button id="btn-tv-full" class="hud-btn" title="Full screen — movie or visualizer">⛶</button>
+  </div>
+
+  <!-- "click to look around" hint (shown while the mouse is free) -->
+  <div id="lock-hint" class="hidden">🖱️ Click the store to look around · <b>W A S D</b> to walk · <b>Q</b> frees the mouse · <b>scroll</b> to zoom</div>
+
+  <!-- poster-loading progress chip -->
+  <div id="art-progress" class="hidden">Printing cover art… <span id="art-progress-num"></span></div>
+
+  <!-- ============================ SIDE MENU ============================ -->
+  <div id="sidebar-backdrop" class="hidden"></div>
+  <aside id="sidebar" class="hidden">
+    <div class="sidebar-head">
+      <div>
+        <div id="sidebar-user" class="sidebar-user">Guest</div>
+        <div id="sidebar-usersub" class="sidebar-usersub">this device</div>
+      </div>
+      <button id="btn-sidebar-close" class="hud-btn">✕</button>
+    </div>
+    <div class="side-search">
+      <input id="side-search" type="text" placeholder="🔍 Search the shelves…" autocomplete="off">
+      <div id="side-search-results" class="hidden"></div>
+    </div>
+    <nav id="sidebar-nav">
+      <button class="side-link" data-tab="look">🎨 <span>My Theme</span><small>colors · visualizer · TV idle</small></button>
+      <button class="side-link" data-tab="shelves">📼 <span>My Shelves</span><small>sorting &amp; shelf map</small></button>
+      <button class="side-link" data-tab="media">📺 <span>My Media</span><small>what stocks my shelves</small></button>
+      <button class="side-link" data-tab="profile">👤 <span>Profile &amp; Sync</span><small>guest mode or account</small></button>
+      <button class="side-link guest-only" id="nav-admin-login" data-tab="profile">🛠️ <span>Admin sign-in</span><small>manage servers · TV · users</small></button>
+      <button class="side-link admin-only hidden" data-tab="server">🛰️ <span>Admin: Server</span><small>Plex / Jellyfin / free shelves / Live TV</small></button>
+      <button class="side-link admin-only hidden" data-tab="users">🧑‍💼 <span>Admin: Users</span><small>accounts &amp; passwords</small></button>
+      <button class="side-link admin-only hidden" data-tab="policies">🔒 <span>Admin: Policies</span><small>locks &amp; defaults</small></button>
+    </nav>
+    <div class="sidebar-foot">
+      <button id="btn-leave-store" class="btn wide" style="margin-bottom:8px">🚪 Back to front entrance</button>
+      <div id="sidebar-source" class="source-chip">Demo Library</div>
+    </div>
+  </aside>
+
+  <!-- ============================ SETTINGS PANEL ============================ -->
+  <div id="settings" class="hidden">
+    <div class="settings-card">
+      <div class="settings-head">
+        <h2 id="settings-title">Settings</h2>
+        <button id="btn-settings-close" class="hud-btn">✕ Done</button>
+      </div>
+      <div id="settings-body"><!-- panels rendered by ui.js --></div>
+    </div>
+  </div>
+
+  <!-- ============================ ITEM DETAIL MODAL ============================ -->
+  <!-- t52: the old jukebox browse modal is RETIRED — the jukebox opens the DJ deck now -->
+  <div id="dj-modal" class="modal hidden">
+    <div class="modal-card dj-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h2 id="dj-title" style="margin:0">🎧 DJ Booth</h2><button id="dj-close" class="hud-btn">✕</button></div>
+      <div id="dj-body"></div>
+    </div>
+  </div>
+  <div id="item-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close hud-btn">✕</button>
+      <div class="item-layout">
+        <!-- The 3D case: drag to flip. Cover on the front, synopsis printed on
+             the back like a real rental box — the panel is for PLAYING. -->
+        <div class="item-case-wrap">
+          <div id="item-case-view"></div>
+          <div class="case-hint">🖱️ grab the case &amp; flip it — the info's on the box</div>
+        </div>
+        <div class="item-info">
+          <div id="item-type" class="item-type"></div>
+          <h2 id="item-title"></h2>
+          <div class="item-actions">
+            <button id="item-play-tv" class="btn accent">📺 Play on the store TV</button>
+            <button id="item-play-next" class="btn">⏭ Play next</button>
+            <a id="item-play" class="btn hidden" target="_blank" rel="noopener">↗ Open on media server</a>
+          </div>
+          <div id="item-source-badge" class="item-source-badge"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ HELP OVERLAY ============================ -->
+  <div id="help-overlay" class="modal hidden">
+    <div class="modal-card narrow">
+      <button class="modal-close hud-btn">✕</button>
+      <h2>Welcome to the store 🎬</h2>
+      <div class="help-grid">
+        <div><b>W A S D</b><span>walk (arrows work too)</span></div>
+        <div><b>Mouse</b><span>look around</span></div>
+        <div><b>Shift</b><span>jog</span></div>
+        <div><b>Click a case</b><span>details &amp; "Play on the store TV"</span></div>
+        <div><b>Q</b><span>release / re-grab the mouse (Esc works too)</span></div>
+        <div><b>Scroll</b><span>zoom in / out</span></div>
+        <div><b>☰ Menu</b><span>theme, sorting, profile, admin</span></div>
+        <div><b>Admins</b><span>☰ Menu → Admin sign-in to manage the store</span></div>
+      </div>
+      <p class="help-note">On phones/tablets: left half of the screen moves, right half looks around, tap to select.</p>
+      <button id="btn-help-close" class="btn accent wide">Let's browse</button>
+    </div>
+  </div>
+
+  <!-- ============================ TOASTS ============================ -->
+  <div id="toasts"></div>
+
+  <!-- ============================ LOADING SCREEN ============================ -->
+  <div id="loading">
+    <div class="loading-inner">
+      <div class="bb-ticket">
+        <div class="bb-name">HOME BINGER</div>
+        <div class="bb-tag">★ YOUR VIRTUAL VIDEO STORE ★</div>
+      </div>
+      <div class="loading-bar"><div id="loading-fill"></div></div>
+      <div id="loading-status">Unlocking the front door…</div>
+      <div id="gate-card" class="hidden">
+        <div id="gate-hello" class="hidden">👋 Signed in as <b id="gate-who"></b>
+          <button id="gate-out" class="hud-btn" title="Sign out">Sign out</button></div>
+        <div id="gate-form">
+          <div class="gate-title">Sign in</div>
+          <div class="gate-fields">
+            <input id="gate-user" type="text" placeholder="Username" autocomplete="username">
+            <input id="gate-pass" type="password" placeholder="Password" autocomplete="current-password">
+          </div>
+          <button id="gate-signin" class="btn accent wide">Sign in</button>
+          <div id="gate-create" class="hidden">
+            <div class="gate-title" style="margin-top:14px">Create an account</div>
+            <div class="gate-fields">
+              <input id="gate-reg-user" type="text" placeholder="Pick a username" autocomplete="off">
+              <input id="gate-reg-pass" type="password" placeholder="Password (4+ chars)" autocomplete="new-password">
+            </div>
+            <button id="gate-register" class="btn wide">Create account &amp; carry my settings over</button>
+          </div>
+          <button id="gate-toggle-create" class="gate-link" type="button">New here? Create an account</button>
+        </div>
+      </div>
+      <button id="btn-enter" class="btn accent big hidden">Enter the store</button>
+      <div id="loading-error" class="loading-error hidden"></div>
+    </div>
+  </div>
+
+  <script src="/js/vendor/resonance-audio.min.js?v=1788729356586"></script>
+  <script type="module" src="/js/main.js?v=1788729356586"></script>
+</body>
+</html>

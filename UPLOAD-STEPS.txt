@@ -1,0 +1,51 @@
+HOW TO PUT HOME BINGER ON GITHUB (about 15 minutes, free)
+==========================================================
+
+You have: this zip = the complete Home Binger source, ready to commit.
+(The .gitignore inside already keeps out runtime data, test media, and
+builds — nothing to configure.)
+
+THE EASY WAY — GITHUB DESKTOP (no command line)
+-----------------------------------------------
+1. Create a free account at github.com (remember your username).
+2. Install GitHub Desktop from desktop.github.com, open it, sign in.
+3. Extract this zip anywhere (Documents is fine).
+4. In GitHub Desktop: File → Add Local Repository → pick the extracted
+   folder → it says the folder isn't a Git repository yet and offers to
+   create one → click Create Repository.
+     Name: home-binger
+     Git ignore dropdown: NONE  (our .gitignore is already in the folder —
+     picking one here would overwrite it)
+     License dropdown: NONE     (our LICENSE file is already included)
+5. Click "Publish repository" (top right). Keeping "Private" checked is
+   fine and free — flip to public later in the repo Settings whenever
+   you're ready.
+6. Done — your browser opens the repo page.
+
+ATTACH THE WINDOWS EXE (permanent tester download)
+--------------------------------------------------
+Use the HomeBinger-Windows.zip (115 MB) you already downloaded.
+1. On the repo page → Releases (right column) → "Create a release".
+2. Tag: v1.0.0-beta   Title: Home Binger 1.0 beta   Notes: anything.
+3. Drag HomeBinger-Windows.zip into "Attach binaries".
+4. Publish. (GitHub allows 2 GB per file; ours is 115 MB.)
+That link never expires — share it everywhere instead of file-share links.
+
+THE COMMAND LINE WAY (if you prefer)
+------------------------------------
+    cd home-binger
+    git init && git add -A && git commit -m "Home Binger 1.0 beta"
+    git remote add origin https://github.com/<your-username>/home-binger.git
+    git branch -M main
+    git push -u origin main
+
+ONE CHECK BEFORE GOING PUBLIC
+-----------------------------
+Make sure the rights-encumbered test media is NOT in the commit:
+    git ls-files | grep tests/media
+must print NOTHING. (.gitignore excludes it — this just proves it.)
+
+NEXT
+----
+Post the itch.io page with the same exe zip — docs/RELEASE.md walks
+through it. Good luck! — packed with 💙

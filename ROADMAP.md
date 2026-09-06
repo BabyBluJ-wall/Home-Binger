@@ -1,0 +1,138 @@
+# 🗺️ Home Binger — Project Roadmap
+
+*From a single video-store room to a full media building. Updated every turn.*
+
+**Current phase: 1 — 1.0 BETA FREEZE / TESTER BUG-HUNT** (updated 2026-09-06)
+
+---
+
+## The discipline (how we finish this together)
+
+1. **One phase at a time.** A phase is done when its gate is met — not when
+   it's merely built. No new features enter a phase that hasn't passed its gate.
+2. **Every turn ends green**: full self-check suite ×2, stamp, changelog, zips.
+3. **Your ears beat my meters.** When they disagree, we measure until they agree.
+4. **Workspace stays lean**: test fixtures get trimmed; ships get cleaned up.
+5. **Bugs before features** — always. (This is the rule you've been living
+   already; it's why the app is solid. Keep it.)
+
+---
+
+## Phase 0 — THE AUDIO GATE 🎯 *(current)*
+**Goal:** the jukebox question closed with real material.
+- [x] Windows zip deleted (owner downloaded; rebuild = `node tools/build-desktop.mjs`)
+- [x] Song acquired via Suno CDN · decoded: **master peaks +0.21 dBFS OVER
+      full scale** — the file itself is hot; that's the distortion source on
+      players that don't attenuate
+- [x] Live sweeps (default / max vol / max+bass14): app limiter never engages
+      (0.0 dB) — the t67 tanh stage bounds output <1.0 by construction
+- [x] Permanent regression check `t69HotMaster` (song kept as fixture)
+- [x] **ROOT CAUSE FOUND (owner's ears → t70)**: the t63 tanh "safety" curve
+      carried a hidden +5.4 dB boost — louder than every other app AND
+      saturating hot masters at max volume, invisible to the limiter meter.
+      Replaced with a unity soft-knee in all 3 engines; `t70ClipCurve` guards.
+- [x] **t71 (owner's ears, round 2)**: booth ring was wired PAST all
+      protection (trim 0.2 = the owner hand-limiting it); jukebox satellites
+      leaked coherent bass through a shallow 85 Hz crossover. Fixed: 110 Hz
+      24 dB-oct crossovers (sub owns the lows), ring-bus dynamics, guarded
+      ring sum. `t71BassMgmt` guards it permanently.
+- [x] **t72 booth layout** (owner spec, pre-test request): decks pinned,
+      list scrolls alone, card fills the screen (max-width clamp found and
+      lifted), zero sideways scroll at any window size.
+- [x] **t73 theater-calibrated subs**: unity mono sum (+6..+9 dB), LP/HP
+      slope mismatch (110 Hz bump), and a non-theater bus compressor all
+      corrected to the reference room's recipe. `t73TheaterSub` guards.
+- [x] **t74 equal-loudness calibration**: rings carried weaker distance
+      shading than the theater (~2.3 dB hotter at the same slider %) —
+      matched to the reference. `t74EqualLoudness` guards; t69 now samples
+      the loud section.
+- [x] **t74/t75 verdicts**: OWNER CONFIRMS THE JUKEBOX FIXED ✅. The booth
+      was missing the 0.55 calibration every other room has (the owner's
+      "perfect at master 0.5" WAS the constant) — t75 inserts it; both
+      limiters measured 0.00 dB at full unity on the loud section.
+- [x] **t76 dB-honest deck EQ**: booth EQ boosts now pay the jukebox's
+      auto-makeup (bass +12 → −6 dB); the owner's full recipe (trim 1,
+      master 1.0, bass maxed) measures both limiters at 0.00 dB.
+- [x] **Owner verdict on t76: BETTER** — usable at full send; a finer tuning
+      pass (sweetening, not repair) is deferred by the owner's choice.
+- [ ] **Booth tuning pass (later, owner's ear led)**: sweetness nudges — all
+      one-number constants now (CAL 0.55, makeup 0.5/0.35, sub 0.4/0.3).
+
+      should hold clean; slider now scales volume, not distortion.
+      Remaining from t74: same song at max on the
+      THEATER's deck vs the jukebox — if both clean, Phase 0 closes; if the
+      jukebox alone still distorts >50%, it's past the app (AUDIO.md
+      checklist). Jukebox + dance bass should now sit
+      like the theater's; jukebox max + bass +14; booth trim
+      back up toward 0.5–0.8 (the 0.2 ceiling should be GONE); bass should
+      image from the sub, not the room speakers.
+**GATE:** owner says the jukebox sounds crisp at max volume — or we've
+measured exactly why not and fixed it.
+
+- [x] **t78 jukebox Ambisonic** (owner: "apply the same fixes to the
+      jukebox") + Windows exe rebuilt for external testers.
+
+## Phase 0 — THE AUDIO GATE ✅ CLOSED
+**Verdicts (owner's ears):** jukebox FIXED (t73/t74) · booth BETTER, sweetening
+deferved by choice (t75/t76/t77 — all one-number nudges when wanted) ·
+surround upgraded to Resonance Ambisonics in booth + jukebox (t77/t78).
+**Close-out:** tester exe delivered via link (chat-viewer crashes on 115 MB
+files — links for big files from now on); workspace copy deleted after
+download; rebuild = one command.
+
+## Phase 1 — 1.0 BETA FREEZE 🔒 *(current — testers have the build)*
+**Goal:** stop adding, start hardening. The app as it stands, bulletproof.
+- [ ] Owner bug-hunt round on the full build (all rooms, both decks, grabber,
+      desktop exe, phones) — findings list → fixes
+- [ ] Fresh-install test again (that's how we caught the grabber gate bug)
+- [ ] Docs final pass (README/START-HERE/AUDIO/EDITING match reality)
+- [ ] Optional but recommended: GitHub export for backup + issue tracking
+**GATE:** one full owner walkthrough with zero must-fix findings.
+
+## Phase 2 — THE BOOK NOOK 📚
+**Goal:** the reading room. Ebooks + audiobooks, using what exists.
+- [ ] New room off the building (design: cozy, wall bookshelves, reading lamp)
+- [ ] `book` items already indexed by the grabber → shelving + browsing
+- [ ] Reader: PDF via vendored pdf.js (no build step); TXT/MD native;
+      EPUB later
+- [ ] Audiobooks = audio files → jukebox engine plays them day one
+**GATE:** open a PDF off the shelf, read it in-world; an audiobook plays.
+
+## Phase 3 — THE OFFICE 🏢
+**Goal:** view-first documents, edit what's reasonable.
+- [ ] Room with desk + monitor props
+- [ ] View: PDF / TXT / MD (reader shared with Book Nook); .docx read-only
+- [ ] Edit: TXT/MD only (honest scope — .docx editing is Google-Docs-sized)
+**GATE:** open and read every supported type in-world; edit a MD file.
+
+## Phase 4 — DLC PACK SYSTEM 💿
+**Goal:** sellable content packs of the owner's music (rights retained).
+- [ ] `pack.json` manifest (name, art, theme, credit) inside any folder
+- [ ] Pack-aware wing: signage, styling, gold-record wall from the manifest
+- [ ] v1 test pack = the 113 MB folder (fits workspace post-cleanup)
+- [ ] Store page: Gumroad/itch.io/Lemon Squeezy (they handle payment+delivery)
+- [ ] LICENSE note: app stays CC BY-NC-SA; packs are owner's commercial content
+**GATE:** a pack folder dropped into a media spot dresses its own wing.
+
+- [x] **t77 surround research + implementation** (owner brief): Resonance
+      Audio (Apache-2.0) chosen over Steam Audio/OpenAL/Cavern (wrong layer
+      for a browser app — full matrix in docs/SURROUND.md); dance-hall ring
+      now renders as an Ambisonic soundfield; WebAudio fallback kept.
+
+- [x] **Publishing path set (owner: $0 budget)**: GitHub (source + exe
+      Releases) + itch.io (free public download page) — Steam parked unless
+      the project ever earns its $100. Guide: docs/RELEASE.md.
+
+## Phase 5 — BACKLOG 🧰
+DJ FX rack (reverb/echo/flanger/filter) · headphone PFL via output-device
+selection · live set recording · crates sidebar · compatible-key highlighting ·
+macOS/Linux desktop builds · Office .docx editing (only if demanded).
+
+---
+
+## Ship history (most recent last)
+t63 volume/EQ logic · t64 DJ booth Pro Rig + jukebox deck completed ·
+t65 theater-mirror jukebox + gold-record wall + wide booth ·
+t66 audio/usability audit · t66b ear-level store ring + novice aids ·
+t67 sub-band dynamics + booth flex + dance-ring bug ·
+t68 fresh-install grabber fix + zip hygiene (63/63 on clean data)

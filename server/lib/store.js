@@ -1,0 +1,202 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  store.js — tiny JSON-file persistence + config loading
+// ─────────────────────────────────────────────────────────────────────────────
+//  Everything the server remembers lives in two plain-text JSON files inside
+//  DATA_DIR (default: ./data). They are safe to open in any text editor, and
+//  they are regenerated automatically if deleted.
+//
+//      data/config.json  → global store settings (media source, creds, TV, locks)
+//      data/db.json      → users, sessions and per-user/guest preferences
+//
+//  ENVIRONMENT VARIABLES (see README → "Environment variables"):
+//      HB_DATA_DIR    folder for data files        (default: ./data)
+//      HB_SESSION_SECRET  signing secret; auto-generated & persisted if unset
+//      HB_ADMIN_USER      default admin username   (default: admin)
+//      HB_ADMIN_PASSWORD  default admin password   (default: BluJNetwork)
+// ─────────────────────────────────────────────────────────────────────────────
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+
+// ⚙️ EDIT ME ── where server data lives (override with HB_DATA_DIR env var)
+const DATA_DIR = (process.env.HB_DATA_DIR || process.env.HB_DATA_DIR) || path.resolve(process.cwd(), 'data');
+
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const DB_FILE = path.join(DATA_DIR, 'db.json');
+const SECRET_FILE = path.join(DATA_DIR, 'secret.key');
+
+// ── Default GLOBAL config ────────────────────────────────────────────────────
+// This object shape is exactly what the admin Settings page edits.
+// 'source' picks which library adapter is used: 'demo' | 'plex' | 'jellyfin'
+export const defaultConfig = () => ({
+  // Per-source toggles — every source is independent, nothing is mandatory.
+  // Fresh stores default to the FREE shelves (see archive/radio below); the
+  // demo catalogue and personal servers are opt-in.
+  sources: { plex: false, jellyfin: false },   // the FREE shelves are the default stock
+  source: 'demo',   // LEGACY (pre-multi-source) — migrated on load, ignored after
+  // sections: WHICH libraries get shelved (array of keys — empty = ALL).
+  // Picked with checkboxes in Admin → Server.
+  plex: { url: '', token: '', sections: [] },
+  jellyfin: { url: '', apiKey: '', sections: [] },
+  // ── free add-on sources (stack on top of the primary source) ──
+  // Internet Archive classics wing: [] = none (unlike Plex, opting in is
+  // explicit — fresh stores start with a tasteful default selection).
+  archive: { url: '', sections: ['staff-picks', 'sci-fi-horror', 'noir', 'comedy', 'cartoons'] },
+  // Podcast RSS feeds the admin pastes in (the "radio rack").
+  podcasts: { feeds: [] },
+  // Live radio wall via radio-browser.info: [] = none.
+  radio: { url: '', sections: ['oldies', 'synthwave'] },
+  // t61/t62: the file grabber — MULTIPLE spots on this machine, each shelved
+  // recursively. (Legacy single-path { on, path } migrates to one spot on load.)
+  local: { on: false, spots: [] },
+  // Shelf Map: which section sits on which shelf unit (unitId → sectionKey).
+  // Empty/missing entries = automatic mixed shelving (the default behaviour).
+  shelves: {},
+  // What the in-store TV does while NOTHING is selected by a player
+  // (selecting any case off a shelf plays it on the TV — see /api/play):
+  //   mode: 'standby' → friendly "NOW PLAYING: NOTHING" idle screen (default)
+  //   mode: 'loop'    → built-in synthwave attraction loop (works offline)
+  //   mode: 'url'     → any direct video URL (mp4/webm)
+  //   mode: 'item'    → an item from the connected media server
+  tv: { enabled: true, mode: 'white', url: '', itemId: '' },   // 'white' = blank projector screen
+  // Feature toggles the admin can LOCK for everyone:
+  //   lockTheme   → guests/users cannot change their theme (defaults apply)
+  //   lockSorting → guests/users cannot change their shelf arrangement
+  locks: { theme: false, sorting: false, shelves: false, sources: false },
+  // Allow open account registration (for cross-device pref syncing)
+  registration: true,
+  // Store-wide defaults used when a user has never customized anything,
+  // and what everyone is forced to when a lock is enabled.
+  defaults: {
+    theme: {
+      // ⚙️ store-wide default look = the "Neon Night" preset (see ui.js)
+      wall: '#0a0f2e', floor: '#0b0e24', shelf: '#23306b',
+      accent: '#ff3ea5', style: 'metal'
+    },
+    sorting: { mode: 'recent', dir: 'desc' }
+  }
+});
+
+// ── Default per-user preferences ─────────────────────────────────────────────
+export const defaultPrefs = () => ({
+  theme: { ...defaultConfig().defaults.theme },
+  sorting: { ...defaultConfig().defaults.sorting },
+  visualizer: { style: 'bars' },   // TV music visualizer — color ALWAYS follows the theme accent
+  // personal shelf map (unitId → sectionKey; '' keys dropped = that unit automatic)
+  shelves: {},
+  // personal TV idle pick: idleMode '' = store default | 'standby' | 'loop' | 'item'
+  tv: { idleMode: '', itemId: '' },
+  // personal media mix (null = follow the store's setup; see auth.js sanitizer)
+  sources: null,
+  updatedAt: 0
+});
+
+// ── ensure data dir exists ───────────────────────────────────────────────────
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// ── config.json (global store settings) ─────────────────────────────────────
+let config;
+export function loadConfig() {
+  let loaded = {};
+  try { loaded = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { /* first run */ }
+  // Deep-merge saved values over defaults so new keys appear after upgrades.
+  config = deepMerge(defaultConfig(), loaded, true);
+  // t62: migrate the single-path grabber to multi-spot (path → spots[0])
+  if (config.local && config.local.path && !(Array.isArray(config.local.spots) && config.local.spots.length))
+    config.local.spots = [config.local.path];
+
+  // t39: connection boxes start EMPTY — a legacy build shipped a literal "t"
+  // as the Plex token placeholder-junk; scrub it so no masked ghost reappears
+  if (config.plex?.token === 't') config.plex.token = '';
+  if (config.jellyfin?.apiKey === 't') config.jellyfin.apiKey = '';
+
+  // migrate old configs: the former 'demo' TV loop is now called 'loop'
+  if (config.tv && config.tv.mode === 'demo') config.tv.mode = 'standby';
+  // migrate the single-source era → per-source toggles (one-time)
+  if (!loaded.sources && loaded.source) {
+    // legacy single-source configs: personal servers stay on; the removed
+    // demo catalogue maps to the free-shelves default (nothing personal on)
+    config.sources = {
+      plex: loaded.source === 'plex',
+      jellyfin: loaded.source === 'jellyfin'
+    };
+  }
+  if (config.sources?.demo !== undefined) delete config.sources.demo;   // demo is gone
+
+  // Env vars only seed values on FIRST RUN (file wins afterwards, so the admin
+  // UI stays authoritative). Delete data/config.json to re-seed from env.
+  const fresh = !fs.existsSync(CONFIG_FILE);
+  if (fresh) {
+    if ((process.env.HB_PLEX_URL || process.env.HB_PLEX_URL)) config.plex.url = (process.env.HB_PLEX_URL || process.env.HB_PLEX_URL);
+    if ((process.env.HB_PLEX_TOKEN || process.env.HB_PLEX_TOKEN)) config.plex.token = (process.env.HB_PLEX_TOKEN || process.env.HB_PLEX_TOKEN);
+    if ((process.env.HB_JELLYFIN_URL || process.env.HB_JELLYFIN_URL)) config.jellyfin.url = (process.env.HB_JELLYFIN_URL || process.env.HB_JELLYFIN_URL);
+    if ((process.env.HB_JELLYFIN_API_KEY || process.env.HB_JELLYFIN_API_KEY)) config.jellyfin.apiKey = (process.env.HB_JELLYFIN_API_KEY || process.env.HB_JELLYFIN_API_KEY);
+    if (['plex', 'jellyfin'].includes((process.env.HB_SOURCE || process.env.HB_SOURCE))) {
+      config.sources = { plex: (process.env.HB_SOURCE || process.env.HB_SOURCE) === 'plex', jellyfin: (process.env.HB_SOURCE || process.env.HB_SOURCE) === 'jellyfin' };
+    }
+    saveConfig();
+  }
+  return config;
+}
+export function getConfig() { return config ?? loadConfig(); }
+export function saveConfig() {
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+// ── db.json (users, sessions, per-user prefs) ────────────────────────────────
+let db = null;
+let saveTimer = null;
+
+export function getDb() {
+  if (db) return db;
+  try { db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); }
+  catch { db = {}; }
+  if (!Array.isArray(db.users)) db.users = [];
+  if (!db.sessions) db.sessions = {};
+  if (!db.profiles) db.profiles = {};   // keyed by "dev:<id>" or "user:<id>"
+  return db;
+}
+
+// Debounced save — batches rapid writes (e.g. many guests saving prefs).
+export function saveDb() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const tmp = DB_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.renameSync(tmp, DB_FILE); // atomic-ish write
+  }, 150);
+}
+// Flush before shutdown so nothing is lost.
+process.on('SIGINT', () => { try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch {} process.exit(0); } );
+
+// ── profiles (per-user / per-device preferences) ─────────────────────────────
+export function getProfile(key) { return db.profiles[key] || null; }
+export function setProfile(key, prefs) {
+  db.profiles[key] = { ...prefs, updatedAt: Date.now() };
+  saveDb();
+}
+
+// ── session secret (auto-generated once, then persisted) ─────────────────────
+export function getSecret() {
+  try { return fs.readFileSync(SECRET_FILE, 'utf8').trim(); }
+  catch {
+    const s = crypto.randomBytes(32).toString('hex');
+    fs.writeFileSync(SECRET_FILE, s);
+    return s;
+  }
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+export function deepMerge(base, over, arrayAsWhole = false) {
+  if (over === null || over === undefined) return base;
+  if (typeof base !== 'object' || base === null) return over;
+  const out = Array.isArray(base) ? [...base] : { ...base };
+  for (const [k, v] of Object.entries(over || {})) {
+    if (typeof v === 'object' && v !== null && !Array.isArray(v) && typeof base[k] === 'object' && base[k] !== null && !Array.isArray(base[k])) {
+      out[k] = deepMerge(base[k], v, arrayAsWhole);
+    } else if (v !== undefined) {
+      out[k] = v;
+    }
+  }
+  return out;
+}

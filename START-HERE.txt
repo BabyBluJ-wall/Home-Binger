@@ -1,0 +1,98 @@
+════════════════════════════════════════════════════════════════════
+ HOME BINGER — HOW TO START
+════════════════════════════════════════════════════════════════════
+
+PICK YOUR PATH
+──────────────
+• Got the "HomeBinger-Windows" folder (with HomeBinger.exe)? → PATH 1
+• Got the source folder (server, public, package.json…)?     → PATH 2
+
+
+PATH 1 — NO NODE INSTALLED (the HomeBinger.exe folder)
+──────────────────────────────────────────────────────
+1. Unzip anywhere you like (Desktop is fine) and open the folder.
+2. Double-click  HomeBinger.exe
+3. That's it. A dark window opens and the store loads.
+   • Everything Home Binger needs (including its own copy of the
+     machinery that runs it) is inside the folder — you never install
+     anything, and nothing is added to your computer.
+   • FIRST LAUNCH ONLY: Windows may ask about your network with a
+     "Windows Security Alert". Click "Allow access" if you want movies
+     on your phone/TV/etc. from this computer. Click "Cancel" instead
+     and everything still works on this PC.
+4. To close it, just close the window like any program.
+
+If you already have Node.js installed: nothing changes and nothing is
+re-installed — the exe never touches your Node. You can still use PATH 2.
+
+
+PATH 2 — WITH NODE.JS INSTALLED (the source folder)
+───────────────────────────────────────────────────
+1. Unzip the folder anywhere.
+2. Double-click  START-WITH-NODE.bat
+   (a small window opens, the server starts, your browser opens the
+   store automatically)
+   • Needs Node.js 18 or newer — free at https://nodejs.org if you
+     don't have it. No other setup, no installs, no dependencies.
+3. To stop: close the small window, or press Ctrl+C in it.
+
+FIRST LAUNCH — WHAT TO EXPECT
+─────────────────────────────
+• The store opens with the free shelves stocked (classic movies, radio).
+• Sign in as the manager:  BabyBluJ / BluJNetwork  (change it later in
+  Settings → Admin → Users).
+• Your own movies/music: Settings → Admin → Server → Plex or Jellyfin.
+  Or skip media servers entirely: "Local files" — type a folder like
+  C:\Videos and EVERYTHING inside it (including subfolders) shelves as
+  individual files.
+• Phones/tablets on the same Wi-Fi: open http://<your-pc-ip>:8181
+  (the address shows in the console window on first launch).
+
+
+LEARNING THE STORE — LAYOUT & CONTROLS
+──────────────────────────────────────
+THE BUILDING (one roof, four spaces):
+• Front hallway — where you load in, facing the store's glass sliders.
+  The street door behind you stays locked (click it for the joke).
+• The movie store — the big room: wall shelves + island racks of cases,
+  the wall TV at the back, and the JUKEBOX against the back wall (click it
+  for its DJ deck — that's where music lives in the store).
+• The theater — through the door in the store's back wall: big screen,
+  sloped floor. Send any movie there from its detail card.
+• The dance hall — through the glass sliders in the store's RIGHT wall:
+  checkerboard floor that pulses with the music, moving light rig, DJ
+  booth (click the laptop for the booth's deck), and the DJ's Library
+  room behind the booth (click a record to spin it).
+
+CONTROLS:
+• W A S D or arrows — walk      • Mouse — look around
+• Shift — jog                   • Scroll wheel — zoom in/out
+• Q or Esc — free the mouse (Q also re-grabs it)
+• Click a case / record / jukebox / laptop — interact
+• ☰ Menu (top-left) — theme, shelf arrangement, profile, admin sign-in
+• Phones/tablets: left half of screen moves, right half looks, tap selects.
+
+PLAYING THINGS:
+• Click any case → details → "Play on the store TV" (or send a movie to
+  the theater). A control bar handles stop/seek/volume.
+• Music: click the jukebox (store) for its classic deck, or the booth
+  laptop (dance hall) for the PRO rig — two decks (A/B), crossfader,
+  BPM/cues/loops, Beginner & Pro modes. Both devices can play at once.
+
+STUCK? ☰ Menu → "Back to front entrance" always returns you to the hallway.
+
+UNINSTALLING — EASY AND COMPLETE
+────────────────────────
+Everything Home Binger writes (settings, users, cached posters) stays INSIDE
+its own folder — nothing is installed into Windows, no registry entries,
+no Program Files.
+  • Exe version: delete the HomeBinger-win32-x64 folder. That removes the
+    app AND all its data. Done.
+  • Node version: delete the Home Binger source folder (its "data" folder
+    inside is the only thing it ever wrote).
+  • Optional tidiness: Windows may have created an empty crash-log folder at
+    %APPDATA%\HomeBinger — deleting it is optional and frees almost nothing.
+The exe (PATH 1) and browsers (phones, other PCs) share one server —
+start the exe and your phone can still connect. If you start the exe
+while an old copy is already running, it quietly takes the next port
+so the two never fight.

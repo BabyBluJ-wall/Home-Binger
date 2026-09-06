@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Home Binger — docker compose
+#
+#   Start:        docker compose up -d
+#   Stop:         docker compose down
+#   Update files: edit them, then: docker compose up -d --build
+#
+#   The store appears on http://<your-machine>:8181 for anyone on your
+#   network. See README → "Remote access" for exposing it to the internet.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  binger:
+    build: .
+    container_name: home-binger
+    restart: unless-stopped
+    ports:
+      - "8181:8181"          # host:container — change the left side if the port is taken
+    volumes:
+      - ./data:/app/data     # users, prefs, media-server config, poster cache
+    environment:
+      # First-run seed values only — afterwards manage them from the app's
+      # Settings → Admin pages (stored in ./data/config.json).
+      HB_ADMIN_USER: admin          # default admin username
+      HB_ADMIN_PASSWORD: binger # default admin password — CHANGE IT after first login!
+      # HB_PLEX_URL: http://192.168.1.50:32400
+      # HB_PLEX_TOKEN: your-plex-token
+      # HB_JELLYFIN_URL: http://192.168.1.50:8096
+      # HB_JELLYFIN_API_KEY: your-jellyfin-api-key
+      # HB_SOURCE: plex            # demo | plex | jellyfin
