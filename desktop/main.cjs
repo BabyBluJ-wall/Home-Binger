@@ -46,7 +46,12 @@ function waitUp(port, ms) {
 (async () => {
   const PORT = await tryPort(8181, 11);
   process.env.PORT = String(PORT);
-  require(path.join(__dirname, '..', 'server', 'server.js'));   // the same server, in-process
+  // t79: the server is an ES module (import syntax). require() of ESM needs
+  // Node >= 20.19 — Electron 33 ships 20.18, so require() threw ERR_REQUIRE_ESM
+  // and the exe died silently on launch (no window, nothing in Task Manager).
+  // Dynamic import() loads ESM on every Node/Electron ever shipped.
+  const { pathToFileURL } = require('node:url');
+  await import(pathToFileURL(path.join(__dirname, '..', 'server', 'server.js')));   // the same server, in-process
   await waitUp(PORT, 20000);
   await app.whenReady();
   Menu.setApplicationMenu(null);                                 // no menu bar — it's an app, not a browser
