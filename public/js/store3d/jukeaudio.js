@@ -7,7 +7,7 @@
 //  the store never hears the movie — soundproofing both ways).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788729356586';
+import { LAYOUT } from './config.js?v=1788810462055';
 
 export function createJukeAudio() {
   const D = LAYOUT.room.l / 2;

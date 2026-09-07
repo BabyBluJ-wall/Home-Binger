@@ -29,7 +29,7 @@ code — all at once.*
 3. Create the repo on github.com (BluJ Productions account). **Recommend:
    start Private**, push, look around, flip to Public when ready:
    ```
-   git remote add origin https://github.com/<you>/home-binger.git
+   git remote add origin https://github.com/BabyBluJ-wall/Home-Binger.git   # ← our live repo
    git branch -M main
    git push -u origin main
    ```

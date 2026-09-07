@@ -16,8 +16,8 @@
 //  whole thing self-contained — no image files.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, STORE } from './config.js?v=1788729356586';
-import { signTexture } from './textures.js?v=1788729356586';
+import { LAYOUT, STORE } from './config.js?v=1788810462055';
+import { signTexture } from './textures.js?v=1788810462055';
 
 // ── procedural material helpers (cached per accent) ─────────────────────────
 function tex(w, h, draw) {

@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788774052550';
-import { createCaseView } from './store3d/caseview.js?v=1788774052550';   // the 3D case in the item modal
-import { state } from './state.js?v=1788774052550';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788774052550';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788774052550';
+import { api } from './api.js?v=1788810462055';
+import { createCaseView } from './store3d/caseview.js?v=1788810462055';   // the 3D case in the item modal
+import { state } from './state.js?v=1788810462055';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788810462055';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788810462055';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -839,21 +839,43 @@ export function initUI(ctx) {
         <div class="hint" style="margin-top:14px">Accounts are <b>self-serve</b> — visitors create their own at the
         front entrance page (the store owner can allow/block new sign-ups in Policies).
         You can still reset a forgotten password or remove an account here.</div>`;
-      root.querySelectorAll('[data-rename]').forEach(btn => {   // t81: rename — shelves/prefs ride the user id, so only the name changes
-        btn.onclick = async () => {
-          const name = prompt(`New name for ${btn.dataset.name}:`, btn.dataset.name);
-          if (!name || name.trim() === btn.dataset.name) return;
-          try { await api.adminRenameUser(btn.dataset.rename, name.trim()); toast('Name changed'); render(); }
-          catch (e) { toast(e.message, true); }
+      // t81b: INLINE EDITORS — Electron (the desktop exe) does not support
+      // window.prompt — it returns null instantly, so prompt-based flows are
+      // DEAD in the exe while working in every browser (how it slipped through
+      // browser-only testing). Rename + Set password now edit inline, everywhere.
+      const inlineEdit = (btn, opts) => {
+        const old = root.querySelector('.user-edit'); if (old) old.remove();
+        const editor = document.createElement('div');
+        editor.className = 'user-edit';
+        editor.style.cssText = 'display:flex;gap:8px;align-items:center;margin:2px 0 8px';
+        const inp = document.createElement('input');
+        inp.type = opts.password ? 'password' : 'text';
+        inp.value = opts.value || '';
+        if (opts.password) inp.placeholder = 'New password…';
+        inp.maxLength = opts.password ? 64 : 32;
+        inp.style.cssText = 'flex:1;min-width:0;padding:6px 10px;border-radius:6px;border:1px solid var(--vb-line,#2a3354);background:rgba(10,12,30,.55);color:var(--vb-ink,#eef1ff)';
+        const save = document.createElement('button'); save.className = 'btn small'; save.textContent = 'Save';
+        const cancel = document.createElement('button'); cancel.className = 'btn small'; cancel.textContent = 'Cancel';
+        editor.append(inp, save, cancel);
+        btn.closest('.user-row').after(editor);
+        inp.focus(); if (!opts.password) inp.select();
+        const done = () => editor.remove();
+        cancel.onclick = done;
+        save.onclick = async () => {
+          const v = inp.value.trim();
+          if (!v || (opts.password ? v.length < 4 : v === btn.dataset.name)) { inp.focus(); return; }
+          try { await opts.onSave(v); toast(opts.okMsg); done(); render(); }
+          catch (e) { toast(e.message, true); inp.focus(); }
         };
+        inp.onkeydown = e => { if (e.key === 'Enter') save.click(); if (e.key === 'Escape') done(); };
+      };
+      root.querySelectorAll('[data-rename]').forEach(btn => {   // t81: rename — shelves/prefs ride the user id, so only the name changes
+        btn.onclick = () => inlineEdit(btn, { value: btn.dataset.name, okMsg: 'Name changed',
+          onSave: v => api.adminRenameUser(btn.dataset.rename, v) });
       });
       root.querySelectorAll('[data-reset]').forEach(btn => {
-        btn.onclick = async () => {
-          const pw = prompt(`New password for ${btn.dataset.name}:`);
-          if (!pw) return;
-          try { await api.adminSetPassword(btn.dataset.reset, pw); toast('Password set'); }
-          catch (e) { toast(e.message, true); }
-        };
+        btn.onclick = () => inlineEdit(btn, { password: true, okMsg: 'Password set',
+          onSave: v => api.adminSetPassword(btn.dataset.reset, v) });
       });
       root.querySelectorAll('[data-del]').forEach(btn => {
         btn.onclick = async () => {

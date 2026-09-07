@@ -1800,10 +1800,17 @@ const addonMock = http.createServer((req, res) => {
     const dup = await fetch(BASE + '/api/admin/users/rename', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + admin.token }, body: JSON.stringify({ id, username: 'babybluj' }) });
     const bad = await fetch(BASE + '/api/admin/users/rename', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + admin.token }, body: JSON.stringify({ id, username: 'x' }) });
     await purge();
-    const uiWired = fs.readFileSync(path.resolve('public/js/ui.js'), 'utf8').includes('data-rename')
-      && fs.readFileSync(path.resolve('public/js/api.js'), 'utf8').includes('adminRenameUser');
+    // t81b: the UI must use inline editors and NEVER window.prompt — Electron
+    // (the desktop exe) doesn't implement prompt(); it silently returns null
+    // and the button does nothing. This line is the regression guard.
+    const uiSrc = fs.readFileSync(path.resolve('public/js/ui.js'), 'utf8');
+    const noPrompt = ['ui', 'api', 'main', 'state'].every(m =>
+      !/\bprompt\s*\(/.test(fs.readFileSync(path.resolve('public/js/' + m + '.js'), 'utf8')));
+    const uiWired = uiSrc.includes('data-rename') && uiSrc.includes('inlineEdit')
+      && fs.readFileSync(path.resolve('public/js/api.js'), 'utf8').includes('adminRenameUser')
+      && noPrompt;
     const ok = reg.ok && ren.ok && newLogin.status === 200 && oldLogin.status === 401 && dup.status === 409 && bad.status === 400 && uiWired;
-    return { regOk: reg.ok, renamed: ren.ok, newLogin: newLogin.status, oldLogin: oldLogin.status, dup: dup.status, badName: bad.status, uiWired, ok };
+    return { regOk: reg.ok, renamed: ren.ok, newLogin: newLogin.status, oldLogin: oldLogin.status, dup: dup.status, badName: bad.status, uiWired, noPrompt, ok };
   })();
   }
 
