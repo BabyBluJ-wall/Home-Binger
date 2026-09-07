@@ -503,6 +503,23 @@ export async function handleApi(req, res, pathname) {
       return ok(res, { ok: true });
     }
 
+    if (method === 'POST' && pathname === '/api/admin/users/rename') {   // t81: rename — profiles key by user id, so the name is safely cosmetic
+      if (!requireAdmin(req, res)) return true;
+      const body = await readBody(req);
+      const name = String(body.username || '').trim();
+      if (!/^[\w .-]{2,32}$/.test(name)) return fail(res, 400, 'Name must be 2-32 letters, numbers, spaces, . - _');
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      const target = db.users.find(u => u.id === body.id);
+      if (!target) return fail(res, 404, 'User not found');
+      if (db.users.some(u => u.id !== target.id && u.username.toLowerCase() === name.toLowerCase())) {
+        return fail(res, 409, 'That name is already taken');
+      }
+      target.username = name;          // sessions store userId → logins survive; personal shelves/prefs are keyed user:<id> → untouched
+      store.saveDb();
+      return ok(res, { ok: true });
+    }
+
     if (method === 'DELETE' && pathname.startsWith('/api/admin/users/')) {
       const admin = requireAdmin(req, res);
       if (!admin) return true;
