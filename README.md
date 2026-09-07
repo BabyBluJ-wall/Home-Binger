@@ -80,6 +80,36 @@ if you have Node 18+ installed, you are two commands away from opening the store
 
 ---
 
+## 💻 Will it run on my machine? (system requirements)
+
+**The Windows exe (HomeBinger.exe):**
+
+| | Minimum | Comfortable |
+|---|---|---|
+| **OS** | Windows 10 64-bit (hard floor — the bundled runtime dropped Win 7/8.1) | Windows 10/11 64-bit |
+| **CPU** | Dual-core, ~2015 or newer (Core i3 class) | Quad-core or better |
+| **RAM** | 4 GB | 8 GB |
+| **Graphics** | Any GPU with working drivers (DirectX 11 era is fine) | Intel HD 530+ or any dedicated GPU |
+| **Disk** | ~1 GB free (app ~270 MB extracted + poster cache + media) | — |
+| **Internet** | Not required — local media + the grabber work fully offline | Needed for the free archive.org shelves, radio, Plex/Jellyfin |
+
+Two real-world notes:
+- **GPU drivers matter more than GPU power.** With missing/broken drivers the
+  app silently falls back to software rendering — it still works, but the
+  start screen can take 30–60 seconds to appear. If that happens, update the
+  graphics driver and it snaps back to normal.
+- **The heaviest moments are the DJ booth** (10 spatial-audio sources) and
+  high-bitrate video. A minimum-spec machine runs the store and theater
+  fine but may dip in the booth during playback. Headphones give the full
+  spatial effect; plain stereo speakers work too.
+
+Port 8181 must be free (the exe politely takes 8182+ if it's busy — the two
+never fight). **Running it the Node way or visiting over LAN?** The same
+table applies, but the browser carries the graphics load: any current
+Chrome, Edge, or Firefox with WebGL2 does it.
+
+---
+
 ## 🖥️ The EASY way (Windows, nothing to install)
 
 Grab the **HomeBinger-Windows** folder, open it, and double-click **HomeBinger.exe**.

@@ -1,3 +1,14 @@
+## 2026-09-07 — system requirements, in plain sight
+- Added a **"Will it run on my machine?"** section to the README (full
+  table) and the TOP of START-HERE.txt (short list) — the two places
+  users and testers actually look. Floor: Win 10 64-bit / dual-core
+  ~2015 / 4 GB RAM / any GPU with working drivers / ~1 GB disk, no
+  internet required. Includes the two real gotchas: broken GPU drivers
+  = slow software-rendered start (driver update fixes it), and the DJ
+  booth is the most demanding room on minimum-spec machines.
+- Note: START-HERE.txt inside the already-shipped v1.5.5 exe predates
+  this — it reaches exe users with the next build. Repo README gets it
+  as soon as the two files are uploaded.
 ## 2026-09-07 — t81b: rename fixed for the exe (Electron has no prompt)
 - **Owner tried Rename in the exe — nothing happened.** Root cause:
   Electron does not support `window.prompt()` (returns null instantly;

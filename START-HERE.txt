@@ -2,6 +2,19 @@
  HOME BINGER — HOW TO START
 ════════════════════════════════════════════════════════════════════
 
+WILL IT RUN ON MY MACHINE?
+──────────────────────────
+  • Windows 10 or 11, 64-bit            (the hard floor — no Win 7/8.1)
+  • Any dual-core CPU from ~2015 on     (Core i3 class or better)
+  • 4 GB RAM                            (8 GB is comfy)
+  • Graphics: any GPU with WORKING drivers — Intel HD is fine. If your
+    drivers are broken/missing the app still runs but the start screen
+    can sit for 30–60 seconds. Updating the graphics driver fixes it.
+  • ~1 GB free disk. Internet NOT required (only for the free online
+    shelves/radio or Plex/Jellyfin).
+  • The DJ booth is the most demanding room — on older machines it may
+    dip during playback there. The store and theater run everywhere.
+
 PICK YOUR PATH
 ──────────────
 • Got the "HomeBinger-Windows" folder (with HomeBinger.exe)? → PATH 1
