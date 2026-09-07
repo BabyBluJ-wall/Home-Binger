@@ -76,6 +76,7 @@ export const api = {
   adminUsers: () => call('GET', '/api/admin/users'),
   adminSetPassword: (id, password) => call('POST', '/api/admin/users/password', { id, password }),
   adminDeleteUser: (id) => call('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
+  adminRenameUser: (id, username) => call('POST', '/api/admin/users/rename', { id, username }),   // t81
 
   // Poster URL for an item (proxied through our server — never touches the
   // media-server token). Items without a source return null → placeholders.

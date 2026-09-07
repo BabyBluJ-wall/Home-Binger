@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788729356586';
-import { createCaseView } from './store3d/caseview.js?v=1788729356586';   // the 3D case in the item modal
-import { state } from './state.js?v=1788729356586';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788729356586';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788729356586';
+import { api } from './api.js?v=1788774052550';
+import { createCaseView } from './store3d/caseview.js?v=1788774052550';   // the 3D case in the item modal
+import { state } from './state.js?v=1788774052550';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788774052550';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788774052550';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -832,12 +832,21 @@ export function initUI(ctx) {
           <div class="user-row">
             <span class="u-name">${esc(u.username)}</span>
             ${u.isAdmin ? '<span class="badge admin">ADMIN</span>' : '<span class="badge">user</span>'}
+            <button class="btn small" data-rename="${u.id}" data-name="${esc(u.username)}">Rename</button>
             <button class="btn small" data-reset="${u.id}" data-name="${esc(u.username)}">Set password</button>
             <button class="btn small danger" data-del="${u.id}" data-name="${esc(u.username)}">Delete</button>
           </div>`).join('')}
         <div class="hint" style="margin-top:14px">Accounts are <b>self-serve</b> — visitors create their own at the
         front entrance page (the store owner can allow/block new sign-ups in Policies).
         You can still reset a forgotten password or remove an account here.</div>`;
+      root.querySelectorAll('[data-rename]').forEach(btn => {   // t81: rename — shelves/prefs ride the user id, so only the name changes
+        btn.onclick = async () => {
+          const name = prompt(`New name for ${btn.dataset.name}:`, btn.dataset.name);
+          if (!name || name.trim() === btn.dataset.name) return;
+          try { await api.adminRenameUser(btn.dataset.rename, name.trim()); toast('Name changed'); render(); }
+          catch (e) { toast(e.message, true); }
+        };
+      });
       root.querySelectorAll('[data-reset]').forEach(btn => {
         btn.onclick = async () => {
           const pw = prompt(`New password for ${btn.dataset.name}:`);
