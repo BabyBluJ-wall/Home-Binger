@@ -266,7 +266,7 @@ const addonMock = http.createServer((req, res) => {
   }
 
   // ── browser phase (guest device) ──
-  const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
+  const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--js-flags=--max-old-space-size=640'] });   // t79: heap cap — renderer OOM-kills under sandbox memory pressure
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   await page.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
   const errors = [];
@@ -1741,6 +1741,70 @@ const addonMock = http.createServer((req, res) => {
       return { vendor, engine: jr?.engine, resSources: jr?.resSources, sats: jr?.satellites, ref: jr?.ref, rolloff: jr?.rolloff,
         hpHz: je?.satHpHz, stages: je?.satStages, subIn: je?.subIn, subGain: je?.subGain, ok };
     });
+  }
+
+  // 16am) t79: THE DESKTOP BOOT CONTRACT — the exe's launcher must load the
+  //       ESM server via dynamic import(). Electron 33 bundles Node 20.18,
+  //       which CANNOT require() an ES module — the original require() threw
+  //       ERR_REQUIRE_ESM and the exe died silently on every machine (found by
+  //       the owner on launch day; reproduced + proven fixed under real
+  //       Electron 33 in-sandbox).
+  {
+    const fs = require('node:fs'), path = require('node:path');
+    const mcjs = fs.readFileSync(path.resolve('desktop/main.cjs'), 'utf8');
+    R.checks.t79DesktopBoot = {
+      dynamicImport: mcjs.includes('pathToFileURL') && mcjs.includes('await import(pathToFileURL('),
+      noBareRequire: !mcjs.includes("require(path.join(__dirname, '..', 'server', 'server.js'))"),
+      ok: mcjs.includes('pathToFileURL') && mcjs.includes('await import(pathToFileURL(')
+        && !mcjs.includes("require(path.join(__dirname, '..', 'server', 'server.js'))")
+    };
+  }
+
+  // 16an) t80: EXE BRANDING — HomeBinger.exe wears the HB logo (the favicon
+  //       rendered 16..256 px into tools/assets/icon.ico) via a pure-JS PE
+  //       resource edit (resedit, build-time only — no Wine, no app deps).
+  {
+    const fs = require('node:fs'), path = require('node:path');
+    const ico = fs.existsSync(path.resolve('tools/assets/icon.ico'));
+    const icoSize = ico ? fs.statSync(path.resolve('tools/assets/icon.ico')).size : 0;
+    const build = fs.readFileSync(path.resolve('tools/build-desktop.mjs'), 'utf8');
+    const tool = fs.readFileSync(path.resolve('tools/set-exe-icon.mjs'), 'utf8');
+    const wired = build.includes('set-exe-icon');
+    const api = tool.includes('Resource.IconGroupEntry.replaceIconsForResource');
+    R.checks.t80IconBrand = { ico, icoKB: Math.round(icoSize / 1024), wired, api, ok: ico && icoSize > 10000 && wired && api };
+  }
+
+  // 16ao) t81: RENAME — the owner asked "how do I change the account name?";
+  //       the Users panel only offered password+delete while START-HERE
+  //       promised "change it in Admin: Users". Rename is cosmetic-safe:
+  //       profiles key user:<id>, sessions key userId.
+  {
+    R.checks.t81Rename = await (async () => {   // NODE-side: expected 401/409/400s must not pollute the browser-console error tally
+    const fs = require('node:fs'), path = require('node:path');
+    const login = async (u, p) => { const r = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) }); return { status: r.status, token: r.ok ? (await r.json()).token : null }; };
+    const admin = await login('BabyBluJ', 'BluJNetwork');
+    const purge = async () => {
+      const list = await (await fetch(BASE + '/api/admin/users', { headers: { Authorization: 'Bearer ' + admin.token } })).json();
+      for (const u of list.users) if (/^t81_(rename_tmp|renamed)/.test(u.username)) {
+        await fetch(BASE + '/api/admin/users/' + encodeURIComponent(u.id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + admin.token } });
+      }
+    };
+    await purge();
+    const reg = await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 't81_rename_tmp', password: 'test1234' }) });
+    const users = await (await fetch(BASE + '/api/admin/users', { headers: { Authorization: 'Bearer ' + admin.token } })).json();
+    const id = users.users.find(u => u.username === 't81_rename_tmp')?.id;
+    if (!id) { await purge(); return { ok: false, missing: true, regStatus: reg.status }; }
+    const ren = await fetch(BASE + '/api/admin/users/rename', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + admin.token }, body: JSON.stringify({ id, username: 't81_renamed' }) });
+    const newLogin = await login('t81_renamed', 'test1234');
+    const oldLogin = await login('t81_rename_tmp', 'test1234');
+    const dup = await fetch(BASE + '/api/admin/users/rename', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + admin.token }, body: JSON.stringify({ id, username: 'babybluj' }) });
+    const bad = await fetch(BASE + '/api/admin/users/rename', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + admin.token }, body: JSON.stringify({ id, username: 'x' }) });
+    await purge();
+    const uiWired = fs.readFileSync(path.resolve('public/js/ui.js'), 'utf8').includes('data-rename')
+      && fs.readFileSync(path.resolve('public/js/api.js'), 'utf8').includes('adminRenameUser');
+    const ok = reg.ok && ren.ok && newLogin.status === 200 && oldLogin.status === 401 && dup.status === 409 && bad.status === 400 && uiWired;
+    return { regOk: reg.ok, renamed: ren.ok, newLogin: newLogin.status, oldLogin: oldLogin.status, dup: dup.status, badName: bad.status, uiWired, ok };
+  })();
   }
 
   // 17) per-user media mix: guest opts OUT of the free shelves while the store keeps them on
