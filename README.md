@@ -223,6 +223,31 @@ Find your IP: **Windows** → `ipconfig` in that black window (look for
 banner in the terminal also prints the network address. That's the whole
 "website" — nothing to install on their end.
 
+### 📱 The exe & phones — the questions everyone asks
+
+**Can I run the exe and still visit from my phone?**
+Yes. The exe serves the exact same store on your network — every device on
+the **same Wi-Fi** opens `http://<your-PC's-IP>:8181` in any browser, just
+like Step 6. Nothing to install on the phone.
+
+**Does the exe have to stay running?**
+Yes. Your PC **is** the store; the phones are visitors walking in. Close the
+exe (or let the PC go to sleep) and the doors close — visitors just get
+"can't connect" until you start it again. Nothing breaks, nothing re-setups.
+
+**Does it work away from home / over mobile data?**
+Not by itself — same network only, by design: your media stays yours and
+never touches the internet. For away-from-home access you'd add a VPN such
+as **Tailscale** (free tier) that links the phone to your home network.
+
+Three smaller ones:
+- **First run:** Windows Firewall will ask → **Allow** (Private networks),
+  or phones can't get in.
+- **Hosting for a while?** Set the PC to stay awake (Settings → System →
+  Power → screen can sleep, PC shouldn't).
+- Each visiting device keeps its own theme and preferences automatically
+  (a guest profile per device) — no setup needed on their end.
+
 ## 🐳 Quick start (Docker)
 
 ```bash

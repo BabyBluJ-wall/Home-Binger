@@ -21,6 +21,21 @@ PICK YOUR PATH
 • Got the source folder (server, public, package.json…)?     → PATH 2
 
 
+PHONES, TABLETS & SMART TVs — THE QUICK FACTS
+─────────────────────────────────────────────
+  • YES: with the exe (or server) running, any device on the SAME Wi-Fi
+    opens the store in its browser →  http://<this-PC's-IP>:8181
+    (find the IP: Windows key → type "cmd" → run "ipconfig" → IPv4 Address)
+  • The exe must STAY RUNNING — this PC is the store, phones are just
+    visitors. Close it (or the PC falls asleep) and the doors close.
+    Nothing breaks; start it again and everyone reconnects.
+  • Same Wi-Fi only — your media never touches the internet. Away from
+    home would need a VPN like Tailscale (free).
+  • First run: if Windows Firewall asks, click Allow (Private networks).
+  • Every visiting device remembers its own theme and preferences —
+    nothing to set up on their end.
+
+
 PATH 1 — NO NODE INSTALLED (the HomeBinger.exe folder)
 ──────────────────────────────────────────────────────
 1. Unzip anywhere you like (Desktop is fine) and open the folder.
