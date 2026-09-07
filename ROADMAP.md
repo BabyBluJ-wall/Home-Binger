@@ -71,6 +71,22 @@ measured exactly why not and fixed it.
 
 - [x] **t78 jukebox Ambisonic** (owner: "apply the same fixes to the
       jukebox") + Windows exe rebuilt for external testers.
+- [x] **t81b rename in the exe** (owner tried it, found it dead): Electron
+      has no window.prompt — Rename + Set password now use inline editors
+      (input + Save/Cancel under the row). Verified by driving the real
+      exe over CDP: click → editor → save → row updates. New doctrine:
+      no browser-only APIs in UI; exe click-through before shipping.
+- [x] **t81 account rename** (owner question → gap found): Admin → Users
+      → Rename; safe by design (profiles key user id). In source now; the
+      public exe gets it with the next build.
+- [x] **t80 exe branding**: HomeBinger.exe wears the HB logo (pure-JS
+      resource edit — the no-Wine icon limitation is dead); pipeline
+      guarded by `t80IconBrand`.
+- [x] **Research night (owner off):** docs/ANDROID.md (APK feasibility —
+      phone-as-client works today; nodejs-mobile is the real APK path;
+      touch controls are the true work item) + docs/DLC-PLAN.md (the .hbd
+      encrypted-pack format, offline signed licenses, pack adapter →
+      rooms with zero client changes; honest threat model included).
 
 ## Phase 0 — THE AUDIO GATE ✅ CLOSED
 **Verdicts (owner's ears):** jukebox FIXED (t73/t74) · booth BETTER, sweetening
@@ -81,12 +97,19 @@ files — links for big files from now on); workspace copy deleted after
 download; rebuild = one command.
 
 ## Phase 1 — 1.0 BETA FREEZE 🔒 *(current — testers have the build)*
+**LIVE:** repo public at https://github.com/BabyBluJ-wall/Home-Binger ·
+release **v1.5.5** (pre-release; owner numbering 1.0 → 1.5 → 1.5.5) ·
+PERMANENT exe download (t81b rename fix, byte-verified):
+https://github.com/BabyBluJ-wall/Home-Binger/releases/download/v1.5.5/HomeBinger-1.5.5-beta.zip
+Recovery: clone the repo, or rebuild the exe from source
+(`node tools/build-desktop.mjs`).
 **Goal:** stop adding, start hardening. The app as it stands, bulletproof.
 - [ ] Owner bug-hunt round on the full build (all rooms, both decks, grabber,
       desktop exe, phones) — findings list → fixes
 - [ ] Fresh-install test again (that's how we caught the grabber gate bug)
 - [ ] Docs final pass (README/START-HERE/AUDIO/EDITING match reality)
-- [ ] Optional but recommended: GitHub export for backup + issue tracking
+- [x] GitHub export for backup + issue tracking — repo live at
+      BabyBluJ-wall/Home-Binger (owner numbering: 1.0 → 1.5 → v1.5.5)
 **GATE:** one full owner walkthrough with zero must-fix findings.
 
 ## Phase 2 — THE BOOK NOOK 📚

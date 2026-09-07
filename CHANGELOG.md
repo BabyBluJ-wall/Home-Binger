@@ -1,3 +1,25 @@
+## 2026-09-07 — t81b: rename fixed for the exe (Electron has no prompt)
+- **Owner tried Rename in the exe — nothing happened.** Root cause:
+  Electron does not support `window.prompt()` (returns null instantly;
+  alert/confirm ARE supported — prompt is the one silent trap). The t81
+  Rename button — and the older "Set password" button, dead in the exe all
+  along — both used it. Browser testing passed because every real browser
+  has prompt. Standing rule born here: **the UI never depends on
+  browser-only APIs, and new UI features get an exe-level click-through
+  before shipping.**
+- **Fix**: both flows now use inline editors — an input with Save/Cancel
+  appears directly under the user row (Enter saves, Escape cancels, toast
+  on success). No dialogs at all.
+- **Verified in the real exe**, not just the browser: booted the Windows
+  build's exact code under a real Electron runtime, drove it over CDP —
+  menu → Admin → Users → Rename → type → Save — and watched the row
+  re-render with the new name, API round-trip 200. Suite stays 76/76.
+  (Also click-tested in a real browser: same flow, same result — the fix
+  is plain DOM, so it behaves identically everywhere.)
+- **Shipped as GitHub release v1.5.5** (asset `HomeBinger-1.5.5-beta.zip`,
+  115,580,915 bytes, MD5-verified identical to the built artifact).
+  package.json now self-identifies as 1.5.5 to match the owner's release
+  numbering (1.0 → 1.5 → 1.5.5).
 ## 2026-09-07 — t81: account rename (the owner's question found a gap)
 - **Owner asked how to change an account name** — and the question found a
   real gap: START-HERE promises "change it in Admin: Users," but the panel
