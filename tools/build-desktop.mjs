@@ -44,6 +44,9 @@ const DEST = path.join(OUT, 'HomeBinger-win32-x64');
 fs.mkdirSync(DEST, { recursive: true });
 execFileSync('unzip', ['-q', '-o', zip, '-d', DEST], { stdio: 'inherit' });
 fs.renameSync(path.join(DEST, 'electron.exe'), path.join(DEST, 'HomeBinger.exe'));
+// t80: brand the exe with the HB logo (pure-JS resource edit — no Wine needed)
+try { const { setExeIcon } = await import('./set-exe-icon.mjs'); await setExeIcon(path.join(DEST, 'HomeBinger.exe')); }
+catch (e) { console.log('icon: skipped (' + e.message + ')'); }
 fs.rmSync(path.join(DEST, 'resources', 'default_app.asar'), { force: true });
 fs.cpSync(STAGE, path.join(DEST, 'resources', 'app'), { recursive: true });
 console.log('DONE →', DEST);
