@@ -1,3 +1,65 @@
+## 2026-09-07 — t81: account rename (the owner's question found a gap)
+- **Owner asked how to change an account name** — and the question found a
+  real gap: START-HERE promises "change it in Admin: Users," but the panel
+  only offered password + delete (and delete/recreate LOSES the profile).
+- **New**: Rename button in Admin → Users (prompt, validates 2-32 chars)
+  + `POST /api/admin/users/rename` (admin-only, uniqueness-enforced,
+  case-insensitive). Rename is cosmetic-safe: profiles key `user:<id>`,
+  sessions key userId — shelves, prefs and logins all survive; only the
+  old NAME stops working (401), by design.
+- **Check `t81Rename`** (76 total): register→rename→login round-trip,
+  old-name 401, duplicate 409, bad name 400, UI wiring asserted. Two test
+  lessons baked in: expected 4xx probes run NODE-side (browser console
+  4xx would pollute the suite's error tally), and the check self-purges
+  temp users (a crashed run can't poison the next).
+- Note: the RELEASED exe (v1.0.0-beta) predates this — ships in the next
+  exe build alongside tester findings. Source + repo packs updated now.
+## 2026-09-07 — t80: the exe wears the logo (owner request)
+- HomeBinger.exe now shows the HB favicon (navy plate, pink italic HB) in
+  Explorer/taskbar instead of Electron's generic icon. Pipeline: the inline
+  SVG favicon rendered via headless Chrome at 16/24/32/48/64/128/256 px →
+  PNG-in-ICO (tools/assets/icon.ico, 15 KB) → embedded into the exe's PE
+  resources by tools/set-exe-icon.mjs using resedit (pure JS — the old
+  build skipped icons because rcedit needs Wine; that limitation is dead).
+  resedit is a BUILD-time tool kept outside the app's zero-dependency tree;
+  builds without it succeed unbranded (graceful skip). Verified: PE
+  re-parses, first icon group = ours at 7 sizes.
+- New check `t80IconBrand` (75 total): the branding pipeline can't silently
+  disappear from the repo.
+## 2026-09-06 (night) — research: Android + DLC protection plans
+- docs/ANDROID.md — APK feasibility: Path 0 (phone-as-client PWA, works
+  today), Path 1 (Capacitor+Node: flagged shaky by its own maintainer),
+  Path 2 (nodejs-mobile standalone APK — our zero-dep server is the ideal
+  candidate). Losses enumerated (pointer-lock → touch layer is the real
+  work); audio engine + 3D fully survive on Android.
+- docs/DLC-PLAN.md — the .hbd pack: AES-256-CTR media blob (seekable →
+  Range streaming preserved), Ed25519-signed offline licenses (Node
+  builtins only — zero-dep doctrine holds), `pack` server adapter feeds
+  the existing rooms with ZERO client changes, manifest-driven wing
+  dressing, owner tooling (build-dlc/sign-dlc), honest threat model
+  (casual copying killed; determined capture is the accepted residual).
+## 2026-09-06 — 🚨 t79 HOTFIX: the exe was dead on launch (owner found it)
+- **Owner report**: the exe did nothing (absent from Task Manager); a second
+  attempt with the Node server also running left Windows unresponsive.
+- **Root cause**: `server.js` is an ES module; the desktop launcher
+  `require()`d it. Electron 33 bundles Node 20.18 — one minor version short
+  of require(ESM) support — so the launcher threw ERR_REQUIRE_ESM and the
+  process died silently. Worked from source on modern Node (why every
+  sandbox test passed); dead inside the exe on EVERY machine.
+- **Fix**: launcher now loads the server via dynamic `import()` (works on
+  every Node/Electron ever shipped).
+- **Proof**: (1) the full exe payload booted under REAL Electron 33 in a
+  Linux harness — window opened, HTTP 200, app rendering; (2) suite ALL
+  GREEN ×1 (74 checks incl. new `t79DesktopBoot` contract) after the
+  sandbox's own memory exhaustion was diagnosed (/tmp tmpfs 100% full from
+  test toolchain — toolchain migrated to disk, `CHROME_EXE`/`NODE_PATH`
+  now under ~/.cache).
+- **Rebuilt + re-uploaded**; release asset swap: v1.0.0-beta → Home.Binger.zip.
+## 2026-09-06 — 🚀 PUBLISHED: v1.0.0-beta is live
+- Repo public: https://github.com/BabyBluJ-wall/Home-Binger (verified 200
+  from outside). Release v1.0.0-beta published as pre-release with the
+  build attached; tester link distributed. Docs updated with the permanent
+  URLs (DELIVERY.md / ROADMAP / RELEASE.md).
 ## 2026-09-06 — release docs, round 2: the $0 publishing path
 - **Owner: no Steam budget — free stays free.** docs/RELEASE.md rewritten:
   itch.io is the primary public home (free publishing, free hosting, free
