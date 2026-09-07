@@ -1,0 +1,16 @@
+# runtime state (each install seeds its own)
+data/
+
+# test media — rights-encumbered fixtures; NEVER publish
+tests/media/*
+
+# dependencies & builds
+node_modules/
+dist/
+out/
+build/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
