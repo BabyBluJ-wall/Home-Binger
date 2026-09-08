@@ -110,9 +110,13 @@ Chrome, Edge, or Firefox with WebGL2 does it.
 
 ---
 
-## 🖥️ The EASY way (Windows, nothing to install)
+## 🖡️ The EASY way (Windows, nothing to install)
 
-Grab the **HomeBinger-Windows** folder, open it, and double-click **HomeBinger.exe**.
+**Where to get it:** the [Releases page](https://github.com/BabyBluJ-wall/Home-Binger/releases) —
+grab the newest **HomeBinger….zip** (the one with the green **Latest** badge). Unzip it,
+open the **Home Binger** folder, and double-click **HomeBinger.exe**. A
+**"1 - START HERE"** text file sorts to the very top of the folder and walks
+you through it in plain words.
 That's the whole install — it runs in its own app window (no browser, no address
 bar) and carries everything it needs inside the folder, including its own copy of
 the runtime: **Node.js is NOT required**. Your phones can still connect exactly
