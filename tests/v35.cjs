@@ -320,7 +320,7 @@ const addonMock = http.createServer((req, res) => {
     document.querySelector('.side-link[data-tab="shelves"]').click();
     await new Promise(r => setTimeout(r, 300));
     const shelvesHtml = (document.querySelector('#settings-body') || document.querySelector('#panel-body') || document.body).innerHTML;
-    const shelvesOk = shelvesHtml.includes('shelf-map-rows') && shelvesHtml.includes('Save my shelf map');
+    const shelvesOk = shelvesHtml.includes('shelf-map-rows') && shelvesHtml.includes('btn-shelves-save');   // t88: label is "Done" now
     // t83: settings modals now PAUSE the scene (mobile perf) — close the modal
     // so the dt-driven checks that follow (queue fade, sliding doors) run live.
     document.getElementById('btn-settings-close')?.click();
@@ -1147,7 +1147,10 @@ const addonMock = http.createServer((req, res) => {
     s.danceTick(quiet, 30);
     const still = Math.abs(s.danceInfo().rigYaws[0] - yEnd);
     const b = s.danceInfo().beat;
-    const ok = (after - b0) === 3 && maxJump <= 0.15 && onBeat >= 0.04 && perBurst >= 0.1 && Math.abs(b.bpm - 100) <= 21 && still < 0.1;
+    // t86: caps doubled for the owner's "more active" ask — a quiet tick now
+    // eases at most 4.6 rad/s × 0.05s = 0.23 (was 2.4 → 0.12). Still bounded,
+    // still easing, just livelier.
+    const ok = (after - b0) === 3 && maxJump <= 0.25 && onBeat >= 0.04 && perBurst >= 0.1 && Math.abs(b.bpm - 100) <= 21 && still < 0.1;
     return { beats: after - b0, bpm: b.bpm, maxJump: +maxJump.toFixed(3), onBeat: +onBeat.toFixed(3), perBurst: +perBurst.toFixed(3), still: +still.toFixed(3), ok };
   });
 
@@ -2242,6 +2245,178 @@ const addonMock = http.createServer((req, res) => {
       ok: refused && notPlaying && nothingMounted && m.tilt === 0 && m.z < -13 };   // mount still the flat screen wall
   });
 
+
+  // 17a) t86: DANCE-LIGHT ENERGY + the real mirror ball + adjustable prefs
+  R.checks.t86Dance2 = await page.evaluate(() => {
+    const s = window.__VB.scene;
+    const hasPrefs = typeof s.setDancePrefs === 'function';
+    const i0 = s.danceInfo();
+    const lightsOk = !!i0.lights && i0.lights.intensity === 1 && i0.lights.speed === 1 && i0.lights.pattern === 'auto';
+    const ballOk = !!i0.ball && i0.ball.facets === true && i0.ball.glints >= 100 && i0.ball.pinSpot === true;
+    let points = 0; s.threeScene.traverse(o => { if (o.isPoints) points++; });   // particle ban holds (glints are instanced)
+    // rig now moves FASTER than the old cap (2.4 rad/s → 4.6): one live 0.05s
+    // step after silence, with a kick, moves a pivot by the (new) cap.
+    // 60 idle steps = 3s of synthetic silence — drains the 40-slot bass
+    // history AND makes any earlier real beat stale (kick needs clock-lastBeatT>0.3).
+    s.danceTick({ bass: 0, mid: 0, treble: 0, energy: 0, live: false }, 60);
+    const a = s.danceInfo().rigYaw;
+    s.danceTick({ bass: 0.9, mid: 0.5, treble: 0.4, energy: 0.8, live: true }, 1);
+    const b = s.danceInfo().rigYaw;
+    const move1 = Math.max(...a.map((v, k) => Math.abs(b[k] - v)));
+    // speed 2 doubles the cap (4.6×2×0.05 = 0.46) — the ease still chases a far target
+    s.setDancePrefs({ speed: 2 });
+    const c = s.danceInfo().rigYaw;
+    s.danceTick({ bass: 0.9, mid: 0.5, treble: 0.4, energy: 0.8, live: true }, 1);
+    const d = s.danceInfo().rigYaw;
+    const move2 = Math.max(...c.map((v, k) => Math.abs(d[k] - v)));
+    s.setDancePrefs({ pattern: '1' });
+    const patOk = s.danceInfo().lights.pattern === '1';
+    s.setDancePrefs({ intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' });
+    const restored = s.danceInfo().lights.speed === 1 && s.danceInfo().lights.pattern === 'auto';
+    return { hasPrefs, lightsOk, ballOk, points, move1: +move1.toFixed(3), move2: +move2.toFixed(3), patOk, restored,
+      ok: hasPrefs && lightsOk && ballOk && points === 0 && move1 > 0.18 && move2 > 0.4 && patOk && restored };
+  });
+
+  // 17b) t87: MULTI-SOURCE — a second Plex as an instance (default plex stays off)
+  {
+    const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    await put({ sources: { plex: false, jellyfin: false },
+      instances: [{ kind: 'plex', name: 'Mock Two', url: 'http://localhost:32770', token: 't', sections: ['1'] }] });
+    const lib = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+    const items = lib.items || [];
+    const instItems = items.filter(i => i.source === 'plex-2');
+    const idOk = instItems.length > 0 && instItems.every(i => i.id.startsWith('plex-2:'));
+    const secOk = instItems.every(i => !i.sectionId || String(i.sectionId).startsWith('plex-2:'));
+    const noBuiltin = !items.some(i => i.source === 'plex');
+    const labelOk = !!(lib.sections || []).some(s => s.sourceLabel === 'Mock Two');
+    const it = instItems[0];
+    const detail = await fetch(BASE + `/api/item/plex-2/${encodeURIComponent(it.key)}?vb_auth=` + login.token);
+    const detailOk = detail.status === 200;
+    const stream = await fetch(BASE + `/api/play/plex-2/${encodeURIComponent(it.key)}?vb_auth=` + login.token, { redirect: 'manual' });
+    const streamOk = stream.status === 200 || stream.status === 302;
+    // per-user toggle: this account opts out of the instance
+    await fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ sources: { 'plex-2': false } }) });
+    const libOff = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+    const offOk = !(libOff.items || []).some(i => i.source === 'plex-2');
+    await fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ sources: null }) });
+    await put({ instances: [] });
+    await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
+    R.checks.t87Multi = { n: instItems.length, idOk, secOk, noBuiltin, labelOk, detailOk, streamOk, offOk,
+      ok: instItems.length > 0 && idOk && secOk && noBuiltin && labelOk && detailOk && streamOk && offOk };
+  }
+
+  // 17c) t88: SHELF BUGS — direction in genre mode, map-wins-taxonomy, commit-on-change
+  {
+    // deterministic stock: ONLY the archive mock's staff-picks (3 movies) —
+    // whatever earlier checks left behind must not matter here.
+    await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
+      body: JSON.stringify({ sources: { plex: false, jellyfin: false }, archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] }, radio: { url: 'http://127.0.0.1:32790', sections: [] }, podcasts: { feeds: [] }, shelves: {} }) });
+  }
+  R.checks.t88Shelves = await page.evaluate(async () => {
+    const s = window.__VB.scene, st = window.__VB.state;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    // fresh library in-page (archive mock still on): staff-picks = 3 classics
+    const lib = await (await fetch('/api/library?refresh=1', { credentials: 'include' })).json();
+    st.items = lib.items; st.sections = lib.sections || []; st.shelves = {};
+    await new Promise(r => { s.setItems(lib.items, { mode: 'genre', dir: 'asc' }, r, { 'wall-R-0': 'archive:staff-picks' }); });
+    await sleep(400);
+    const asc = s.placementsByUnit('wall-R-0');
+    await new Promise(r => { s.setItems(lib.items, { mode: 'genre', dir: 'desc' }, r, { 'wall-R-0': 'archive:staff-picks' }); });
+    await sleep(400);
+    const desc = s.placementsByUnit('wall-R-0');
+    // BUG 3 + 4: direction honored in genre mode, and the MAPPED shelf shows its
+    // own section in the mode's within-group (title) order — A→Z vs Z→A.
+    // (compare the first pool cycle — the shelf may have more slots than the
+    // section has titles, so the cycled tail breaks a full-array reverse)
+    const a3 = asc.slice(0, 3), d3 = desc.slice(0, 3);
+    const dirWorks = a3.length === 3 && a3[0] === 'His Girl Friday'
+      && JSON.stringify(d3) === JSON.stringify([...a3].reverse())
+      && new Set(asc).size === 3;
+    // BUG 2: commit-on-change — flip a select in My Shelves, press NOTHING,
+    // and the map is already saved to the profile.
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.querySelector('.side-link[data-tab="shelves"]').click();
+    await sleep(300);
+    const sel = document.querySelector('#shelf-map-rows select[data-unit="wall-L-0"]');
+    const opt = sel ? [...sel.querySelectorAll('option')].find(o => o.value && o.value !== '') : null;
+    if (!sel || !opt) {
+      document.getElementById('btn-settings-close')?.click();
+      return { why: 'panel-missing', sections: (lib.sections || []).map(x => x.key), ok: false };
+    }
+    sel.value = opt.value;
+    sel.dispatchEvent(new Event('change'));
+    await sleep(500);
+    const boot = await (await fetch('/api/bootstrap', { credentials: 'include' })).json();
+    const committed = boot.prefs?.shelves?.['wall-L-0'] === opt.value;
+    // stale-key visibility (BUG 1b): a mapping to a dead key shows in the panel
+    await st.updatePrefs({ shelves: { 'wall-L-1': 'archive:does-not-exist' } });
+    st.shelves = { ...(st.shelves || {}), 'wall-L-1': 'archive:does-not-exist' };   // what a fresh boot would load
+    await sleep(200);
+    document.querySelector('.side-link[data-tab="shelves"]').click();
+    await sleep(300);
+    const staleShown = document.getElementById('shelf-stale-note')?.style.display !== 'none'
+      && document.getElementById('shelf-stale-note')?.textContent.includes('no longer exist');
+    // cleanup: close the modal, clear the personal map + stale key, restore sorting
+    document.getElementById('btn-settings-close')?.click();
+    await sleep(150);
+    await st.updatePrefs({ shelves: { 'wall-L-0': '', 'wall-L-1': '' } });   // '' entries are deleted by the merge
+    st.shelves = {};
+    s.setShelfAssignment({});
+    await st.updatePrefs({ sorting: { mode: 'recent', dir: 'desc' } });
+    await sleep(200);
+    return { dirWorks, committed, staleShown, asc: asc.slice(0, 3), ok: dirWorks && committed && staleShown };
+  });
+
+  // 17d) t89: GRABBER CASE ART — frame upload + cached poster serve + rejection paths
+  {
+    const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+    const root = path.resolve('tests/media/local');
+    fs.mkdirSync(root + '/Movies', { recursive: true });
+    fs.writeFileSync(root + '/Movies/Thumb Test.mp4', 'fakemp4-thumbtest-0123456789');
+    await put({ local: { on: true, spots: [root] } });
+    const lib = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+    const item = (lib.items || []).find(i => i.source === 'local' && i.key.endsWith('Thumb Test.mp4'));
+    const found = !!item;
+    let t89 = { found, ok: false };
+    if (item) {
+      // wipe any cached thumb from a previous run — suite runs twice
+      const h = crypto.createHash('sha1').update('local:' + item.key).digest('hex');
+      fs.rmSync(path.resolve('data/thumbs', h + '.jpg'), { force: true });
+      // node-side: the 404-before + rejection paths (deliberate 4xx responses
+      // from the PAGE would pollute the browser console-error count)
+      const beforeN = await fetch(BASE + '/img/local/' + encodeURIComponent(item.key) + '?vb_auth=' + login.token);
+      const was404 = beforeN.status === 404;
+      const badN = await fetch(BASE + '/api/thumb/local/' + encodeURIComponent(item.key), { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ dataUrl: 'data:image/jpeg;base64,AAAA' }) });
+      const rejected = badN.status === 400;
+      const wrongN = await fetch(BASE + '/api/thumb/local/' + encodeURIComponent('999/nope.mp4'), { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ dataUrl: 'x' }) });
+      const notFound = wrongN.status === 404;
+      // page-side: a REAL canvas JPEG uploads, then serves as the case image
+      t89 = await page.evaluate(async (key) => {
+        const c = document.createElement('canvas'); c.width = 60; c.height = 80;
+        const g = c.getContext('2d');
+        g.fillStyle = '#22334a'; g.fillRect(0, 0, 60, 80);
+        g.fillStyle = '#ffd23f'; g.fillRect(10, 10, 40, 60);
+        const dataUrl = c.toDataURL('image/jpeg', 0.8);
+        const post = await fetch('/api/thumb/local/' + encodeURIComponent(key), {
+          method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ dataUrl })
+        });
+        const posted = post.status === 200;
+        const after = await fetch('/img/local/' + encodeURIComponent(key));
+        const served = after.status === 200 && (after.headers.get('content-type') || '').includes('image/jpeg');
+        const bytes = served ? (await after.arrayBuffer()).byteLength : 0;
+        return { posted, served, bytes, ok: posted && served && bytes > 100 };
+      }, item.key);
+      t89.was404 = was404; t89.rejected = rejected; t89.notFound = notFound;
+      t89.ok = t89.ok && was404 && rejected && notFound;
+    }
+    const wired = await page.evaluate(() => typeof window.__VB.mainCtx.genLocalThumbs === 'function'
+      && typeof window.__VB.scene.refreshPosters === 'function');
+    await put({ local: { on: false, spots: [] } });
+    await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
+    R.checks.t89Thumbs = { ...t89, wired, ok: t89.ok && wired };
+  }
 
   // ── restore the live preview: real archive.org defaults, no mocks ──
   await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },

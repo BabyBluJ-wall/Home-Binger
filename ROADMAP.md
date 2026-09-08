@@ -2,7 +2,7 @@
 
 *From a single video-store room to a full media building. Updated every turn.*
 
-**Current phase: 1 — 1.0 BETA FREEZE / TESTER BUG-HUNT** (updated 2026-09-06)
+**Current phase: 1 — 1.0 BETA FREEZE / TESTER BUG-HUNT** (updated 2026-09-08)
 
 ---
 
@@ -104,6 +104,22 @@ https://github.com/BabyBluJ-wall/Home-Binger/releases/download/v1.5.5/HomeBinger
 Recovery: clone the repo, or rebuild the exe from source
 (`node tools/build-desktop.mjs`).
 **Goal:** stop adding, start hardening. The app as it stands, bulletproof.
+- [x] **t82–t85 tester round 2**: admin tabs merged into one Admin
+      section + make/remove-admin per user (last-admin guard); mobile
+      account creation un-lagged (overlay pauses scene + no backdrop
+      blur on phones); one-tap LAN invite copy in My Profile; jukebox
+      hover overlay removed. 80/80 suite.
+- [x] **t86–t89 wave (2026-09-08)**: multi-source — connect as many
+      Plex/Jellyfin instances as wanted (Admin → Server → More libraries;
+      per-instance nickname/on-off/picks/Test; "Nickname · Library" labels;
+      per-user toggles in My Media; per-connection routing). Shelf map fixed
+      five ways (cap-safe pinned sections, commit-on-change, Direction in
+      genre/library, map-wins-taxonomy, "Server · Section" labels) + stale
+      pins surfaced with cleanup + jukebox-aware reset. Grabber videos get
+      real case images (first visitor generates, server-cached). Dance
+      floor: 2× rig energy, cones un-inverted, real faceted mirror ball
+      (pin spot + glints + floor sweep), per-person "Dance floor lights"
+      prefs — gate stays (dance-hall music only). 85/85 suite ×2.
 - [ ] Owner bug-hunt round on the full build (all rooms, both decks, grabber,
       desktop exe, phones) — findings list → fixes
 - [ ] Fresh-install test again (that's how we caught the grabber gate bug)
@@ -158,4 +174,5 @@ t63 volume/EQ logic · t64 DJ booth Pro Rig + jukebox deck completed ·
 t65 theater-mirror jukebox + gold-record wall + wide booth ·
 t66 audio/usability audit · t66b ear-level store ring + novice aids ·
 t67 sub-band dynamics + booth flex + dance-ring bug ·
-t68 fresh-install grabber fix + zip hygiene (63/63 on clean data)
+t68 fresh-install grabber fix + zip hygiene (63/63 on clean data) ·
+t86–t89 multi-source + shelf-map fixes + grabber case art + dance-floor lights 2.0 (85/85 ×2)

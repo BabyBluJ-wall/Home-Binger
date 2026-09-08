@@ -1,3 +1,36 @@
+## 2026-09-08 — t86–t89: multi-source, shelf-map fixes, grabber art, dance-floor lights
+- **t87 · connect as many libraries as you like.** Admin → Server has a new
+  "More libraries" section: add another Plex or Jellyfin — or a friend's —
+  each with its own nickname, on/off switch, library picks and Test button.
+  Extra servers stack on the shelves; sections label themselves
+  "Nickname · Library" so two "Movies" never look alike; each visitor can
+  switch any connection on or off in My Media. Posters, details and streams
+  route per-connection; tokens stay masked like the built-ins.
+- **t88 · the shelf map, fixed five ways.** ① A pinned section always
+  reaches its own titles — a section past the display cap (or with an
+  unlucky sort) no longer silently falls back to the mixed shelf. ② The map
+  saves on every change — the live preview IS the saved map; the button is
+  just "Done" now. ③ Direction (A→Z / Z→A) finally works in Genre and By
+  Library modes. ④ A pinned shelf shows its OWN section in title order —
+  grouping modes shape the automatic mix, never your pinned walls. ⑤
+  Duplicate section names read "Server · Section". Plus: stale pins
+  (renamed library, removed server) show as "no longer available" with a
+  one-click cleanup, and "All automatic" clears the jukebox pick too.
+- **t89 · grabbed videos get case images.** Files pulled in by the file
+  grabber had plain text cases. Now the first browser to visit grabs a
+  frame (~15% in), uploads it once, and every store after that shows it as
+  the case image — cached on the server, zero per-visit cost. Codecs the
+  browser can't decode keep the text case.
+- **t86 · the dance hall actually dances.** The rig moves twice as fast and
+  twice as far, patterns rotate twice as often, washes/LEDs hit harder —
+  and the sweeping cones finally point the right way (narrow at the
+  fixture, wide at the floor; they were inverted). The mirror ball is real:
+  faceted, pin-spotted, spinning, with sparkle glints and a floor sweep.
+  New "Dance floor lights" section in My Theme — intensity, speed, ball
+  spin, pattern lock — saved per person. The rule stays: the rig only
+  wakes when the dance hall's own music is playing.
+- Suite: 80 → 85 checks (t86Dance2, t87Multi, t88Shelves, t89Thumbs;
+  t59Beat and panels updated to the new spec).
 ## 2026-09-08 — t82–t85: the tester round-2 wave (admin, mobile, invites, jukebox)
 - **t82 · Admin consolidated + admins make admins.** The three admin tabs
   (Server / Users / Policies) merged into ONE "Admin" section with sub-tab

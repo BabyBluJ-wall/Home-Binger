@@ -268,7 +268,9 @@ and your data survives.
 add as many **media spots** as you like (`C:\Videos`, `D:\Music`, an external
 drive…) and switch it on. Every spot grabs everything inside it — **and every
 folder nested inside, recursively** — as individual files: movies by file,
-music tracks grouped by their folder. Ebooks/PDFs are indexed in the catalogue
+music tracks grouped by their folder. Grabbed **videos grow their own case
+images automatically** — the first browser to visit grabs a frame from each
+file and uploads it once; every store after that shows it. Ebooks/PDFs are indexed in the catalogue
 for the coming full-media library. Nothing leaves your computer and no media
 server is involved.
 
@@ -282,6 +284,7 @@ match any of them:
 | Source | What it gives you |
 |---|---|
 | **Plex** / **Jellyfin** | Your full library, paginated to the last page. Movies & TV on the shelves, music on the jukebox. Live TV/DVR channels appear as 📺 VHS channel-tapes (playback streams via HLS; Safari plays it natively, Chrome-based browsers may refuse the format — that's a browser limitation). |
+| **➕ More libraries** | Got a second server — or a friend's? **Admin → Server → "More libraries"**: add as many extra Plex/Jellyfin connections as you like. Each gets a nickname (shows as "Nickname · Library" on shelf labels), its own switch, picks and Test button. Everyone can flip each one on/off in My Media. |
 | **🎞️ Internet Archive** | Public-domain classics, free and legal. |
 | **📻 Radio-Browser** | Live radio stations on the jukebox. |
 | **🎙️ Podcasts** | Any podcast by RSS feed. |

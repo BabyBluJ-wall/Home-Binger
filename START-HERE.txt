@@ -69,10 +69,14 @@ FIRST LAUNCH — WHAT TO EXPECT
 • The store opens with the free shelves stocked (classic movies, radio).
 • Sign in as the manager:  BabyBluJ / BluJNetwork  (change it later in
   Settings → Admin → Users).
-• Your own movies/music: Settings → Admin → Server → Plex or Jellyfin.
+• Your own movies/music: Settings → Admin → Server → Plex or Jellyfin —
+  and you can add MORE of them ("More libraries"): a second server, a
+  friend's, as many as you like. Each gets a nickname and shows up as
+  "Nickname · Library" on the shelves.
   Or skip media servers entirely: "Local files" — type a folder like
   C:\Videos and EVERYTHING inside it (including subfolders) shelves as
-  individual files.
+  individual files. Grabbed videos grow their own case images
+  automatically (the first visitor generates them, once, for everyone).
 • Phones/tablets on the same Wi-Fi: open http://<your-pc-ip>:8181
   (the address shows in the console window on first launch).
 
@@ -88,8 +92,10 @@ THE BUILDING (one roof, four spaces):
 • The theater — through the door in the store's back wall: big screen,
   sloped floor. Send any movie there from its detail card.
 • The dance hall — through the glass sliders in the store's RIGHT wall:
-  checkerboard floor that pulses with the music, moving light rig, DJ
-  booth (click the laptop for the booth's deck), and the DJ's Library
+  checkerboard floor that pulses with the music, a moving light rig and a
+  spinning faceted mirror ball (they only wake when the dance hall's own
+  music plays — shape them in Settings → My Theme → Dance floor lights),
+  DJ booth (click the laptop for the booth's deck), and the DJ's Library
   room behind the booth (click a record to spin it).
 
 CONTROLS:

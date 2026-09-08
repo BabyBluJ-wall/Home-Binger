@@ -157,6 +157,12 @@ export function sanitizeSourcesPref(v) {
       ? [...new Set(v[k].map(String).filter(x => /^[\w-]{1,40}$/.test(x)))].slice(0, 20)
       : null;
   }
+  // t87: extra instances (plex-2, jellyfin-2, …) toggle like the built-ins —
+  // boolean on/off; absent key = follow the store's setting.
+  for (const k of Object.keys(v)) {
+    if (k in out) continue;
+    if (/^[a-z][a-z0-9-]{0,31}$/.test(k) && typeof v[k] === 'boolean') out[k] = v[k];
+  }
   return out;
 }
 
@@ -167,7 +173,7 @@ export function sanitizeShelfMap(map) {
   for (const [unit, sec] of Object.entries(map || {})) {
     if (!/^[\w-]{1,32}$/.test(unit)) continue;
     if (sec === '' || sec == null) continue;
-    if (/^[\w:-]{1,64}$/.test(String(sec))) out[unit] = String(sec);
+    if (/^[\w:-]{1,100}$/.test(String(sec))) out[unit] = String(sec);   // t87: instance-namespaced keys
     if (Object.keys(out).length >= 64) break;
   }
   return out;

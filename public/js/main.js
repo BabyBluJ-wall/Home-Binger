@@ -8,11 +8,11 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1788852958324';
-import { api } from './api.js?v=1788852958324';
-import { initUI } from './ui.js?v=1788852958324';
-import { createScene } from './store3d/scene.js?v=1788852958324';
-import { STORE, SUPPORT } from './store3d/config.js?v=1788852958324';
+import { state } from './state.js?v=1788899102183';
+import { api } from './api.js?v=1788899102183';
+import { initUI } from './ui.js?v=1788899102183';
+import { createScene } from './store3d/scene.js?v=1788899102183';
+import { STORE, SUPPORT } from './store3d/config.js?v=1788899102183';
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -81,6 +81,8 @@ async function boot() {
     }
   };
   scene.setItems(state.items, prefs.sorting, onStockProgress, state.shelves);
+  scene.setDancePrefs?.(state.prefs.dance);   // t86: dance-floor prefs at boot
+  scheduleLocalThumbs();                      // t89: grabber case art, once the store settles
   fill.style.width = '90%';
 
   // TV config (idle screen; playback is triggered by clicking shelf cases)
@@ -148,6 +150,8 @@ async function boot() {
     },
     currentAccent: () => state.prefs.theme.accent,
     applySorting: (sorting) => { scene.applySorting(sorting); toastIt('Shelves restocked!'); },
+    applyDancePrefs: (p) => scene.setDancePrefs?.(p),       // t86: dance-floor light prefs
+    genLocalThumbs: () => scheduleLocalThumbs(),            // t89: grabber case art (also auto-runs)
     respawn: () => { scene.controls.reset(); },
     getTv: () => scene.tv,
     playNext: (item) => scene.playNext(item),
@@ -224,6 +228,8 @@ async function boot() {
       r.setProperty('--vb-accent-soft', `color-mix(in srgb, ${state.prefs.theme.accent || '#ffd23f'} 72%, white)`);
       scene.applyTheme(state.prefs.theme);
       scene.applySorting(state.prefs.sorting);
+      scene.setDancePrefs?.(state.prefs.dance);   // t86
+      scheduleLocalThumbs();                      // t89: new files may have been grabbed
       ui.updateSidebar();
     },
     reloadLibrary: async () => {
@@ -429,3 +435,61 @@ function escapeHtml(s) {
 }
 
 boot();
+
+// ── t89: grabber case art ─────────────────────────────────────────────────────
+// Local/grabber videos carry no artwork, so the first client to visit grabs a
+// frame, POSTs it to the server's thumb cache, and repaints the case. Done
+// once per file, ever — later stores just GET the cached image.
+const thumbTried = new Set();
+function scheduleLocalThumbs() {
+  setTimeout(async () => {
+    if (document.hidden) return;                    // tries again on next rebuild/visit
+    const vids = (state.items || [])
+      .filter(i => i.source === 'local' && i.type === 'movie' && !thumbTried.has(i.id))
+      .slice(0, 6);                                 // gentle: a few per pass
+    for (const item of vids) {
+      thumbTried.add(item.id);
+      try {
+        const r = await fetch(`/img/local/${encodeURIComponent(item.key)}`);
+        if (r.ok) continue;                         // already cached — nothing to do
+        const dataUrl = await grabVideoFrame(`/api/play/local/${encodeURIComponent(item.key)}`);
+        if (!dataUrl) continue;                     // undecodable (e.g. some .mkv) — placeholder stays
+        await fetch('/api/thumb/local/' + encodeURIComponent(item.key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl })
+        });
+        scene.refreshPosters?.([item]);             // repaint the case right now
+      } catch { thumbTried.delete(item.id); }       // transient — a later visit retries
+    }
+  }, 1500);
+}
+
+// Seek to ~15% in, paint one frame onto a small canvas, return a JPEG data URL.
+function grabVideoFrame(url) {
+  return new Promise(resolve => {
+    const v = document.createElement('video');
+    v.muted = true; v.preload = 'auto'; v.src = url;
+    const finish = (x) => {
+      clearTimeout(timer);
+      v.onerror = v.onloadeddata = v.onseeked = null;
+      v.removeAttribute('src'); try { v.load(); } catch {}
+      resolve(x);
+    };
+    const timer = setTimeout(() => finish(null), 12000);
+    v.onerror = () => finish(null);                 // codec the browser can't read → skip
+    v.onloadeddata = () => {
+      try { v.currentTime = Math.min(Math.max(2, (v.duration || 0) * 0.15), 90); }
+      catch { finish(null); }
+    };
+    v.onseeked = () => {
+      try {
+        const w = 240, h = Math.max(1, Math.round((v.videoHeight || 320) / ((v.videoWidth || 240) / w)));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(v, 0, 0, w, h);
+        finish(c.toDataURL('image/jpeg', 0.72));
+      } catch { finish(null); }
+    };
+  });
+}
+

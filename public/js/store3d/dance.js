@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1788852958324';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1788899102183';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;
@@ -79,14 +79,35 @@ export function buildDance(theme) {
   group.add(tiles);
 
   // ── LIGHT RIG — everything reacts to the music ──
-  // mirror ball + speckles
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 14),
-    new THREE.MeshStandardMaterial({ color: '#cfd6e6', roughness: 0.15, metalness: 1 }));
+  // t86: THE MIRROR BALL, for real this time — faceted (flat-shaded
+  // icosahedron), a pin spot aimed at it, and two instanced glint sets
+  // (shell sparkles + a floor sweep). One draw call each. Deliberately NO
+  // THREE.Points objects — the t54 particle ban still holds.
+  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 2),
+    new THREE.MeshStandardMaterial({ color: '#cfd6e6', roughness: 0.08, metalness: 1, flatShading: true }));
   ball.position.set(xc, H - 0.75, floorZ); group.add(ball);
+  const pinSpot = new THREE.SpotLight(0xffffff, 0, 10, 0.42, 0.6, 1.2);   // a real mirror ball is lit by a pin spot
+  pinSpot.position.set(xc - 1.7, H - 0.35, floorZ - 1.7);
+  pinSpot.target = ball; group.add(pinSpot, pinSpot.target);
   const ballLight = new THREE.PointLight(0xffffff, 6, 7, 1.8);
   ballLight.position.set(xc, H - 0.2, floorZ); group.add(ballLight);
-  // (t54: the particle field is GONE — it added little; haze/smoke returns
-  //  once the room textures are worth it)
+  // glints — shell sparkles on the ball + sweeping dots on the floor
+  const SHELL_N = 80, FLOOR_N = 24;
+  const glintMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const shellGlints = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.05, 0.05), glintMat(), SHELL_N);
+  const floorGlints = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.15, 0.15), glintMat(), FLOOR_N);
+  shellGlints.frustumCulled = floorGlints.frustumCulled = false;
+  group.add(shellGlints, floorGlints);
+  const shellDirs = [];
+  for (let i = 0; i < SHELL_N; i++) {           // golden-angle sphere distribution (deterministic)
+    const y = 1 - (i / (SHELL_N - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * 2.399963;
+    shellDirs.push(new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r));
+  }
+  const floorGlintSeed = [];
+  for (let i = 0; i < FLOOR_N; i++) floorGlintSeed.push(1.1 + ((i * 37) % 100) / 100 * 1.9);   // radius 1.1–3.0 m
+  const glintDummy = new THREE.Object3D();
+  const glintCol = new THREE.Color();
   // sweeping color beams (visible cones + real lights)
   const beamMat = (hue) => new THREE.MeshStandardMaterial({
     color: hue, emissive: hue, emissiveIntensity: 1.4, transparent: true, opacity: 0.34, depthWrite: false });
@@ -96,8 +117,9 @@ export function buildDance(theme) {
     const a = (i / beamColors.length) * Math.PI * 2;
     const pivot = new THREE.Group();
     pivot.position.set(xc + Math.cos(a) * 2.6, H - 0.25, floorZ + Math.sin(a) * 2.6);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.55, 6.2, 14, 1, true), beamMat(col));
-    cone.position.y = -3.1; cone.rotation.x = Math.PI;   // hang downward
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.95, 6.2, 14, 1, true), beamMat(col));
+    cone.position.y = -3.1;   // t86 FIX: NO π-flip — apex AT the fixture (narrow at the ceiling),
+                              // base flaring down at the floor. It was inverted before (owner report).
     pivot.add(cone);
     const spot = new THREE.PointLight(col, 0, 8, 1.9);
     spot.position.y = -0.6; pivot.add(spot);
@@ -347,6 +369,23 @@ export function buildDance(theme) {
   let lightMode = 'idle';
 
   // ── update: a real DJ-set light engine (t51) — beats drive PATTERNS,
+  // t86: ADJUSTABLE + a lot more active — the owner asked for "more life".
+  // P = the owner's dance-floor prefs (My Theme → Dance floor lights):
+  // intensity/speed scale the whole show; ballSpin the mirror ball;
+  // pattern locks one look instead of auto-rotating. Defaults (all 1 /
+  // 'auto') = the new tuned spec — and the rig stays ASLEEP unless the
+  // dance hall's own music is playing (owner's rule: free perf when the
+  // room is quiet).
+  let P = { intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' };
+  function setPrefs(p) {
+    const num = (v, dflt, lo, hi) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : dflt);
+    P = {
+      intensity: num(p?.intensity, P.intensity, 0.2, 2.5),
+      speed: num(p?.speed, P.speed, 0.3, 2.5),
+      ballSpin: num(p?.ballSpin, P.ballSpin, 0, 3),
+      pattern: ['auto', '0', '1', '2', '3'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern
+    };
+  }
   //    hues rotate with the music, particles fly on the kick, floor shifts color
   let ph = 0, barBeats = 0, pattern = 0, hue = Math.random();
   // t59: ADAPTIVE BEAT — the old fixed 0.42 threshold fired early or late
@@ -370,7 +409,7 @@ export function buildDance(theme) {
     djSpot.intensity += Math.sign(spotT - djSpot.intensity) * Math.min(Math.abs(spotT - djSpot.intensity), dt * 10);
     const rigLevel = live ? 1 : 0.05;
     clock += dt;
-    ph += dt * (0.15 + lv.energy * 0.5);         // t59: slow drift — beats move the rig, not energy jitter
+    ph += dt * (0.3 + lv.energy * 0.85) * P.speed;   // t86: livelier drift — beats still lead, energy rides
 
     // BEAT + PATTERN bookkeeping — adaptive kick; 8 kicks = a bar
     bassHist[bh] = lv.bass; bh = (bh + 1) % bassHist.length;
@@ -381,22 +420,53 @@ export function buildDance(theme) {
       if (lastBeatT >= 0 && clock - lastBeatT < 2.5) { lastInt = clock - lastBeatT; bpm = Math.round(60 / lastInt); }
       lastBeatT = clock; beats++;
       barBeats++;
-      pose += 0.9 + (barBeats % 2) * 0.5;                     // the next pose the rig eases to
+      pose += (1.5 + (barBeats % 2) * 0.8) * P.speed;         // the next pose the rig eases to (t86: bigger jumps)
       hue = (hue + 0.06 + lv.energy * 0.05) % 1;              // every kick nudges the palette
-      if (barBeats >= 8) { barBeats = 0; pattern = (pattern + 1) % 4; }   // rotate the rig pattern
+      if (barBeats >= 4) { barBeats = 0; pattern = (pattern + 1) % 4; }   // t86: rotate the look twice as often
+      if (P.pattern !== 'auto') pattern = P.pattern | 0;      // t86: locked look wins
     }
 
     // FLOOR: same bass/mid checker pulse, but the COLOR rides the hue
     col.setHSL((hue + 0.08) % 1, 0.95, 0.55);
     for (const t of tileMats) {
       t.mat.emissive.copy(col);
-      t.mat.emissiveIntensity = Math.max(0, (t.even ? lv.bass : lv.mid * 0.7) - ((t.ix + t.iz) % 3) * 0.06) * 1.5;
+      t.mat.emissiveIntensity = Math.max(0, (t.even ? lv.bass : lv.mid * 0.7) - ((t.ix + t.iz) % 3) * 0.06) * 1.9 * P.intensity;
     }
 
 
-    // MIRROR BALL
-    ball.rotation.y += dt * (0.4 + lv.energy * 3);
-    ballLight.intensity = 3.5 + lv.treble * 9;
+    // MIRROR BALL (t86: faceted + pin spot + glints — the spin is finally VISIBLE)
+    ball.rotation.y += dt * (0.5 + lv.energy * 4.5) * P.ballSpin;
+    ballLight.intensity = (4 + lv.treble * 12) * P.intensity;
+    pinSpot.intensity = live ? (2.2 + lv.energy * 2.6) * P.intensity : 0.4;
+    const glintVis = 0.12 + rigLevel * 0.88;                  // glints live with the rig
+    for (let i = 0; i < SHELL_N; i++) {
+      const dir = shellDirs[i];
+      const tw = 0.55 + 0.45 * Math.sin(clock * (3 + (i % 5)) + i * 2.1);   // per-facet twinkle
+      glintDummy.position.set(ball.position.x + dir.x * 0.47, ball.position.y + dir.y * 0.47, ball.position.z + dir.z * 0.47);
+      glintDummy.lookAt(glintDummy.position.x + dir.x, glintDummy.position.y + dir.y, glintDummy.position.z + dir.z);
+      const s = (0.45 + tw * 0.85) * glintVis;
+      glintDummy.scale.setScalar(s);
+      glintDummy.updateMatrix();
+      shellGlints.setMatrixAt(i, glintDummy.matrix);
+      glintCol.setHSL((hue + 0.12) % 1, 0.35, 0.75 + tw * 0.25);
+      shellGlints.setColorAt(i, glintCol);
+    }
+    shellGlints.instanceMatrix.needsUpdate = true;
+    if (shellGlints.instanceColor) shellGlints.instanceColor.needsUpdate = true;
+    for (let i = 0; i < FLOOR_N; i++) {                        // sweeping dots ride the spin across the floor
+      const ang = (i / FLOOR_N) * Math.PI * 2 + ball.rotation.y * 1.6;
+      const r = floorGlintSeed[i];
+      glintDummy.position.set(xc + Math.cos(ang) * r, 0.03, floorZ + Math.sin(ang) * r);
+      glintDummy.rotation.set(-Math.PI / 2, 0, ang);
+      const s = (0.35 + lv.treble * 1.1) * glintVis;
+      glintDummy.scale.setScalar(s);
+      glintDummy.updateMatrix();
+      floorGlints.setMatrixAt(i, glintDummy.matrix);
+      glintCol.setHSL((hue + 0.12) % 1, 0.5, 0.7);
+      floorGlints.setColorAt(i, glintCol);
+    }
+    floorGlints.instanceMatrix.needsUpdate = true;
+    if (floorGlints.instanceColor) floorGlints.instanceColor.needsUpdate = true;
 
     // RIG — DJ-set PATTERNS (sweep → chase → strobe → build), hue-synced colors
     const beamCol = (i) => col.setHSL((hue + i * 0.13) % 1, 1, 0.55);
@@ -404,34 +474,34 @@ export function buildDance(theme) {
       const r = rig[i];
       if (r.spin) { r.spin.rotation.y += dt * (1 + lv.mid * 8); continue; }
       let ty, tx = 0, punch = 0.4 + lv.energy * 1.3;
-      if (pattern === 0) { ty = pose * 0.55 + r.phase + ph * 0.15; tx = Math.sin(pose * 0.5 + r.phase) * 0.45; }        // sweep
-      else if (pattern === 1) { ty = Math.floor(barBeats % rig.length) === i ? pose * 0.8 : r.phase + ph * 0.1; punch *= barBeats % rig.length === i ? 2.1 : 0.5; }  // chase
-      else if (pattern === 2) { ty = r.phase + ph * 0.1; tx = kick ? 0.25 + ((beats * 7 + i * 3) % 5) * 0.13 : 0.1; punch *= kick ? 2.6 : (lv.bass > 0.3 ? 1.2 : 0.15); }  // strobe (deterministic — no random jitter)
-      else { ty = (i / rig.length) * Math.PI * 2 + pose * 0.2 + ph * 0.1; tx = 0.5 - barBeats * 0.07; if (barBeats === 7 && kick) { tx = 0.9; punch *= 2.4; } }  // build & drop
+      if (pattern === 0) { ty = pose * 0.9 + r.phase + ph * 0.2; tx = Math.sin(pose * 0.5 + r.phase) * 0.8; }        // sweep — t86: wider arcs
+      else if (pattern === 1) { ty = Math.floor(barBeats % rig.length) === i ? pose * 1.1 : r.phase + ph * 0.15; punch *= barBeats % rig.length === i ? 2.8 : 0.35; }  // chase — harder hits
+      else if (pattern === 2) { ty = r.phase + ph * 0.15; tx = kick ? 0.3 + ((beats * 7 + i * 3) % 5) * 0.16 : 0.1; punch *= kick ? 3.2 : (lv.bass > 0.3 ? 1.2 : 0.08); }  // strobe — snappier
+      else { ty = (i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15; tx = 0.75 - barBeats * 0.09; if (barBeats === 3 && kick) { tx = 0.95; punch *= 3.2; } }  // build & drop
       // t59: EASE to the target, then CAP the travel speed — real moving-head
       // fixtures SWEEP to their next position; they never snap. Even a far
       // target glides in at ≤ 2.4 rad/s. Loose, liquid, beat-locked.
-      const ease = 1 - Math.exp(-dt * 6);
-      const capY = 2.4 * dt, capX = 1.8 * dt;
+      const ease = 1 - Math.exp(-dt * 10);
+      const capY = 4.6 * P.speed * dt, capX = 3.2 * P.speed * dt;   // t86: real movers, really moving
       let dy = (ty - r.pivot.rotation.y) * ease;
       let dx2 = (tx - r.pivot.rotation.x) * ease;
       r.pivot.rotation.y += Math.max(-capY, Math.min(capY, dy));
       r.pivot.rotation.x += Math.max(-capX, Math.min(capX, dx2));
-      r.spot.intensity = punch * 2.2 * rigLevel;
-      r.cone.material.opacity = (0.14 + Math.min(0.55, punch * 0.22)) * rigLevel;
+      r.spot.intensity = punch * 3.2 * rigLevel * P.intensity;
+      r.cone.material.opacity = Math.min(0.95, (0.10 + Math.min(0.7, punch * 0.3)) * rigLevel * P.intensity);
       r.cone.material.color.copy(beamCol(i)); r.cone.material.emissive.copy(beamCol(i));
       r.spot.color.copy(beamCol(i));
     }
-    washes[0].intensity = 0.4 + lv.bass * 2.6;
-    washes[1].intensity = 0.4 + lv.mid * 2.6;
-    ambient.intensity = 0.4 + lv.energy * 0.5;
+    washes[0].intensity = (0.5 + lv.bass * 3.6) * P.intensity;
+    washes[1].intensity = (0.5 + lv.mid * 3.6) * P.intensity;
+    ambient.intensity = 0.4 + lv.energy * 0.6;
 
     // NEON: LED bars ride the hue and PULSE per band; signs breathe with it
     for (let i = 0; i < ledBars.length; i++) {
       const m2 = ledBars[i].material;
       m2.color.setHSL((hue + 0.5 + i * 0.07) % 1, 1, 0.6);
       m2.emissive.copy(m2.color);
-      m2.emissiveIntensity = 0.35 + lv.energy * 1.8 + (kick && i % 2 === 0 ? 0.8 : 0);
+      m2.emissiveIntensity = (0.4 + lv.energy * 2.6 + (kick && i % 2 === 0 ? 1.1 : 0)) * P.intensity;
     }
     coveMat.color.setHSL((hue + 0.25) % 1, 1, 0.6); coveMat.emissive.copy(coveMat.color);
     coveMat.emissiveIntensity = 0.5 + lv.bass * 2.2; cove2.material = coveMat;
@@ -441,6 +511,10 @@ export function buildDance(theme) {
 
   function info() {
     return {
+      lights: { ...P },                     // t86: the adjustable light engine
+      ball: { facets: true, glints: SHELL_N + FLOOR_N, pinSpot: true },
+      rigYaw: rig.filter(r => !r.spin).map(r => +r.pivot.rotation.y.toFixed(3)),
+      rigSpot: rig.filter(r => !r.spin).map(r => +r.spot.intensity.toFixed(2)),
       x0: X0, x1: X1, z0: Z0, z1: Z1, onRightSide: X0 > 0,
       floorTiles: tileMats.length, records: records.length,
       recordWall: {                                  // t65: framed vinyls, flush on the walls
@@ -463,5 +537,5 @@ export function buildDance(theme) {
     };
   }
 
-  return { group, occluders, colliders, boothTargets, recordTargets, setRecords, update, info, speakerWorld };
+  return { group, occluders, colliders, boothTargets, recordTargets, setRecords, update, info, setPrefs, speakerWorld };
 }

@@ -36,6 +36,7 @@ function addonSignature(cfg) {
     sources: cfg.sources || {},
     plex: cfg.plex?.sections || [],
     jellyfin: cfg.jellyfin?.sections || [],
+    instances: (cfg.instances || []).map(i => [i.id, i.kind, i.on !== false, i.url || '', i.token || i.apiKey || '', i.sections || []]),   // t87
     addons: ADDONS.map(a => [a.cfgKey, cfg[a.cfgKey]?.sections || [], cfg[a.cfgKey]?.feeds || [],
       !!cfg[a.cfgKey]?.on, cfg[a.cfgKey]?.path || ''])    // t51: local on/path busts the cache
   });
@@ -50,6 +51,8 @@ export function defaultView(cfg) {
     archive: cfg.archive || { sections: [] }, radio: cfg.radio || { sections: [] },
     podcasts: cfg.podcasts || { feeds: [] },
     local: cfg.local || { on: false, path: '' },     // t61: file grabber root
+    // t87: extra Plex/Jellyfin connections — on + credentialed only
+    instances: (cfg.instances || []).filter(i => i.on !== false && i.url && (i.token || i.apiKey)),
   };
 }
 export function userView(cfg, userSources) {
@@ -65,6 +68,8 @@ export function userView(cfg, userSources) {
     archive: { ...d.archive, sections: u.archive ?? d.archive.sections },
     radio: { ...d.radio, sections: u.radio ?? d.radio.sections },
     podcasts: d.podcasts, local: d.local,           // t61: local files stack for everyone
+    // t87: each extra instance honors the user's own toggle (default: on)
+    instances: d.instances.filter(i => (typeof u[i.id] === 'boolean' ? u[i.id] : true)),
   };
 }
 
@@ -73,6 +78,18 @@ export function userView(cfg, userSources) {
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 let cache = new Map();   // sig → { at, items } — one slot per distinct media mix
+
+// t87: MULTI-SOURCE routing — 'plex'/'jellyfin' are the built-in slots, but
+// extra instances (config.instances) each act as their OWN source key. Every
+// route that touches a media server resolves through here.
+export function sourceConfig(source) {
+  const cfg = getConfig();
+  if (typeof source !== 'string') return null;
+  if (ADAPTERS[source] && cfg[source]) return { adapter: ADAPTERS[source], cfg: cfg[source] };
+  const inst = (cfg.instances || []).find(i => i.id === source);
+  if (inst && ADAPTERS[inst.kind]) return { adapter: ADAPTERS[inst.kind], cfg: { ...inst } };
+  return null;
+}
 
 export function activeAdapter() {
   const cfg = getConfig();
@@ -115,6 +132,26 @@ export async function getLibrary(force = false, view = null) {
   for (const it of items) {
     if (it.addedAt && it.addedAt > 1e12) it.addedAt = Math.floor(it.addedAt / 1000);
   }
+  // ── t87: EXTRA INSTANCES — unlimited Plex/Jellyfin connections. Each
+  // instance's items are namespaced: source = instance id (routing), id gets
+  // the instance prefix (atlas slots), sectionId prefixed so shelf maps and
+  // By-Library grouping never collide between two libraries with the same
+  // name. sectionTitle keeps the server's own label for display.
+  for (const inst of (v.instances || [])) {
+    const adapter = ADAPTERS[inst.kind];
+    if (!adapter) continue;
+    try {
+      const got = await adapter.library({ ...inst, sections: inst.sections || [] });
+      for (const it of got) {
+        it.source = inst.id;
+        it.id = `${inst.id}:${it.key}`;
+        if (it.sectionId) it.sectionId = `${inst.id}:${it.sectionId}`;
+        items.push(it);
+      }
+    } catch (e) {
+      console.warn(`[${inst.id}] instance failed: ${e.message}`);
+    }
+  }
   // ── free add-on sources stack on top ──
   for (const addon of ADDONS) {
     if (!addon.wants(v[addon.cfgKey])) continue;
@@ -132,11 +169,19 @@ export async function getLibrary(force = false, view = null) {
 // Sections present in the catalogue (drives the Admin → Shelf Map dropdowns).
 export async function librarySections(view = null) {
   const items = await getLibrary(false, view);
+  const cfg = getConfig();
+  const instName = new Map((cfg.instances || []).map(i => [i.id, i.name]));
+  const SRC = { plex: 'Plex', jellyfin: 'Jellyfin', archive: 'Archive', radio: 'Radio', podcasts: 'Podcasts', local: 'Grabber' };
   const map = new Map();
   for (const it of items) {
     const key = it.sectionId || `auto:${it.sectionTitle || it.type}`;
     const name = it.sectionTitle || it.type || 'Media';
-    map.set(key, { key, name, count: (map.get(key)?.count || 0) + 1 });
+    const e = map.get(key);
+    if (e) e.count++;
+    else map.set(key, {
+      key, name, count: 1, source: it.source,
+      sourceLabel: instName.get(it.source) || SRC[it.source] || it.source   // t87/88: "Bob's Plex · Movies"
+    });
   }
   return [...map.values()].sort((a, b) => b.count - a.count);
 }
@@ -150,21 +195,19 @@ export async function findItem(source, key, view = null) {
 
 // Poster URL on the upstream media server (token-embedded — server-side only!).
 export async function posterUrlFor(source, key, view = null) {
-  const cfg = getConfig();
   const item = await findItem(source, key, view);
   if (!item) return null;
-  const adapter = ADAPTERS[source];
-  if (!adapter?.posterUrl) return null;
-  try { return adapter.posterUrl(cfg[source] || {}, item); }
+  const sc = sourceConfig(source);            // t87: instance or built-in
+  if (!sc?.adapter?.posterUrl) return null;
+  try { return sc.adapter.posterUrl(sc.cfg, item); }
   catch { return null; }
 }
 
 // Upstream stream URL for the in-store TV (server-side only).
 export async function streamUrlFor(source, key) {
-  const cfg = getConfig();
-  const adapter = ADAPTERS[source];
-  if (!adapter?.streamUrl) return null;
-  try { return await adapter.streamUrl(cfg[source] || {}, key); }
+  const sc = sourceConfig(source);            // t87: instance or built-in
+  if (!sc?.adapter?.streamUrl) return null;
+  try { return await sc.adapter.streamUrl(sc.cfg, key); }
   catch { return null; }
 }
 

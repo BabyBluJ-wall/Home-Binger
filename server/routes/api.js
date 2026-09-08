@@ -29,11 +29,13 @@ import {
   hashPassword, verifyPassword, findUser, publicUser, createSession, destroySession,
   getSessionUser, profileKeyFor, readPrefs, writePrefs, migrateDevicePrefs, sanitizeShelfMap, sanitizeSourcesPref } from '../lib/auth.js';
 import {
-  getLibrary, findItem, posterUrlFor, streamUrlFor, libraryStatus, invalidateCache, librarySections, userView, ADAPTERS
+  getLibrary, findItem, posterUrlFor, streamUrlFor, libraryStatus, invalidateCache, librarySections, userView, ADAPTERS, sourceConfig
 } from '../lib/library.js';
 import { proxyImage, proxyVideo, streamLocalFile } from '../lib/proxy.js';
 import { localAdapter } from '../lib/adapters/local.js';   // t61: mime lookup for disk streams
 import fs from 'node:fs';                                 // t66: grabber spot validation
+import path from 'node:path';                             // t89: thumb cache dir
+import { DATA_DIR } from '../lib/store.js';                // t89: grabbed-file case art
 import { CATALOG_SECTIONS } from '../lib/adapters/archive.js';
 import { GENRES as RADIO_GENRES } from '../lib/adapters/radio.js';
 
@@ -60,6 +62,14 @@ function corsHeaders(res) {
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   };
+}
+
+// t89: where a grabbed video's generated case image lives (content-hashed —
+// the item key can contain '/', '..' etc. and NEVER touches the path)
+function localThumbPath(key) {
+  if (!key) return null;
+  const h = crypto.createHash('sha1').update('local:' + key).digest('hex');
+  return path.join(DATA_DIR, 'thumbs', h + '.jpg');
 }
 
 function readBody(req, limit = 256 * 1024) {
@@ -92,6 +102,12 @@ function maskConfig(cfg) {
   const safe = JSON.parse(JSON.stringify(cfg));
   if (safe.plex?.token) safe.plex.token = MASK;
   if (safe.jellyfin?.apiKey) safe.jellyfin.apiKey = MASK;
+  if (Array.isArray(safe.instances)) {                     // t87: extra connections mask too
+    for (const i of safe.instances) {
+      if (i?.token) i.token = MASK;
+      if (i?.apiKey) i.apiKey = MASK;
+    }
+  }
   return safe;
 }
 
@@ -120,6 +136,7 @@ export async function handleApi(req, res, pathname) {
         // a lock forces the store's map on everyone
         shelves: locks.shelves ? (cfg.shelves || {}) : (prefs.shelves && Object.keys(prefs.shelves).length ? prefs.shelves : (cfg.shelves || {})),
         tv: prefs.tv || { idleMode: '', itemId: '' },
+        dance: prefs.dance || { intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' },   // t86
         sources: locks.sources ? null : (prefs.sources ?? null)
       };
       const status = await libraryStatus();
@@ -145,6 +162,10 @@ export async function handleApi(req, res, pathname) {
           plex: !!(cfg.plex?.url && cfg.plex?.token),
           jellyfin: !!(cfg.jellyfin?.url && cfg.jellyfin?.apiKey)
         },
+        instances: (cfg.instances || []).map(i => ({    // t87: extra connections, My Media toggles
+          id: i.id, kind: i.kind, name: i.name, on: i.on !== false,
+          ready: !!(i.url && (i.token || i.apiKey))
+        })),
         storeDefaults: {
           sources: cfg.sources || {},
           archive: cfg.archive?.sections || [],
@@ -194,6 +215,17 @@ export async function handleApi(req, res, pathname) {
         prefs.visualizer = {
           style: ['bars', 'mirror', 'wave', 'pulse'].includes(v.style) ? v.style : 'bars'
           // no color — the visualizer always follows the theme accent
+        };
+      }
+      if (body.dance) {   // t86: dance-floor light engine (intensity/speed/ballSpin/pattern)
+        const d = body.dance;
+        const num = (v, dflt, lo, hi) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : dflt);
+        prefs.dance = {
+          intensity: num(d.intensity, (prefs.dance || {}).intensity ?? 1, 0.2, 2.5),
+          speed: num(d.speed, (prefs.dance || {}).speed ?? 1, 0.3, 2.5),
+          ballSpin: num(d.ballSpin, (prefs.dance || {}).ballSpin ?? 1, 0, 3),
+          pattern: ['auto', '0', '1', '2', '3'].includes(String(d.pattern)) ? String(d.pattern)
+            : ((prefs.dance || {}).pattern ?? 'auto')
         };
       }
       // personal shelf map (unitId → sectionKey; '' entries clear mappings)
@@ -268,10 +300,10 @@ export async function handleApi(req, res, pathname) {
       // /api/item/<source>/<key> → skip ['', 'api', 'item']; key may contain '/'
       const _ip = pathname.split('/').map(decodeURIComponent);
       const source = _ip[3], key = _ip.slice(4).join('/');
-      const cfg = getConfig();
-      const adapter = ADAPTERS[source];
+      const sc = sourceConfig(source);                 // t87: built-in or instance
+      const adapter = sc?.adapter;
       if (!adapter) return fail(res, 404, 'Unknown source');
-      const detail = await adapter.detail(cfg[source] || {}, key);
+      const detail = await adapter.detail(sc?.cfg || {}, key);
       if (!detail) return fail(res, 404, 'Not found');
       return ok(res, detail);
     }
@@ -280,10 +312,45 @@ export async function handleApi(req, res, pathname) {
     if (method === 'GET' && pathname.startsWith('/img/')) {
       const _gp = pathname.split('/').map(decodeURIComponent);
       const source = _gp[2], key = _gp.slice(3).join('/');   // key may contain '/'
+      // t89: GRABBER CASE ART — grabbed videos have no art upstream; the
+      // first browser to visit grabs a frame and POSTs it (below). Cached
+      // on disk, then served like any other poster.
+      if (source === 'local') {
+        const thumb = localThumbPath(key);
+        if (thumb && fs.existsSync(thumb)) {
+          res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+          fs.createReadStream(thumb).pipe(res);
+          return true;
+        }
+      }
       const url = await posterUrlFor(source, key, userView(getConfig(), readPrefs(profileKeyFor(req, res))?.sources));
       if (!url) { res.writeHead(404); res.end('no poster'); return true; }
       await proxyImage(req, res, url);
       return true;
+    }
+
+    // t89: upload a generated case image for a grabbed video (any signed-in
+    // session — guests browse grabber files too; validated JPEG/PNG only,
+    // path-safe by content hash, size-capped)
+    if (method === 'POST' && pathname.startsWith('/api/thumb/local/')) {
+      const key = decodeURIComponent(pathname.slice('/api/thumb/local/'.length));
+      const who = profileKeyFor(req, res);
+      if (!who) return fail(res, 401, 'No profile');
+      const view = userView(getConfig(), readPrefs(who)?.sources);
+      const item = await findItem('local', key, view).catch(() => null);
+      if (!item || item.type !== 'movie') return fail(res, 404, 'Not a grabbed video');
+      const body = await readBody(req, 600 * 1024).catch(() => null);
+      const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/.exec(String(body?.dataUrl || ''));
+      const buf = m ? Buffer.from(m[2], 'base64') : null;
+      const jpeg = buf && buf.length > 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+      const png = buf && buf.length > 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+      if (!buf || !buf.length || buf.length > 500000 || !(jpeg || png)) return fail(res, 400, 'Not a valid image');
+      const p = localThumbPath(key);
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      const tmp = p + '.tmp' + Date.now();
+      fs.writeFileSync(tmp, buf);
+      fs.renameSync(tmp, p);
+      return ok(res, { ok: true });
     }
 
     // ── TV ──
@@ -300,12 +367,12 @@ export async function handleApi(req, res, pathname) {
       const _p = pathname.split('/').map(decodeURIComponent);
       const source = _p[3], key = _p.slice(4).join('/');   // t51: local keys contain '/'
       const isAudio = new URL(req.url, 'http://x').searchParams.get('audio') === '1';
-      if (!ADAPTERS[source]) { res.writeHead(404); res.end('unknown source'); return true; }
-      const cfg = getConfig();
-      const adapter = ADAPTERS[source];
+      const sc = sourceConfig(source);                 // t87: built-in or instance
+      if (!sc) { res.writeHead(404); res.end('unknown source'); return true; }
+      const adapter = sc.adapter;
       let upstream = null;
       try {
-        if (isAudio && adapter.audioUrl) upstream = await adapter.audioUrl(cfg[source] || {}, key);
+        if (isAudio && adapter.audioUrl) upstream = await adapter.audioUrl(sc.cfg || {}, key);
       } catch { upstream = null; }
       // FALL BACK to the regular stream when no audio-specific URL exists
       // (e.g. the free archive's mp4s) — the player uses its audio track.
@@ -403,13 +470,44 @@ export async function handleApi(req, res, pathname) {
         // t66: a typo'd folder must NOT fail silently — report it in plain words
         localNotes = next.local.on ? next.local.spots.filter(p2 => { try { return !fs.statSync(p2).isDirectory(); } catch { return true; } }) : [];
       }
+      // t87: EXTRA INSTANCES — as many Plex/Jellyfin connections as the owner
+      // wants. Sanitized hard: kind must be real, id is a slug (auto-assigned
+      // when missing/colliding), secrets are MASK-aware, counts bounded.
+      if (Array.isArray(incoming.instances)) {
+        const taken = new Set(['plex', 'jellyfin', 'archive', 'podcasts', 'radio', 'local']);
+        for (const i of cfg.instances || []) taken.add(i.id);
+        const nextInst = [];
+        for (const raw of incoming.instances.slice(0, 12)) {
+          if (!raw || typeof raw !== 'object' || !['plex', 'jellyfin'].includes(raw.kind)) continue;
+          let id = String(raw.id || '').trim();
+          if (!id || taken.has(id) || !/^[a-z][a-z0-9-]{0,31}$/.test(id)) {
+            let n = 2; while (taken.has(`${raw.kind}-${n}`)) n++;
+            id = `${raw.kind}-${n}`;
+          }
+          taken.add(id);
+          const prev = (cfg.instances || []).find(i => i.id === id);   // masked secret = keep current
+          nextInst.push({
+            id, kind: raw.kind,
+            name: String(raw.name || '').trim().slice(0, 40) || (prev?.name) || (raw.kind === 'plex' ? 'Second Plex' : 'Second Jellyfin'),
+            url: String(raw.url ?? '').trim().slice(0, 300),
+            token: (raw.token !== undefined && raw.token !== null && raw.token !== MASK)
+              ? String(raw.token).trim().slice(0, 300) : (prev?.token || ''),
+            apiKey: (raw.apiKey !== undefined && raw.apiKey !== null && raw.apiKey !== MASK)
+              ? String(raw.apiKey).trim().slice(0, 300) : (prev?.apiKey || ''),
+            sections: Array.isArray(raw.sections) ? raw.sections.map(String).slice(0, 40) : (prev?.sections || []),
+            on: raw.on !== false
+          });
+        }
+        next.instances = nextInst;
+        invalidateCache();
+      }
       // Shelf Map — unitId → sectionKey ('' = automatic). Unit ids are slugs.
       if (incoming.shelves && typeof incoming.shelves === 'object' && !Array.isArray(incoming.shelves)) {
         const map = {};
         for (const [unit, sec] of Object.entries(incoming.shelves)) {
           if (!/^[\w-]{1,32}$/.test(unit)) continue;
           if (String(sec) === '') { map[unit] = ''; continue; }
-          if (/^[\w:-]{1,64}$/.test(String(sec))) map[unit] = String(sec);
+          if (/^[\w:-]{1,100}$/.test(String(sec))) map[unit] = String(sec);   // t87: instance-namespaced keys
         }
         next.shelves = map;
       }
@@ -444,13 +542,16 @@ export async function handleApi(req, res, pathname) {
       const cfg = getConfig();
       const body = await readBody(req);
       // Test either the provided draft creds or the saved ones.
-      const source = ['plex', 'jellyfin'].includes(body.source) ? body.source : cfg.source;
+      // t87: tests a built-in slot OR any saved extra instance ('plex-2'…)
+      const sc = sourceConfig(String(body.source || ''));
+      if (!sc?.adapter?.test) return fail(res, 400, 'Unknown source');
+      const saved = sc.cfg || {};
       const draft = {
-        url: body.url ?? cfg[source].url,
-        token: (body.token && body.token !== MASK) ? body.token : cfg[source].token,
-        apiKey: (body.apiKey && body.apiKey !== MASK) ? body.apiKey : cfg[source].apiKey
+        url: body.url ?? saved.url,
+        token: (body.token && body.token !== MASK) ? body.token : saved.token,
+        apiKey: (body.apiKey && body.apiKey !== MASK) ? body.apiKey : saved.apiKey
       };
-      const result = await ADAPTERS[source].test(draft);
+      const result = await sc.adapter.test(draft);
       return ok(res, result);
     }
 
@@ -459,20 +560,22 @@ export async function handleApi(req, res, pathname) {
       if (!requireAdmin(req, res)) return true;
       const cfg = getConfig();
       const body = await readBody(req);
-      const source = ['plex', 'jellyfin'].includes(body.source) ? body.source : cfg.source;
+      const source = String(body.source || '');
       if (source === 'archive' || source === 'radio') {
         const a = ADAPTERS[source];
         return ok(res, a.libraries ? a.libraries() : { libraries: [] });
       }
-      if (!['plex', 'jellyfin'].includes(source)) return fail(res, 400, 'Unknown source');
+      // t87: built-in slots AND saved extra instances resolve the same way
+      const sc = sourceConfig(source);
+      if (!sc?.adapter?.libraries) return fail(res, 400, 'Unknown source');
       const draft = {
-        url: body.url ?? cfg[source].url,
-        token: (body.token && body.token !== MASK) ? body.token : cfg[source].token,
-        apiKey: (body.apiKey && body.apiKey !== MASK) ? body.apiKey : cfg[source].apiKey
+        url: body.url ?? sc.cfg.url,
+        token: (body.token && body.token !== MASK) ? body.token : sc.cfg.token,
+        apiKey: (body.apiKey && body.apiKey !== MASK) ? body.apiKey : sc.cfg.apiKey
       };
       if (!draft.url) return fail(res, 400, 'Enter the server URL first');
       try {
-        const libraries = await ADAPTERS[source].libraries(draft);
+        const libraries = await sc.adapter.libraries(draft);
         return ok(res, { libraries });
       } catch (e) {
         return fail(res, 502, e?.message || 'Could not list libraries');

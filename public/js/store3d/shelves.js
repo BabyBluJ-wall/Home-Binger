@@ -17,8 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
 import { RoundedBoxGeometry } from '/vendor/RoundedBoxGeometry.js';   // three.js addon, vendored
-import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1788852958324';
-import { shelfTexture, hashString } from './textures.js?v=1788852958324';
+import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1788899102183';
+import { shelfTexture, hashString } from './textures.js?v=1788899102183';
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  PART 1 — where the shelves are
@@ -235,7 +235,6 @@ export function shelfColliders(faces) {
 export function sortItems(items, sorting) {
   const s = [...items];
   const dir = sorting.dir === 'asc' ? 1 : -1;
-  const byTitle = (a, b) => a.title.localeCompare(b.title, undefined, { numeric: true });
   switch (sorting.mode) {
     case 'alpha':  s.sort((a, b) => dir * byTitle(a, b)); break;
     case 'rating': s.sort((a, b) => dir * ((a.rating || 0) - (b.rating || 0)) || byTitle(a, b)); break;
@@ -246,8 +245,11 @@ export function sortItems(items, sorting) {
         const g = (it.genres && it.genres[0]) || 'Other';
         (groups.get(g) ?? groups.set(g, []).get(g)).push(it);
       }
+      // t88 BUG 3 FIX: Direction finally does something here — desc is the
+      // classic look (biggest groups first, A→Z titles), asc mirrors it.
       const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-      return ordered.flatMap(([, list]) => list.sort(byTitle));
+      if (dir < 0) ordered.reverse();
+      return ordered.flatMap(([, list]) => list.sort((a, b) => dir * byTitle(a, b)));
     }
     case 'type': {
       const order = { live: 0, movie: 1, show: 2, musicvideo: 3, album: 4 };
@@ -266,13 +268,18 @@ export function sortItems(items, sorting) {
         (groups.get(k) ?? groups.set(k, []).get(k)).push(it);
       }
       const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-      return ordered.flatMap(([, list]) => list.sort(byTitle));
+      if (dir < 0) ordered.reverse();                    // t88 BUG 3 FIX
+      return ordered.flatMap(([, list]) => list.sort((a, b) => dir * byTitle(a, b)));
     }
     case 'recent':
     default: s.sort((a, b) => dir * ((a.addedAt || 0) - (b.addedAt || 0)) || byTitle(a, b)); break;
   }
   return s;
 }
+
+// Shared title comparator (numeric-aware) — used by the global sort AND by
+// mapped-section pools (t88 BUG 4).
+const byTitle = (a, b) => a.title.localeCompare(b.title, undefined, { numeric: true });
 
 // Which physical case does an item live in? (three visually distinct types)
 function caseKindFor(item) {
@@ -298,11 +305,21 @@ export function assignItems(faces, items, sorting, assignment, unitPages) {
   const secKey = (it) => it.sectionId || it.sectionTitle || it.type;
   const pools = new Map();                 // sectionKey → items (in shelf order)
   const sectionNames = new Map();
-  for (const it of capped) {
+  // t88 BUG 1 FIX: pools are built from the WHOLE catalogue, not the capped
+  // window — a mapped section must reach its own items even when they sit
+  // beyond the display cap. Only the GENERAL (automatic-mix) pool is capped.
+  for (const it of ordered) {
     const k = secKey(it);
     if (!pools.has(k)) pools.set(k, []);
     pools.get(k).push(it);
     if (!sectionNames.has(k)) sectionNames.set(k, it.sectionTitle || it.type || 'Media');
+  }
+  // t88 BUG 4 FIX: the map wins the taxonomy — a PINNED shelf shows its own
+  // section in the mode's within-group order (plain title, direction
+  // honored), never the genre/library group order bleeding across it.
+  if (sorting.mode === 'genre' || sorting.mode === 'library') {
+    const dir = sorting.dir === 'asc' ? 1 : -1;
+    for (const list of pools.values()) list.sort((a, b) => dir * byTitle(a, b));
   }
   const assignedAway = new Set(Object.values(assignment || {}).filter(k => pools.has(k)));
   const general = capped.filter(it => !assignedAway.has(secKey(it)));

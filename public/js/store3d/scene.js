@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1788852958324';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1788852958324';
-import { buildHall } from './hall.js?v=1788852958324';
-import { buildDance } from './dance.js?v=1788852958324';
-import { buildExterior } from './exterior.js?v=1788852958324';   // the world outside the door
-import { buildSignage } from './signage.js?v=1788852958324';
-import { createDjPro } from './djpro.js?v=1788852958324';
-import { buildTV } from './tv.js?v=1788852958324';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1788852958324';
-import { PosterAtlases } from './atlas.js?v=1788852958324';
-import { createControls } from './controls.js?v=1788852958324';
-import { createJukeAudio } from './jukeaudio.js?v=1788852958324';
+import { LAYOUT, TUNING } from './config.js?v=1788899102183';
+import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1788899102183';
+import { buildHall } from './hall.js?v=1788899102183';
+import { buildDance } from './dance.js?v=1788899102183';
+import { buildExterior } from './exterior.js?v=1788899102183';   // the world outside the door
+import { buildSignage } from './signage.js?v=1788899102183';
+import { createDjPro } from './djpro.js?v=1788899102183';
+import { buildTV } from './tv.js?v=1788899102183';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1788899102183';
+import { PosterAtlases } from './atlas.js?v=1788899102183';
+import { createControls } from './controls.js?v=1788899102183';
+import { createJukeAudio } from './jukeaudio.js?v=1788899102183';
 
 export function createScene(container, theme) {
   // ── renderer ──
@@ -463,6 +463,11 @@ export function createScene(container, theme) {
         danceSats: dance.speakerWorld.sats, danceSubs: dance.speakerWorld.subs };   // t60: ear-level check
     },
     danceFakeLevels: (v) => { danceLevelsOverride = v; },   // t54 tests: drive the rig
+    setDancePrefs: (p) => dance.setPrefs?.(p),              // t86: adjustable light engine
+    refreshPosters: (items) => {                            // t89: grabber thumbs arriving late
+      for (const it of items || []) atlases.refreshPoster(it);
+      atlases.flush();
+    },
     danceTick(levels, steps = 20) {          // t54 tests: step the light engine SYNCHRONOUSLY
       const keep = danceLevelsOverride;      // (rAF can starve to ~2 fps in headless)
       for (let i = 0; i < steps; i++) dance.update(0.05, levels ?? keep);

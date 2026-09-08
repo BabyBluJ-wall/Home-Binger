@@ -19,7 +19,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 // ⚙️ EDIT ME ── where server data lives (override with HB_DATA_DIR env var)
-const DATA_DIR = (process.env.HB_DATA_DIR || process.env.HB_DATA_DIR) || path.resolve(process.cwd(), 'data');
+export const DATA_DIR = (process.env.HB_DATA_DIR || process.env.HB_DATA_DIR) || path.resolve(process.cwd(), 'data');
 
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -37,6 +37,7 @@ export const defaultConfig = () => ({
   // sections: WHICH libraries get shelved (array of keys — empty = ALL).
   // Picked with checkboxes in Admin → Server.
   plex: { url: '', token: '', sections: [] },
+  instances: [],   // t87: EXTRA Plex/Jellyfin connections — [{id, kind, name, url, token|apiKey, sections, on}]
   jellyfin: { url: '', apiKey: '', sections: [] },
   // ── free add-on sources (stack on top of the primary source) ──
   // Internet Archive classics wing: [] = none (unlike Plex, opting in is

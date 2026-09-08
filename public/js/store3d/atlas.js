@@ -15,9 +15,9 @@
 //       and overwrites just the cover region — shelves "fill in" live.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { TUNING } from './config.js?v=1788852958324';
-import { drawPlaceholderCover, hashString } from './textures.js?v=1788852958324';
-import { api } from '../api.js?v=1788852958324';
+import { TUNING } from './config.js?v=1788899102183';
+import { drawPlaceholderCover, hashString } from './textures.js?v=1788899102183';
+import { api } from '../api.js?v=1788899102183';
 
 export class PosterAtlases {
   constructor() {
@@ -140,6 +140,12 @@ export class PosterAtlases {
       };
       next();
     });
+  }
+
+  // t89: re-fetch ONE poster (e.g. a grabber thumb that was just generated
+  // server-side) and repaint its tile — the loop's flush uploads the page.
+  refreshPoster(item) {
+    if (this.slots.has(item.id) && api.posterUrl(item)) this.fetchInto(item).catch(() => {});
   }
 
   fetchInto(item) {

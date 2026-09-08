@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788852958324';
-import { createCaseView } from './store3d/caseview.js?v=1788852958324';   // the 3D case in the item modal
-import { state } from './state.js?v=1788852958324';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788852958324';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788852958324';
+import { api } from './api.js?v=1788899102183';
+import { createCaseView } from './store3d/caseview.js?v=1788899102183';   // the 3D case in the item modal
+import { state } from './state.js?v=1788899102183';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788899102183';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788899102183';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -143,6 +143,19 @@ export function initUI(ctx) {
       </div>
       <div class="hint" style="margin:-6px 0 14px">What the screen shows while music, podcasts or radio play — it always wears your theme accent.</div>
 
+      <div class="section-title" style="margin-top:22px">Dance floor lights</div>
+      <div class="hint" style="margin:-4px 0 10px">The rig wakes when the dance hall's own music plays — these shape how hard it dances. Yours on every device.</div>
+      <div class="field"><label>Intensity <span id="dance-int-val"></span></label><input type="range" id="dance-int" min="0.2" max="2.5" step="0.1"></div>
+      <div class="field"><label>Speed <span id="dance-spd-val"></span></label><input type="range" id="dance-spd" min="0.3" max="2.5" step="0.1"></div>
+      <div class="field"><label>Mirror ball spin <span id="dance-ball-val"></span></label><input type="range" id="dance-ball" min="0" max="3" step="0.1"></div>
+      <div class="field"><label>Pattern</label>
+        <select id="dance-pattern">
+          <option value="auto">Auto — rotate with the music</option>
+          <option value="0">Sweep</option><option value="1">Chase</option>
+          <option value="2">Strobe</option><option value="3">Build &amp; drop</option>
+        </select>
+      </div>
+
       <div class="section-title">My TV idle screen</div>
       <div class="radio-cards">
         ${[['', 'Store default', 'whatever the manager set'],
@@ -212,6 +225,26 @@ export function initUI(ctx) {
         state.updatePrefs({ visualizer: next });
       };
     });
+    // t86: dance-floor light engine — sliders + pattern, live-applied
+    {
+      const D = state.prefs.dance || { intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' };
+      const setDance = (patch) => {
+        state.updatePrefs({ dance: patch });
+        ctx.applyDancePrefs(state.prefs.dance);
+      };
+      const bindSlider = (id, valId, key, fmt) => {
+        const el = root.querySelector('#' + id), lab = root.querySelector('#' + valId);
+        if (!el) return;
+        el.value = D[key];
+        lab.textContent = fmt(D[key]);
+        el.oninput = () => { lab.textContent = fmt(+el.value); setDance({ [key]: +el.value }); };
+      };
+      bindSlider('dance-int', 'dance-int-val', 'intensity', v => v + '×');
+      bindSlider('dance-spd', 'dance-spd-val', 'speed', v => v + '×');
+      bindSlider('dance-ball', 'dance-ball-val', 'ballSpin', v => v === 0 ? 'still' : v + '×');
+      const pat = root.querySelector('#dance-pattern');
+      if (pat) { pat.value = String(D.pattern ?? 'auto'); pat.onchange = () => setDance({ pattern: pat.value }); }
+    }
     // ── personal TV idle pick ──
     root.querySelectorAll('[data-idle]').forEach(card => {
       card.onclick = () => {
@@ -274,11 +307,12 @@ export function initUI(ctx) {
       </div>
 
       <div class="section-title" style="margin-top:22px">Shelf map — what goes where</div>
-      <div class="hint" style="margin:-4px 0 12px">Park a section on a specific shelf unit — Sci-Fi on the back wall, podcasts by the register, whatever feels right. Unmapped units keep the automatic mix. Yours alone (until an admin locks arrangement).</div>
+      <div class="hint" style="margin:-4px 0 12px">Park a section on a specific shelf unit — Sci-Fi on the back wall, podcasts by the register, whatever feels right. Unmapped units keep the automatic mix. Grouping modes (Genre / By Library) shape the AUTOMATIC mix; pinned shelves always show their own section. Yours alone (until an admin locks arrangement).</div>
       <div id="shelf-map-rows"></div>
+      <div id="shelf-stale-note" style="display:none"></div>
       <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
         <button class="btn" id="btn-shelves-reset" ${state.boot.locks.sorting ? 'disabled' : ''}>All automatic</button>
-        <button class="btn accent" id="btn-shelves-save" ${state.boot.locks.sorting ? 'disabled' : ''}>Save my shelf map</button>
+        <button class="btn accent" id="btn-shelves-save" ${state.boot.locks.sorting ? 'disabled' : ''}>Done</button>
       </div>`;
     root.querySelectorAll('.radio-card').forEach(card => {
       card.onclick = () => {
@@ -306,12 +340,24 @@ export function initUI(ctx) {
     const mGroups = new Map();          // sectionKey → { key, name, count } — built from the
     for (const it of audioItems) {      // ITEMS, so it works even when state.sections
       const k = it.sectionId || it.sectionTitle || it.type;   // doesn't list music at all
-      if (!mGroups.has(k)) mGroups.set(k, { key: k, name: it.sectionTitle || k, count: 0 });
+      if (!mGroups.has(k)) mGroups.set(k, { key: k, name: it.sectionTitle || k, count: 0, source: it.source });
       mGroups.get(k).count++;
     }
     const musicKeys = new Set(mGroups.keys());
     const videoSections = sections.filter(sec => !musicKeys.has(sec.key));
     const musicSections = [...mGroups.values()].sort((a, b) => a.name.localeCompare(b.name));
+    // t88 BUG 5: two libraries both called "Movies" must not read identical —
+    // when a name repeats, every option carries its source: "Plex · Movies".
+    const SRC_LABEL = { plex: 'Plex', jellyfin: 'Jellyfin', archive: 'Archive', radio: 'Radio', local: 'Grabber' };
+    const nameCount = new Map();
+    for (const sec of [...videoSections, ...musicSections]) nameCount.set(sec.name, (nameCount.get(sec.name) || 0) + 1);
+    const secLabel = (sec) => nameCount.get(sec.name) > 1
+      ? `${sec.sourceLabel || SRC_LABEL[sec.source] || sec.source || 'Media'} · ${sec.name}` : sec.name;   // t87: instance names
+    // t88 BUG 1b: saved keys that no longer match any section are SHOWN, not
+    // silently swapped for the automatic mix.
+    const availKeys = new Set([...videoSections.map(s => s.key), ...musicSections.map(g => g.key)]);
+    const stale = Object.entries(myMap).filter(([unit, k]) => unit !== 'jukebox' && k && !availKeys.has(k));
+    const staleOption = (k) => `<option value="${esc(k)}" selected>⚠ ${esc(k)} — no longer available</option>`;
     if (!sections.length) {
       rows.innerHTML = '<div class="locked-note">No sections found yet — connect a source or enable free shelves first (an admin does that in Admin → Server).</div>';
     } else if (!units.length) {
@@ -323,7 +369,7 @@ export function initUI(ctx) {
           <b style="min-width:150px">🎵 Jukebox</b>
           <select data-unit="jukebox" ${state.boot.locks.sorting ? 'disabled' : ''} style="margin-left:auto;max-width:55%">
             <option value="">All music (${audioItems.length})</option>
-            ${musicSections.map(g => `<option value="${esc(g.key)}" ${myMap.jukebox === g.key ? 'selected' : ''}>${esc(g.name)} (${g.count})</option>`).join('')}
+            ${musicSections.map(g => `<option value="${esc(g.key)}" ${myMap.jukebox === g.key ? 'selected' : ''}>${esc(secLabel(g))} (${g.count})</option>`).join('')}
           </select>
         </div>` : `
         <div class="lib-row juke-map-row" style="cursor:default;opacity:.65">
@@ -335,7 +381,8 @@ export function initUI(ctx) {
           <b style="min-width:150px">${esc(u.label)}</b>
           <select data-unit="${esc(u.id)}" ${state.boot.locks.sorting ? 'disabled' : ''} style="margin-left:auto;max-width:55%">
             <option value="">Automatic (mixed)</option>
-            ${videoSections.map(sec => `<option value="${esc(sec.key)}" ${myMap[u.id] === sec.key ? 'selected' : ''}>${esc(sec.name)} (${sec.count})</option>`).join('')}
+            ${(stale.some(([unit]) => unit === u.id) && myMap[u.id] ? staleOption(myMap[u.id]) : '')}
+            ${videoSections.map(sec => `<option value="${esc(sec.key)}" ${myMap[u.id] === sec.key ? 'selected' : ''}>${esc(secLabel(sec))} (${sec.count})</option>`).join('')}
           </select>
         </div>`).join('');
       rows.querySelectorAll('[data-unit]').forEach(sel => {
@@ -343,20 +390,39 @@ export function initUI(ctx) {
           if (sel.value) myMap[sel.dataset.unit] = sel.value;
           else delete myMap[sel.dataset.unit];
           ctx.previewShelves({ ...myMap });          // live preview behind the panel
+          state.updatePrefs({ shelves: { ...myMap } });   // t88 BUG 2 FIX: commit-on-change —
+          state.shelves = { ...myMap };                   // the preview IS the saved map, always
         };
       });
     }
+    if (stale.length) {
+      const note = root.querySelector('#shelf-stale-note');
+      note.style.display = 'block';
+      note.innerHTML = `<div class="locked-note" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ⚠ ${stale.length} pinned section${stale.length > 1 ? 's' : ''} no longer exist${stale.length > 1 ? '' : 's'} (library renamed or a source changed) — those shelves are showing the automatic mix.
+        <button class="btn" id="btn-shelves-clean">Remove missing</button></div>`;
+      note.querySelector('#btn-shelves-clean').onclick = () => {
+        for (const [unit] of stale) delete myMap[unit];
+        state.updatePrefs({ shelves: { ...myMap } });
+        state.shelves = { ...myMap };
+        ctx.previewShelves({ ...myMap });
+        root.innerHTML = '';    // re-render clean (panelShelves appends, not replaces)
+        panelShelves(root);
+      };
+    }
     root.querySelector('#btn-shelves-reset').onclick = () => {
+      const clear = { jukebox: '' };                       // '' = delete after merge — t88: jukebox too
+      for (const u of units) clear[u.id] = '';
       Object.keys(myMap).forEach(k => delete myMap[k]);
       rows.querySelectorAll('[data-unit]').forEach(sel => sel.value = '');
       ctx.previewShelves({});
-      state.updatePrefs({ shelves: Object.fromEntries(units.map(u => [u.id, ''])) });  // clear all personal mappings
+      state.updatePrefs({ shelves: clear });               // keys are DELETED, never stored as ''
+      state.shelves = {};
       toast('Back to the automatic mix');
     };
-    root.querySelector('#btn-shelves-save').onclick = () => {
-      state.updatePrefs({ shelves: { ...myMap } });
-      state.shelves = { ...myMap };
-      toast('Shelf map saved to your profile');
+    root.querySelector('#btn-shelves-save').onclick = () => {   // t88 BUG 2: everything already
+      toast('Shelf map saved — every change was live');         // saved on change; Done just closes
+      closeSettings();
     };
   }
   const modeHint = (id) => ({
@@ -391,6 +457,11 @@ export function initUI(ctx) {
         <div><div class="t-label">🛰️ Jellyfin</div><div class="t-sub">this store's Jellyfin server</div></div>
         <label class="switch"><input type="checkbox" id="md-jf" ${eff.jellyfin ? 'checked' : ''}><span class="track"></span></label>
       </div>` : ''}
+      ${(cat.instances || []).filter(i => i.ready).map(i => `
+      <div class="toggle-row">
+        <div><div class="t-label">🛰️ ${esc(i.name)}</div><div class="t-sub">extra ${i.kind === 'plex' ? 'Plex' : 'Jellyfin'} connection</div></div>
+        <label class="switch"><input type="checkbox" id="md-inst-${CSS.escape(i.id)}" ${(mine ? mine[i.id] : i.on) !== false ? 'checked' : ''}><span class="track"></span></label>
+      </div>`).join('')}
       <div class="section-title" style="margin-top:14px">🎞️ Classics wing</div>
       <div id="media-archive" class="lib-list">
         ${cat.archive.map(c => `<label class="lib-row"><input type="checkbox" value="${esc(c.key)}" ${eff.archive.includes(c.key) ? 'checked' : ''}>
@@ -406,12 +477,19 @@ export function initUI(ctx) {
         <button class="btn accent" id="media-save">Save my media mix</button>
       </div>
       <div class="hint" style="margin-top:10px">Your mix is saved to your profile and restocks <b>your</b> shelves only — everyone else keeps theirs.</div>`;
-    const build = () => ({
-      plex: cat.available.plex ? root.querySelector('#md-plex')?.checked ?? false : null,
-      jellyfin: cat.available.jellyfin ? root.querySelector('#md-jf')?.checked ?? false : null,
-      archive: [...root.querySelectorAll('#media-archive input:checked')].map(c => c.value),
-      radio: [...root.querySelectorAll('#media-radio input:checked')].map(c => c.value)
-    });
+    const build = () => {
+      const out = {
+        plex: cat.available.plex ? root.querySelector('#md-plex')?.checked ?? false : null,
+        jellyfin: cat.available.jellyfin ? root.querySelector('#md-jf')?.checked ?? false : null,
+        archive: [...root.querySelectorAll('#media-archive input:checked')].map(c => c.value),
+        radio: [...root.querySelectorAll('#media-radio input:checked')].map(c => c.value)
+      };
+      for (const i of (cat.instances || [])) {          // t87: per-instance toggles
+        const el = root.querySelector(`#md-inst-${CSS.escape(i.id)}`);
+        if (el) out[i.id] = el.checked;
+      }
+      return out;
+    };
     root.querySelector('#media-save').onclick = async () => {
       state.updatePrefs({ sources: build() });
       toast('Media mix saved — restocking your shelves…');
@@ -631,7 +709,15 @@ export function initUI(ctx) {
         <div class="hint" style="margin-top:8px">Unchecked = not shelved.</div>
       </div>
 
-      <div class="section-title" style="margin-top:8px">Free shelves — stack with anything above</div>
+      <div class="section-title" style="margin-top:8px">More libraries — another Plex or Jellyfin</div>
+      <div class="hint" style="margin:-4px 0 10px">Two servers in the house (or a friend's)? Connect <b>as many as you like</b> — every extra one stacks on the shelves under its own nickname, and each visitor can switch it on or off in My Media.</div>
+      <div id="instance-list"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btn-add-plex">+ Add another Plex</button>
+        <button class="btn" id="btn-add-jf">+ Add another Jellyfin</button>
+      </div>
+
+      <div class="section-title" style="margin-top:16px">Free shelves — stack with anything above</div>
       <div class="hint" style="margin:-4px 0 12px">Public-domain classics from the <b>Internet Archive</b>, live radio from <b>Radio-Browser</b>, and any podcast's RSS feed. Free, legal, no account. Nothing checked = that shelf stays off.</div>
 
       <div class="section-title">🎞️ Classics wing (Internet Archive)</div>
@@ -766,6 +852,90 @@ export function initUI(ctx) {
     loadStaticLibs('radio', '#radio-libraries', adminCfg.radio?.sections);
     if (adminCfg.plex.url) loadLibs('plex').catch(() => {});
     if (adminCfg.jellyfin.url) loadLibs('jellyfin').catch(() => {});
+    // ── t87: EXTRA INSTANCES — unlimited Plex/Jellyfin connections ──
+    let instSeq = 0;
+    let instDrafts = (adminCfg.instances || []).map(i => ({ ...i, _new: false }));
+    const instKey = (i) => i.id || `new-${i._k}`;
+    const renderInstances = () => {
+      const box = root.querySelector('#instance-list');
+      if (!instDrafts.length) {
+        box.innerHTML = '<div class="hint" style="margin:0 0 2px">None yet — only the built-in connections above are connected.</div>';
+        return;
+      }
+      box.innerHTML = instDrafts.map(i => {
+        const k = CSS.escape(instKey(i));
+        const isPlex = i.kind === 'plex';
+        return `
+        <div style="border:1px solid var(--vb-line);border-radius:12px;padding:10px 12px;margin-bottom:10px">
+          <div class="toggle-row" style="margin:0 0 8px">
+            <div><div class="t-label">🛰️ ${esc(i.name || (isPlex ? 'New Plex' : 'New Jellyfin'))}</div><div class="t-sub">extra ${isPlex ? 'Plex' : 'Jellyfin'} connection</div></div>
+            <label class="switch"><input type="checkbox" data-inst-on="${k}" ${i.on !== false ? 'checked' : ''}><span class="track"></span></label>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Nickname (shows on shelves)</label>
+              <input type="text" data-inst-name="${k}" value="${esc(i.name || '')}" placeholder="${isPlex ? 'e.g. Basement Plex' : 'e.g. Garage Jellyfin'}"></div>
+            <div class="field"><label>Server URL</label>
+              <input type="url" data-inst-url="${k}" value="${esc(i.url || '')}" placeholder="Paste server URL"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>${isPlex ? 'X-Plex-Token' : 'API key'}</label>
+              <input type="text" data-inst-secret="${k}" value="${esc(isPlex ? (i.token || '') : (i.apiKey || ''))}" placeholder="${isPlex ? 'Paste X-Plex-Token' : 'Paste API key'}"></div>
+            <div class="field" style="align-self:end"><button class="btn" data-inst-del="${k}">🗑 Remove</button></div>
+          </div>
+          <div class="section-title">Libraries on the shelves</div>
+          <div class="lib-list" data-inst-libs="${k}"><div class="hint">Nothing loaded yet — click Load below (needs the URL + ${isPlex ? 'token' : 'key'}).</div></div>
+          <div style="display:flex;gap:8px;margin:6px 0 0;flex-wrap:wrap">
+            <button class="btn" data-inst-load="${k}">↻ Load libraries</button>
+            <button class="btn" data-inst-test="${k}">Test</button>
+          </div>
+        </div>`;
+      }).join('');
+      for (const i of instDrafts) {
+        const k = instKey(i);
+        const q = (sel) => root.querySelector(`[data-inst-${sel}="${CSS.escape(k)}"]`);
+        q('del').onclick = () => { instDrafts = instDrafts.filter(x => x !== i); renderInstances(); };
+        q('load').onclick = async () => {
+          const url = q('url').value.trim();
+          if (!url) return toast('Enter the server URL first', true);
+          const libBox = q('libs');
+          libBox.innerHTML = '<div class="hint">Loading…</div>';
+          try {
+            const secret = q('secret').value.trim();
+            const body = { source: i._new ? i.kind : i.id, url };
+            if (i.kind === 'plex') body.token = secret; else body.apiKey = secret;
+            const r = await api.adminLibraries(body);
+            if (!r.libraries?.length) { libBox.innerHTML = '<div class="hint">No usable libraries found on that server.</div>'; return; }
+            const saved = i.sections || [];
+            const firstTime = saved.length === 0;
+            libBox.innerHTML = (firstTime ? '<div class="hint" style="margin:0 0 6px">✅ All libraries are checked — untick anything you don’t want shelved.</div>' : '')
+              + r.libraries.map(lib => `
+              <label class="lib-row"><input type="checkbox" value="${esc(lib.key)}" ${(firstTime || saved.includes(lib.key)) ? 'checked' : ''}>
+              <b>${esc(lib.title)}</b><small>${esc(lib.type)}</small></label>`).join('');
+          } catch (e) { libBox.innerHTML = `<div class="locked-note">${esc(e.message)}</div>`; }
+        };
+        q('test').onclick = async () => {
+          const url = q('url').value.trim();
+          if (!url) { out.innerHTML = `❌ Enter the ${i.kind === 'plex' ? 'Plex' : 'Jellyfin'} server URL first.`; return; }
+          out.innerHTML = `Testing ${esc(q('name').value.trim() || i.name || i.kind)}…`;
+          try {
+            const secret = q('secret').value.trim();
+            const body = { source: i._new ? i.kind : i.id, url };
+            if (i.kind === 'plex') body.token = secret; else body.apiKey = secret;
+            const r = await api.adminTest(body);
+            out.innerHTML = `✅ <b>${esc(r.name)}</b> — ${esc(r.detail)}`;
+          } catch (err) { out.innerHTML = `❌ ${esc(err.message)}`; }
+        };
+      }
+    };
+    renderInstances();
+    root.querySelector('#btn-add-plex').onclick = () => {
+      instDrafts.push({ id: '', kind: 'plex', name: '', url: '', token: '', apiKey: '', sections: [], on: true, _new: true, _k: ++instSeq });
+      renderInstances();
+    };
+    root.querySelector('#btn-add-jf').onclick = () => {
+      instDrafts.push({ id: '', kind: 'jellyfin', name: '', url: '', token: '', apiKey: '', sections: [], on: true, _new: true, _k: ++instSeq });
+      renderInstances();
+    };
     const draft = () => ({
       sources: {
         plex: root.querySelector('#src-plex').checked,
@@ -779,7 +949,22 @@ export function initUI(ctx) {
       radio: { sections: [...root.querySelectorAll('#radio-libraries input:checked')].map(c => c.value) },
       podcasts: { feeds: podcastList },
       local: { on: !!(root.querySelector('#local-on')?.checked),
-        spots: [...root.querySelectorAll('.local-path')].map(el => el.value.trim()).filter(Boolean) }   // t62: multi-spot grabber
+        spots: [...root.querySelectorAll('.local-path')].map(el => el.value.trim()).filter(Boolean) },   // t62: multi-spot grabber
+      instances: instDrafts.map(i => {                     // t87: extra connections
+        const k = CSS.escape(instKey(i));
+        const libBox = root.querySelector(`[data-inst-libs="${k}"]`);
+        const hasBoxes = !!libBox?.querySelector('input[type="checkbox"]');
+        const secret = root.querySelector(`[data-inst-secret="${k}"]`)?.value.trim() || '';
+        return {
+          id: i._new ? '' : i.id, kind: i.kind,
+          name: root.querySelector(`[data-inst-name="${k}"]`)?.value.trim() || i.name || '',
+          url: root.querySelector(`[data-inst-url="${k}"]`)?.value.trim() || '',
+          token: i.kind === 'plex' ? secret : '',
+          apiKey: i.kind === 'jellyfin' ? secret : '',
+          sections: hasBoxes ? [...libBox.querySelectorAll('input:checked')].map(c => c.value) : (i.sections || []),
+          on: root.querySelector(`[data-inst-on="${k}"]`)?.checked ?? (i.on !== false)
+        };
+      })
     });
     root.querySelector('#btn-save-server').onclick = async () => {
       // t66: show grabber folder problems right where the user is looking
@@ -790,6 +975,10 @@ export function initUI(ctx) {
         return toast('Jellyfin is switched on but the URL or API key is missing', true);
       if (d.local.on && !d.local.spots.length)
         return toast('Local files is switched on but no media spots are set', true);
+      for (const i of d.instances) {                       // t87: instances must be complete when on
+        if (i.on && !i.url)
+          return toast(`"${i.name || (i.kind === 'plex' ? 'Plex' : 'Jellyfin')}" is switched on but has no server URL`, true);
+      }
       if (d.sources.plex && d.plex.sections.length === 0)
         return toast('No Plex libraries are ticked — hit "↻ Load libraries" and tick at least one (or switch Plex off)', true);
       if (d.sources.jellyfin && d.jellyfin.sections.length === 0)
