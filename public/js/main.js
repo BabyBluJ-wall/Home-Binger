@@ -8,11 +8,11 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1788810462055';
-import { api } from './api.js?v=1788810462055';
-import { initUI } from './ui.js?v=1788810462055';
-import { createScene } from './store3d/scene.js?v=1788810462055';
-import { STORE, SUPPORT } from './store3d/config.js?v=1788810462055';
+import { state } from './state.js?v=1788852958324';
+import { api } from './api.js?v=1788852958324';
+import { initUI } from './ui.js?v=1788852958324';
+import { createScene } from './store3d/scene.js?v=1788852958324';
+import { STORE, SUPPORT } from './store3d/config.js?v=1788852958324';
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -274,6 +274,7 @@ async function boot() {
     $('#lock-hint')?.classList.add('hidden');
     const loading = $('#loading');
     loading.style.display = '';
+    document.body.classList.add('overlay-open');   // t83: front desk owns the CPU
     $('#loading-status').textContent = 'Back at the front entrance — the neon is always on.';
     $('#loading-fill').style.width = '100%';
     $('#btn-enter').classList.remove('hidden');
@@ -384,6 +385,7 @@ async function boot() {
   function enterStore(hideLoading) {
     scene.resetToSpawn?.();                 // t52: every entry = fresh load-in (anti-stuck)
     if (hideLoading) $('#loading').style.display = 'none';
+    document.body.classList.remove('overlay-open');   // t83: the store owns the CPU again
     $('#crosshair').classList.remove('hidden');
     // The mouse starts FREE so the menus are usable. Clicking the store
     // captures it for looking around; ESC gives it back at any time.

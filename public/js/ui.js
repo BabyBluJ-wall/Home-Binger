@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788810462055';
-import { createCaseView } from './store3d/caseview.js?v=1788810462055';   // the 3D case in the item modal
-import { state } from './state.js?v=1788810462055';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788810462055';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788810462055';
+import { api } from './api.js?v=1788852958324';
+import { createCaseView } from './store3d/caseview.js?v=1788852958324';   // the 3D case in the item modal
+import { state } from './state.js?v=1788852958324';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788852958324';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788852958324';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -88,20 +88,24 @@ export function initUI(ctx) {
 
   // ── settings shell ──
   const TITLES = {
-    look: 'My Theme', shelves: 'My Shelves', media: 'My Media', profile: 'Profile & Sync',
-    server: 'Admin · Media Server', users: 'Admin · Users', policies: 'Admin · Store Policies'
+    look: 'My Theme', shelves: 'My Shelves', media: 'My Media', profile: 'My Profile',
+    admin: 'Admin'
   };
   function openSettings(tab) {
     $('#settings-title').textContent = TITLES[tab] || 'Settings';
     $('#settings-body').innerHTML = '';
     ({
       look: panelLook, shelves: panelShelves, media: panelMedia, profile: panelProfile,
-      server: panelServer, users: panelUsers, policies: panelPolicies
+      admin: panelAdmin
     }[tab] || panelLook)($('#settings-body'));
     $('#settings').classList.remove('hidden');
+    document.body.classList.add('overlay-open');   // t83: pauses the 3D scene while a modal owns the screen
     document.exitPointerLock?.();
   }
-  const closeSettings = () => $('#settings').classList.add('hidden');
+  const closeSettings = () => {
+    $('#settings').classList.add('hidden');
+    document.body.classList.remove('overlay-open');   // t83
+  };
   $('#btn-settings-close').onclick = closeSettings;
   $('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings') closeSettings(); });
 
@@ -423,6 +427,34 @@ export function initUI(ctx) {
   }
 
   // ═══════════════ PROFILE ═══════════════
+  // t84: one-tap invite — shows & copies this store's LAN address, so friends
+  // connect without any "which IP do I type?" archaeology. Works for guests
+  // too (it's the store's address, not the account's).
+  function loadInvite(root) {
+    fetch('/api/lan').then(r => r.json()).then(({ urls }) => {
+      const box = root.querySelector('#invite-box'); if (!box) return;
+      if (!urls?.length) { box.innerHTML = `<div class="hint">This store isn't reachable over the local network right now.</div>`; return; }
+      const primary = urls[0];
+      const copy = () => {
+        const done = () => toast('Address copied — send it to a friend');
+        const fallback = () => {   // http:// LAN isn't a secure context → clipboard API may be absent
+          const ta = document.createElement('textarea'); ta.value = primary; document.body.appendChild(ta); ta.select();
+          let ok = false; try { ok = document.execCommand('copy'); } catch {}
+          ta.remove(); ok ? done() : toast(primary, true);
+        };
+        try { navigator.clipboard.writeText(primary).then(done, fallback); } catch { fallback(); }
+      };
+      box.innerHTML = `
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <code style="flex:1;min-width:170px;padding:8px 10px;border:1px solid var(--vb-line,#2a3354);border-radius:8px;background:rgba(10,12,30,.55);font-size:13px">${esc(primary)}</code>
+          <button class="btn accent" id="btn-copy-lan">📋 Copy address</button>
+        </div>
+        ${urls.length > 1 ? `<div class="hint" style="margin-top:6px">Other networks: ${urls.slice(1).map(esc).join(' · ')}</div>` : ''}
+        <div class="hint" style="margin-top:6px">Anyone on the same Wi-Fi opens that in any browser — nothing to install.</div>`;
+      box.querySelector('#btn-copy-lan').onclick = copy;
+    }).catch(() => {});
+  }
+
   function panelProfile(root) {
     const me = state.me();
     if (!me?.isGuest) {
@@ -441,7 +473,9 @@ export function initUI(ctx) {
         </div>
         <div class="section-title" style="margin-top:20px">Start fresh</div>
         <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
-        <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick and media mix all return to the store defaults — no reinstall needed.</div>`;
+        <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick and media mix all return to the store defaults — no reinstall needed.</div>
+        <div class="section-title" style="margin-top:20px">Invite a friend</div>
+        <div id="invite-box"><div class="hint">…</div></div>`;
       root.querySelector('#pw-save').onclick = async (e) => {
         try {
           await api.changePassword(root.querySelector('#pw-old').value, root.querySelector('#pw-new').value);
@@ -456,6 +490,7 @@ export function initUI(ctx) {
         toast('Signed out — back to guest mode (this device)');
         closeSettings();
       };
+      loadInvite(root);
       return;
     }
     root.innerHTML = `
@@ -466,12 +501,34 @@ export function initUI(ctx) {
       <div class="section-title">Start fresh</div>
       <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
       <div class="hint" style="margin:6px 0 18px">Theme, shelves, shelf map, TV pick and media mix all return to the store defaults — no reinstall needed.</div>
-      <div class="section-title">Sign in</div>
+      <div class="section-title">Invite a friend</div>
+      <div id="invite-box"><div class="hint">…</div></div>
+      <div class="section-title" style="margin-top:18px">Sign in</div>
       <p class="hint" style="margin:0 0 14px">🔑 First time? The store manager account is
-      <b>BabyBluJ</b> / <b>BluJNetwork</b> — sign in at the front entrance, then change it in ☰ Menu → Admin: Users.<br>🔑 Accounts live at the <b>front entrance</b> now —
+      <b>BabyBluJ</b> / <b>BluJNetwork</b> — sign in at the front entrance, then change it in ☰ Menu → Admin → Users.<br>🔑 Accounts live at the <b>front entrance</b> now —
       use <b>🚪 Back to front entrance</b> in the sidebar and sign in (or create an account) right
       at the front desk, then walk straight into your media. Admins get their panels in ☰ Menu
       once they're in.</p>`;
+    loadInvite(root);
+  }
+
+  // ═══════════════ ADMIN · ALL IN ONE PLACE (t82: server + users + policies under one tab) ═══════════════
+  function panelAdmin(root) {
+    const SUBS = [['server', '🛰️ Server'], ['users', '🧑‍💼 Users'], ['policies', '🔒 Policies']];
+    let sub = panelAdmin.current || 'server';
+    root.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        ${SUBS.map(([k, label]) => `<button class="btn small admin-sub" data-sub="${k}">${label}</button>`).join('')}
+      </div>
+      <div id="admin-sub-body"></div>`;
+    const body = root.querySelector('#admin-sub-body');
+    const draw = () => {
+      root.querySelectorAll('.admin-sub').forEach(b => b.style.opacity = b.dataset.sub === sub ? '' : '.55');
+      body.innerHTML = '';
+      ({ server: panelServer, users: panelUsers, policies: panelPolicies }[sub] || panelServer)(body);
+    };
+    root.querySelectorAll('.admin-sub').forEach(b => b.onclick = () => { sub = b.dataset.sub; panelAdmin.current = sub; draw(); });
+    draw();
   }
 
   // ═══════════════ ADMIN · SERVER ═══════════════
@@ -834,10 +891,11 @@ export function initUI(ctx) {
             ${u.isAdmin ? '<span class="badge admin">ADMIN</span>' : '<span class="badge">user</span>'}
             <button class="btn small" data-rename="${u.id}" data-name="${esc(u.username)}">Rename</button>
             <button class="btn small" data-reset="${u.id}" data-name="${esc(u.username)}">Set password</button>
+            <button class="btn small" data-admin="${u.id}" data-name="${esc(u.username)}" data-has="${u.isAdmin ? 1 : 0}">${u.isAdmin ? 'Remove admin' : 'Make admin'}</button>
             <button class="btn small danger" data-del="${u.id}" data-name="${esc(u.username)}">Delete</button>
           </div>`).join('')}
         <div class="hint" style="margin-top:14px">Accounts are <b>self-serve</b> — visitors create their own at the
-        front entrance page (the store owner can allow/block new sign-ups in Policies).
+        front entrance page (the store owner can allow/block new sign-ups in Admin → Policies).
         You can still reset a forgotten password or remove an account here.</div>`;
       // t81b: INLINE EDITORS — Electron (the desktop exe) does not support
       // window.prompt — it returns null instantly, so prompt-based flows are
@@ -876,6 +934,14 @@ export function initUI(ctx) {
       root.querySelectorAll('[data-reset]').forEach(btn => {
         btn.onclick = () => inlineEdit(btn, { password: true, okMsg: 'Password set',
           onSave: v => api.adminSetPassword(btn.dataset.reset, v) });
+      });
+      root.querySelectorAll('[data-admin]').forEach(btn => {   // t82: admins make admins — a partner gets the keys without a rebuild
+        btn.onclick = async () => {
+          const removing = btn.dataset.has === '1';
+          if (removing && !confirm(`Remove admin from ${btn.dataset.name}? They keep their account and shelves.`)) return;
+          try { await api.adminPromoteUser(btn.dataset.admin, !removing); toast(removing ? 'Admin removed' : `${btn.dataset.name} is now an admin`); render(); }
+          catch (e) { toast(e.message, true); }
+        };
       });
       root.querySelectorAll('[data-del]').forEach(btn => {
         btn.onclick = async () => {

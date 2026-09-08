@@ -17,9 +17,9 @@
 //  (or ⏹ Stop) controls it.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788810462055';
-import { signTexture, hashString } from './textures.js?v=1788810462055';
-import { computeTheaterSpeakers } from './room.js?v=1788810462055';   // 8.2 layout (shared with the room mesh)
+import { LAYOUT } from './config.js?v=1788852958324';
+import { signTexture, hashString } from './textures.js?v=1788852958324';
+import { computeTheaterSpeakers } from './room.js?v=1788852958324';   // 8.2 layout (shared with the room mesh)
 
 const TW = 512, TH = 288;   // screen canvas LOGICAL resolution (drawing code)
 const SS = 3.75;            // supersample: device canvas = TW×SS × TH×SS = 1920×1080.

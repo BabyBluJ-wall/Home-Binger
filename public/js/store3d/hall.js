@@ -7,7 +7,7 @@
 //  The book room will take the −x side later.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788810462055';
+import { LAYOUT } from './config.js?v=1788852958324';
 
 export function buildHall(theme) {
   const L = LAYOUT, H = L.hall.h;

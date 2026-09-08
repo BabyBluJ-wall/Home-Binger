@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1788810462055';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1788810462055';
-import { buildHall } from './hall.js?v=1788810462055';
-import { buildDance } from './dance.js?v=1788810462055';
-import { buildExterior } from './exterior.js?v=1788810462055';   // the world outside the door
-import { buildSignage } from './signage.js?v=1788810462055';
-import { createDjPro } from './djpro.js?v=1788810462055';
-import { buildTV } from './tv.js?v=1788810462055';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1788810462055';
-import { PosterAtlases } from './atlas.js?v=1788810462055';
-import { createControls } from './controls.js?v=1788810462055';
-import { createJukeAudio } from './jukeaudio.js?v=1788810462055';
+import { LAYOUT, TUNING } from './config.js?v=1788852958324';
+import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1788852958324';
+import { buildHall } from './hall.js?v=1788852958324';
+import { buildDance } from './dance.js?v=1788852958324';
+import { buildExterior } from './exterior.js?v=1788852958324';   // the world outside the door
+import { buildSignage } from './signage.js?v=1788852958324';
+import { createDjPro } from './djpro.js?v=1788852958324';
+import { buildTV } from './tv.js?v=1788852958324';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1788852958324';
+import { PosterAtlases } from './atlas.js?v=1788852958324';
+import { createControls } from './controls.js?v=1788852958324';
+import { createJukeAudio } from './jukeaudio.js?v=1788852958324';
 
 export function createScene(container, theme) {
   // ── renderer ──
@@ -276,7 +276,8 @@ export function createScene(container, theme) {
           ? (carried ? { ...BIN_TIP, title: `📥 Return “${carried.title.slice(0, 34)}”` } : BIN_TIP)
           : sp === 'djbooth' ? { title: '💻 Open the DJ menu', sub: 'playlists · EQ · fades' }
           : sp === 'record' ? { title: `💿 Spin “${(lastRecord?.title || 'that record').slice(0, 30)}”`, sub: 'plays on the jukebox' }
-          : { title: '🧟 Zombie warning, Stay and party', sub: 'the party is inside' };   // t52
+          : sp === 'streetdoor' ? { title: '🧟 Zombie warning, Stay and party', sub: 'the party is inside' }   // t52 — the street door only
+          : null;   // t85: the jukebox is quiet on purpose — hover overlay removed (owner request)
       if (specialHovered !== sp) { specialHovered = sp; api.onHover?.(tip); }
       return;
     }
@@ -301,6 +302,9 @@ export function createScene(container, theme) {
   const tvFocus = tv.focusPoint || new THREE.Vector3();
   function loop() {
     raf = requestAnimationFrame(loop);
+    // t83: full-screen overlays (front desk, settings) own the CPU — on phones,
+    // typing into the account form ran at ~2 fps with the scene rendering behind it.
+    if (document.hidden || document.body.classList.contains('overlay-open')) return;
     const dt = Math.min(clock.getDelta(), 0.05);
     controls.update(dt);
     tv.update(dt, camera);
