@@ -520,6 +520,36 @@ export async function handleApi(req, res, pathname) {
       return ok(res, { ok: true });
     }
 
+    if (method === 'POST' && pathname === '/api/admin/users/promote') {   // t82: admins make admins — add a partner, demote safely
+      if (!requireAdmin(req, res)) return true;
+      const body = await readBody(req);
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      const target = db.users.find(u => u.id === body.id);
+      if (!target) return fail(res, 404, 'User not found');
+      const want = !!body.admin;
+      if (!want && target.isAdmin && db.users.filter(u => u.isAdmin).length === 1) {
+        return fail(res, 400, 'Cannot remove the last admin');
+      }
+      target.isAdmin = want;
+      store.saveDb();
+      return ok(res, { user: { id: target.id, username: target.username, isAdmin: target.isAdmin } });
+    }
+
+    if (method === 'GET' && pathname === '/api/lan') {   // t84: best LAN addresses for the Invite button — private ranges only, never a public IP
+      const os = await import('node:os');
+      const port = req.socket?.localPort || process.env.PORT || 8181;
+      const urls = [];
+      for (const list of Object.values(os.networkInterfaces())) {
+        for (const ni of list || []) {
+          if (ni.family !== 'IPv4' || ni.internal) continue;
+          if (!/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ni.address)) continue;
+          urls.push(`http://${ni.address}:${port}`);
+        }
+      }
+      return ok(res, { urls: [...new Set(urls)] });
+    }
+
     if (method === 'DELETE' && pathname.startsWith('/api/admin/users/')) {
       const admin = requireAdmin(req, res);
       if (!admin) return true;

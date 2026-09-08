@@ -300,9 +300,12 @@ const addonMock = http.createServer((req, res) => {
   // 6) compiled panels — tabs trimmed, sections landed in their new homes
   R.checks.panels = await page.evaluate(async () => {
     const tabs = [...document.querySelectorAll('#sidebar-nav .side-link')].map(b => b.dataset.tab);
-    const wanted = ['look', 'shelves', 'media', 'profile', 'server', 'users', 'policies'];
-    // 8 side-links: the 7 panels + the guest "Admin sign-in" shortcut (also data-tab="profile")
-    const tabOk = tabs.length === 8 && wanted.every(t => tabs.includes(t)) && !['viz', 'livetv', 'tvadmin', 'shelfmap'].some(t => tabs.includes(t));
+    const wanted = ['look', 'shelves', 'media', 'profile', 'admin'];
+    // 6 side-links: the 5 panels + the guest "Admin sign-in" shortcut (also data-tab="profile").
+    // t82 merged the three admin tabs into ONE Admin tab (server+users+policies live inside it).
+    const adminHidden = !!document.querySelector('.side-link[data-tab="admin"]')?.classList.contains('hidden');
+    const tabOk = tabs.length === 6 && wanted.every(t => tabs.includes(t)) && adminHidden
+      && !['viz', 'livetv', 'tvadmin', 'shelfmap', 'server', 'users', 'policies'].some(t => tabs.includes(t));
     // open My Theme as the (guest) — admin sections hidden
     const side = document.querySelector('#btn-menu') || document.querySelector('[id*=menu]');
     const lookPanel = async () => {
@@ -318,6 +321,10 @@ const addonMock = http.createServer((req, res) => {
     await new Promise(r => setTimeout(r, 300));
     const shelvesHtml = (document.querySelector('#settings-body') || document.querySelector('#panel-body') || document.body).innerHTML;
     const shelvesOk = shelvesHtml.includes('shelf-map-rows') && shelvesHtml.includes('Save my shelf map');
+    // t83: settings modals now PAUSE the scene (mobile perf) — close the modal
+    // so the dt-driven checks that follow (queue fade, sliding doors) run live.
+    document.getElementById('btn-settings-close')?.click();
+    await new Promise(r => setTimeout(r, 150));
     return { tabs, tabOk, themeOk, shelvesOk, ok: tabOk && themeOk && shelvesOk };
   });
 
@@ -736,6 +743,8 @@ const addonMock = http.createServer((req, res) => {
     const firstRow = document.querySelector('#shelf-map-rows .lib-row');
     const jSel = firstRow?.querySelector('select[data-unit="jukebox"]');
     const jukeFirst = !!jSel && jSel.options.length >= 2;    // "All music" + ≥1 section
+    document.getElementById('btn-settings-close')?.click();  // t83: open modal = paused scene — close it
+    await new Promise(r2 => setTimeout(r2, 150));
     return { audioOnShelves, videoOnShelves, jm, jmSel, key, jukeFirst, jukeOptions: jSel ? jSel.options.length : 0,
       ok: audioOnShelves === 0 && videoOnShelves > 0
         && jm.total > 0 && jm.listed === jm.total && jm.sections >= 1
@@ -1812,6 +1821,78 @@ const addonMock = http.createServer((req, res) => {
     const ok = reg.ok && ren.ok && newLogin.status === 200 && oldLogin.status === 401 && dup.status === 409 && bad.status === 400 && uiWired;
     return { regOk: reg.ok, renamed: ren.ok, newLogin: newLogin.status, oldLogin: oldLogin.status, dup: dup.status, badName: bad.status, uiWired, noPrompt, ok };
   })();
+  }
+
+  // 16x) t82–t85: the admin/menu/mobile wave (owner tester round 2)
+  // t82: admins make admins — promote/demote round-trip + last-admin guard + wiring
+  R.checks.t82Admin = await (async () => {
+    const fs = require('node:fs'), path = require('node:path');
+    const login = async (u, p) => { const r = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) }); return { status: r.status, token: r.ok ? (await r.json()).token : null }; };
+    const admin = await login('BabyBluJ', 'BluJNetwork');
+    const H = { 'content-type': 'application/json', Authorization: 'Bearer ' + admin.token };
+    const users = () => fetch(BASE + '/api/admin/users', { headers: H }).then(r => r.json());
+    const purge = async () => { for (const u of (await users()).users) if (/^t82_/.test(u.username)) await fetch(BASE + '/api/admin/users/' + encodeURIComponent(u.id), { method: 'DELETE', headers: H }); };
+    await purge();
+    const reg = await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 't82_member', password: 'test1234' }) });
+    const id = (await users()).users.find(u => u.username === 't82_member')?.id;
+    const prom = await fetch(BASE + '/api/admin/users/promote', { method: 'POST', headers: H, body: JSON.stringify({ id, admin: true }) });
+    const promoted = (await users()).users.find(u => u.id === id)?.isAdmin === true;
+    const dem = await fetch(BASE + '/api/admin/users/promote', { method: 'POST', headers: H, body: JSON.stringify({ id, admin: false }) });
+    const demoted = (await users()).users.find(u => u.id === id)?.isAdmin === false;
+    const meId = (await users()).users.find(u => u.username === 'BabyBluJ')?.id;
+    const lastAdmin = await fetch(BASE + '/api/admin/users/promote', { method: 'POST', headers: H, body: JSON.stringify({ id: meId, admin: false }) });
+    const stillAdmin = (await users()).users.find(u => u.id === meId)?.isAdmin === true;
+    await purge();
+    const uiSrc = fs.readFileSync(path.resolve('public/js/ui.js'), 'utf8');
+    const wired = uiSrc.includes('data-admin') && uiSrc.includes('panelAdmin') && uiSrc.includes('admin-sub')
+      && fs.readFileSync(path.resolve('public/js/api.js'), 'utf8').includes('adminPromoteUser');
+    const ok = reg.ok && prom.ok && promoted && dem.ok && demoted && lastAdmin.status === 400 && stillAdmin && wired;
+    return { regOk: reg.ok, promoted, demoted, lastAdminBlocked: lastAdmin.status, stillAdmin, wired, ok };
+  })();
+
+  // t83: overlays own the CPU — modal pauses the scene, mobile drops the frosted glass
+  {
+    const fs = require('node:fs');
+    const r = await page.evaluate(async () => {
+      document.querySelector('#sidebar')?.classList.remove('hidden');
+      document.querySelector('#btn-menu')?.click();
+      await new Promise(r2 => setTimeout(r2, 400));
+      document.querySelector('.side-link[data-tab="look"]')?.click();
+      await new Promise(r2 => setTimeout(r2, 300));
+      const open = document.body.classList.contains('overlay-open');
+      document.getElementById('btn-settings-close')?.click();
+      await new Promise(r2 => setTimeout(r2, 250));
+      const released = !document.body.classList.contains('overlay-open');
+      return { open, released, ok: open && released };
+    });
+    const sceneSrc = fs.readFileSync('public/js/store3d/scene.js', 'utf8');
+    const cssSrc = fs.readFileSync('public/css/style.css', 'utf8');
+    r.sceneHook = sceneSrc.includes('overlay-open');
+    r.cssMobile = cssSrc.includes('max-width: 820px') && cssSrc.includes('backdrop-filter: none');
+    r.ok = r.ok && r.sceneHook && r.cssMobile;
+    R.checks.t83Mobile = r;
+  }
+
+  // t84: the invite button — /api/lan serves private-range URLs, UI wires the copy
+  R.checks.t84Invite = await (async () => {
+    const fs = require('node:fs');
+    const r = await fetch(BASE + '/api/lan');
+    const j = await r.json().catch(() => null);
+    const shaped = r.ok && Array.isArray(j?.urls)
+      && j.urls.every(u => /^http:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)\d{1,3}\.\d{1,3}:\d+$/.test(u));
+    const uiSrc = fs.readFileSync('public/js/ui.js', 'utf8');
+    const wired = uiSrc.includes('btn-copy-lan') && uiSrc.includes('/api/lan');
+    return { status: r.status, n: (j?.urls || []).length, shaped, wired, ok: shaped && wired };
+  })();
+
+  // t85: the jukebox is silent on hover — zombie tip lives on the street door only
+  {
+    const fs = require('node:fs');
+    const s = fs.readFileSync('public/js/store3d/scene.js', 'utf8');
+    const doorOnly = s.includes("sp === 'streetdoor' ? { title: '🧟 Zombie warning");
+    const oneZombie = s.split('Zombie warning').length - 1 === 1;
+    const silentDefault = s.includes(': null;   // t85: the jukebox is quiet on purpose');
+    R.checks.t85Jukebox = { doorOnly, oneZombie, silentDefault, ok: doorOnly && oneZombie && silentDefault };
   }
 
   // 17) per-user media mix: guest opts OUT of the free shelves while the store keeps them on
