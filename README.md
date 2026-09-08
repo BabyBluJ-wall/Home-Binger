@@ -274,9 +274,14 @@ file and uploads it once; every store after that shows it. Ebooks/PDFs are index
 for the coming full-media library. Nothing leaves your computer and no media
 server is involved.
 
-**Uninstalling** is delete-the-folder: all settings, users and caches live in
-the app's own `data/` folder — no registry, no Program Files (exe users can
-also remove the empty `%APPDATA%\HomeBinger` crash-log folder, optional).
+**Updating the exe** (new version out?): delete the old app folder, unzip the
+new one — **your accounts, logins and settings are untouched**. Since 1.6.0
+the exe keeps them in `%APPDATA%\HomeBinger` (the first launch of a new
+version moves them there automatically — nobody has to do anything).
+
+**Uninstalling** is delete-the-folder: no registry, no Program Files. Your
+data lives in `%APPDATA%\HomeBinger` — delete that folder too if you want a
+complete wipe (otherwise a future install picks up right where you left off).
 
 Open **☰ Menu → sign in as admin → Admin → Server**. Sources stack — mix and
 match any of them:

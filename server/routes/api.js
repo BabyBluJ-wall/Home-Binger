@@ -9,6 +9,7 @@
 //    POST /api/auth/login
 //    POST /api/auth/logout
 //    POST /api/account/password      change my own password
+//    POST /api/account/username      change my own display name
 //    GET  /api/item/:source/:key     full metadata for the detail modal
 //    GET  /img/:source/:key          poster (proxied + cached, token-safe)
 //    GET  /api/tv                    what's playing on the in-store TV
@@ -282,6 +283,22 @@ export async function handleApi(req, res, pathname) {
       destroySession(req, res);
       profileKeyFor(req, res); // mint a fresh anonymous device id
       return ok(res, { ok: true });
+    }
+
+    if (method === 'POST' && pathname === '/api/account/username') {   // t90: rename MYSELF
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Not logged in');
+      const body = await readBody(req);
+      const name = String(body.username || '').trim();
+      if (!/^[\w .-]{2,32}$/.test(name)) return fail(res, 400, 'Name must be 2-32 letters, numbers, spaces, . - _');
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      if (db.users.some(u => u.id !== user.id && u.username.toLowerCase() === name.toLowerCase())) {
+        return fail(res, 409, 'That name is already taken');
+      }
+      user.username = name;         // same guarantees as the admin rename: sessions + prefs key by user id
+      store.saveDb();
+      return ok(res, { ok: true, username: name });
     }
 
     if (method === 'POST' && pathname === '/api/account/password') {

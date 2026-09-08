@@ -49,4 +49,32 @@ try { const { setExeIcon } = await import('./set-exe-icon.mjs'); await setExeIco
 catch (e) { console.log('icon: skipped (' + e.message + ')'); }
 fs.rmSync(path.join(DEST, 'resources', 'default_app.asar'), { force: true });
 fs.cpSync(STAGE, path.join(DEST, 'resources', 'app'), { recursive: true });
+
+// t90: FINDABILITY — the folder used to be a wall of ~60 identical-looking
+// files. Two fixes: (1) drop every Electron locale pack except en-US
+// (Chromium falls back to en-US automatically — the app is English-only),
+// (2) a pointer file that sorts to the TOP of the folder and says what to do.
+try {
+  const locDir = path.join(DEST, 'locales');
+  for (const f of fs.readdirSync(locDir)) {
+    if (f !== 'en-US.pak') fs.rmSync(path.join(locDir, f), { force: true });
+  }
+  console.log('locales: pruned to en-US');
+} catch { /* no locales dir? fine */ }
+fs.writeFileSync(path.join(DEST, '1 - START HERE (double-click HomeBinger.exe).txt'),
+`■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  DOUBLE-CLICK  HomeBinger.exe  ← that's the app
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+That's the only file you ever need to open. Everything else in this
+folder is the app's machinery — leave it be.
+
+Your account, users and settings are safe: they live in
+%APPDATA%\HomeBinger (NOT in this folder) — so deleting this folder
+to install an update never loses them.
+
+Phones on the same Wi-Fi: open http://<this-pc-ip>:8181
+Full guide: START-HERE.txt in this folder.
+`);
+
 console.log('DONE →', DEST);

@@ -1202,9 +1202,12 @@ const addonMock = http.createServer((req, res) => {
     const fs = require('node:fs');
     const docs = fs.readFileSync('START-HERE.txt', 'utf8');
     const store = fs.readFileSync('server/lib/store.js', 'utf8');
-    const docsOk = /UNINSTALLING/i.test(docs) && /delete the HomeBinger-win32-x64 folder/i.test(docs) && /%APPDATA%/.test(docs);
-    const portable = /process\.cwd\(\), 'data'/.test(store) && fs.existsSync('data/config.json');   // data really is ./data
-    R.checks.t62Uninstall = { docsOk, portable, ok: docsOk && portable };
+    const mainCjs = fs.readFileSync('desktop/main.cjs', 'utf8');
+    const docsOk = /UPDAT/i.test(docs) && /%APPDATA%/.test(docs) && /delete the old app folder/i.test(docs);   // t90: exe data survives updates
+    const portable = /process\.cwd\(\), 'data'/.test(store) && fs.existsSync('data/config.json');   // node/server mode: data really is ./data
+    // t90: the EXE keeps data in %APPDATA% (survives updates) + auto-migrates
+    const persist = /HB_DATA_DIR/.test(mainCjs) && /userData/.test(mainCjs) && /moved to AppData/.test(mainCjs);
+    R.checks.t62Uninstall = { docsOk, portable, persist, ok: docsOk && portable && persist };
   }
 
   // 16v) t61: the FILE GRABBER — recursive folders, INDIVIDUAL FILES only,
@@ -2249,8 +2252,11 @@ const addonMock = http.createServer((req, res) => {
   // 17a) t86: DANCE-LIGHT ENERGY + the real mirror ball + adjustable prefs
   R.checks.t86Dance2 = await page.evaluate(() => {
     const s = window.__VB.scene;
+    s.danceFakeLevels({ bass: 0, mid: 0, treble: 0, energy: 0, live: false });   // t90: force the real loop silent — the DJ deck may still be playing
     const hasPrefs = typeof s.setDancePrefs === 'function';
-    const i0 = s.danceInfo();
+    const i0 = s.danceInfo();               // defaults asserted BEFORE the pattern lock
+    s.setDancePrefs({ pattern: '0' });      // t90: LOCK to sweep — pose drives EVERY beam's yaw target, so the
+    // movement measurement can't land on strobe/chase
     const lightsOk = !!i0.lights && i0.lights.intensity === 1 && i0.lights.speed === 1 && i0.lights.pattern === 'auto';
     const ballOk = !!i0.ball && i0.ball.facets === true && i0.ball.glints >= 100 && i0.ball.pinSpot === true;
     let points = 0; s.threeScene.traverse(o => { if (o.isPoints) points++; });   // particle ban holds (glints are instanced)
@@ -2270,9 +2276,10 @@ const addonMock = http.createServer((req, res) => {
     const d = s.danceInfo().rigYaw;
     const move2 = Math.max(...c.map((v, k) => Math.abs(d[k] - v)));
     s.setDancePrefs({ pattern: '1' });
-    const patOk = s.danceInfo().lights.pattern === '1';
+    const patOk = s.danceInfo().lights.pattern === '1' && s.danceInfo().lights.pattern !== 'auto';
     s.setDancePrefs({ intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' });
     const restored = s.danceInfo().lights.speed === 1 && s.danceInfo().lights.pattern === 'auto';
+    s.danceFakeLevels(null);   // back to real audio for everything after
     return { hasPrefs, lightsOk, ballOk, points, move1: +move1.toFixed(3), move2: +move2.toFixed(3), patOk, restored,
       ok: hasPrefs && lightsOk && ballOk && points === 0 && move1 > 0.18 && move2 > 0.4 && patOk && restored };
   });
@@ -2416,6 +2423,61 @@ const addonMock = http.createServer((req, res) => {
     await put({ local: { on: false, spots: [] } });
     await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
     R.checks.t89Thumbs = { ...t89, wired, ok: t89.ok && wired };
+  }
+
+  // 17e) t90: SELF-RENAME — general users change their own name in My Profile
+  {
+    const fs = require('node:fs');
+    const uname = 'renameme_' + Date.now().toString(36);
+    const reg = await j(await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: uname, password: 'pass1234' }) }));
+    const ren = await fetch(BASE + '/api/account/username', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + reg.token }, body: JSON.stringify({ username: 'Renamed ' + uname }) });
+    const renamed = ren.status === 200;
+    const oldLogin = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: uname, password: 'pass1234' }) });
+    const oldGone = oldLogin.status === 401;
+    const newLogin = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'Renamed ' + uname, password: 'pass1234' }) });
+    const newWorks = newLogin.status === 200;
+    const nt = (await newLogin.json()).token;
+    const stillValid = await fetch(BASE + '/api/account/username', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + reg.token }, body: JSON.stringify({ username: 'x' }) });   // old token: sessions key by user id
+    const sessionSurvived = stillValid.status === 400;   // 400 = validation (reached auth) — not 401
+    const dup = await fetch(BASE + '/api/account/username', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + nt }, body: JSON.stringify({ username: 'BabyBluJ' }) });
+    const dupBlocked = dup.status === 409;
+    const guest = await fetch(BASE + '/api/account/username', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'nope' }) });
+    const guestBlocked = guest.status === 401;
+    const uiWired = /id="name-save"/.test(fs.readFileSync('public/js/ui.js', 'utf8')) && /renameSelf/.test(fs.readFileSync('public/js/api.js', 'utf8'));
+    R.checks.t90Rename = { renamed, oldGone, newWorks, sessionSurvived, dupBlocked, guestBlocked, uiWired,
+      ok: renamed && oldGone && newWorks && sessionSurvived && dupBlocked && guestBlocked && uiWired };
+  }
+
+  // 17f) t90: ENTRY-WAY VISUAL FIXES — sign out of the wall, glass depth, near plane
+  R.checks.t90Visual = await page.evaluate(() => {
+    const s = window.__VB.scene;
+    // the two theater-doorway signs (PlaneGeometry 1.7×0.42, MeshBasicMaterial)
+    const signs = [];
+    s.threeScene.traverse(o => {
+      if (o.isMesh && o.material?.isMeshBasicMaterial && o.geometry?.parameters?.width === 1.7
+        && o.geometry?.parameters?.height === 0.42 && Math.abs(o.position.x) < 0.01 && o.position.y > 2.5
+        && o.position.z < -5) {   // back wall only — the hall's "🎬 MOVIES" sign at +6.6 is its own thing
+        signs.push(+o.position.z.toFixed(3));
+      }
+    });
+    signs.sort((a, b) => a - b);
+    // store wall slab spans z −6.345…−6.095: the store-side sign must sit IN FRONT
+    // (−6.095+0.03=−6.065), the theater-side one PAST the far face (−6.345−0.03=−6.375)
+    const signsOk = signs.length === 2 && Math.abs(signs[0] + 6.375) < 0.005 && Math.abs(signs[1] + 6.065) < 0.005;
+    // door glass no longer writes depth (transparent stacking fix)
+    let glassFixed = false;
+    s.threeScene.traverse(o => {
+      if (o.isMesh && o.material?.transparent && o.material?.opacity === 0.13 && o.material?.depthWrite === false) glassFixed = true;
+    });
+    return { signs, signsOk, glassFixed,
+      ok: signsOk && glassFixed };
+  });
+  {
+    // near plane + exe persistence live in files — deterministic, no GPU needed
+    const fs = require('node:fs');
+    const camOk = /PerspectiveCamera\(70, container\.clientWidth \/ container\.clientHeight, 0\.15, 60\)/.test(fs.readFileSync('public/js/store3d/scene.js', 'utf8'));
+    const buildOk = /en-US\.pak/.test(fs.readFileSync('tools/build-desktop.mjs', 'utf8')) && /1 - START HERE/.test(fs.readFileSync('tools/build-desktop.mjs', 'utf8'));
+    R.checks.t90Visual = { ...R.checks.t90Visual, camOk, buildOk, ok: R.checks.t90Visual.ok && camOk && buildOk };
   }
 
   // ── restore the live preview: real archive.org defaults, no mocks ──

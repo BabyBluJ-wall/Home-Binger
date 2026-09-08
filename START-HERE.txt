@@ -78,6 +78,9 @@ FIRST LAUNCH — WHAT TO EXPECT
   individual files. Grabbed videos grow their own case images
   automatically (the first visitor generates them, once, for everyone).
 • Phones/tablets on the same Wi-Fi: open http://<your-pc-ip>:8181
+• UPDATING to a new version: delete the old app folder, unzip the new one.
+  Your accounts, logins and settings live in %APPDATA%\HomeBinger —
+  they survive every update (moved there automatically the first time).
   (the address shows in the console window on first launch).
 
 

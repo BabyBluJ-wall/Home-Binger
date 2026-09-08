@@ -7,7 +7,7 @@
 //  The book room will take the −x side later.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788899102183';
+import { LAYOUT } from './config.js?v=1788905515415';
 
 export function buildHall(theme) {
   const L = LAYOUT, H = L.hall.h;
@@ -23,7 +23,10 @@ export function buildHall(theme) {
   const metal = new THREE.MeshStandardMaterial({ color: '#8b93a8', roughness: 0.35, metalness: 0.7 });
   // t48: the ORIGINAL clear-glass recipe (0.13 opacity) — from the street you
   // see straight through: street glass → hall → store glass → the movie store
-  const glassMat = new THREE.MeshStandardMaterial({ color: '#d6ecff', roughness: 0.03, metalness: 0.05, transparent: true, opacity: 0.13 });
+  // t90 FIX: depthWrite OFF — transparent glass that writes depth was slicing
+  // holes in whatever drew after it (store door + dance slider + street door
+  // glass stacking = the "blinking gray overlap" at the entry sightline)
+  const glassMat = new THREE.MeshStandardMaterial({ color: '#d6ecff', roughness: 0.03, metalness: 0.05, transparent: true, opacity: 0.13, depthWrite: false });
   const floorMat = new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.6 });
   const ceilMat = new THREE.MeshStandardMaterial({ color: '#1a1f30', roughness: 1 });
 

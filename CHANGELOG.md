@@ -1,3 +1,24 @@
+## 2026-09-08 — t90: exe updates keep your login, self-rename, entry-way polish
+- **exe updates no longer wipe your account.** The desktop app now keeps all
+  data (accounts, logins, settings, shelf maps) in `%APPDATA%\HomeBinger`
+  instead of inside the app folder — delete the old folder, unzip the new
+  one, and everyone's still signed in. The first launch of the new version
+  moves existing data there automatically; nothing to do, nothing to lose.
+- **Change your own name.** My Profile → "My name": any signed-in user can
+  rename themselves (admins keep their admin-only rename too). Sessions
+  survive the rename; duplicates are rejected.
+- **The exe folder is easier to understand.** A "1 - START HERE" file sorts
+  to the top and points at HomeBinger.exe; ~50 unused language packs are
+  gone (the app is English), so the app stands out instead of drowning in
+  lookalike files.
+- **Entry-way visual fixes** (the "gray flicker straight ahead" report):
+  the theater-side "↩ THE STORE" sign was buried inside the wall slab —
+  now it hangs properly on the theater side of the doorway. Door glass no
+  longer writes depth (transparent panes stacking at the entry could fight
+  over pixels — now they blend cleanly). Camera near-plane raised for
+  better depth precision on long grazing walls.
+- Suite: 85 → 88 checks (t90Rename round-trip, t90Visual sign/glass/near,
+  t62Uninstall extended with the persistence assertions).
 ## 2026-09-08 — t86–t89: multi-source, shelf-map fixes, grabber art, dance-floor lights
 - **t87 · connect as many libraries as you like.** Admin → Server has a new
   "More libraries" section: add another Plex or Jellyfin — or a friend's —

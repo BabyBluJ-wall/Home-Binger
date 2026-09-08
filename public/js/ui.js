@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788899102183';
-import { createCaseView } from './store3d/caseview.js?v=1788899102183';   // the 3D case in the item modal
-import { state } from './state.js?v=1788899102183';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788899102183';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788899102183';
+import { api } from './api.js?v=1788905515415';
+import { createCaseView } from './store3d/caseview.js?v=1788905515415';   // the 3D case in the item modal
+import { state } from './state.js?v=1788905515415';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788905515415';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788905515415';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -540,6 +540,12 @@ export function initUI(ctx) {
         <div class="section-title">Signed in</div>
         <p style="margin:0 0 6px">You're <b>${esc(me.username)}</b>${me.isAdmin ? ' <span class="badge admin">ADMIN</span>' : ''}.</p>
         <p class="hint" style="margin:0 0 18px">Your theme &amp; sorting follow your account on every device you sign in from.</p>
+        <div class="section-title">My name</div>
+        <div class="row2">
+          <div class="field"><label>Display name</label><input type="text" id="me-name" maxlength="32" value="${esc(me.username)}"></div>
+          <div class="field" style="align-self:end"><button class="btn accent" id="name-save">Update name</button></div>
+        </div>
+        <div class="hint" style="margin:-4px 0 16px">This is what you sign in as and what admins see — your shelves and settings stay put.</div>
         <div class="section-title">Change password</div>
         <div class="row2">
           <div class="field"><label>Current password</label><input type="password" id="pw-old"></div>
@@ -554,6 +560,15 @@ export function initUI(ctx) {
         <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick and media mix all return to the store defaults — no reinstall needed.</div>
         <div class="section-title" style="margin-top:20px">Invite a friend</div>
         <div id="invite-box"><div class="hint">…</div></div>`;
+      root.querySelector('#name-save').onclick = async () => {
+        try {
+          await api.renameSelf(root.querySelector('#me-name').value.trim());
+          toast('Name updated');
+          await state.refresh();
+          ui.updateSidebar();
+          panelProfile(root);        // re-render with the new name
+        } catch (err) { toast(err.message, true); }
+      };
       root.querySelector('#pw-save').onclick = async (e) => {
         try {
           await api.changePassword(root.querySelector('#pw-old').value, root.querySelector('#pw-new').value);

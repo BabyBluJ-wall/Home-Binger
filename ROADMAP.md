@@ -144,6 +144,20 @@ Recovery: clone the repo, or rebuild the exe from source
 - [ ] Edit: TXT/MD only (honest scope — .docx editing is Google-Docs-sized)
 **GATE:** open and read every supported type in-world; edit a MD file.
 
+## Phase W — WATCH PARTY 🍿 *(owner request 2026-09-08)*
+Watch together, w2g-style, but it's YOUR store. Staged honestly by size:
+- **W1 — synced theater nights (small):** the host queues a title; everyone
+  in the theater stays frame-synced (the TV state already lives on the
+  server — formalize "party mode": host controls, synchronized start,
+  a "🎬 Now hosting" sign, simple in-room chat).
+- **W2 — invite rooms:** a room link friends open in a browser — joins the
+  same screen without walking the whole store (rides the existing web UI).
+- **W3 — the big dream (multiplayer presence):** friends' customizable
+  avatars walking the aisles together. Real-time multiplayer is a project
+  of its own — parked here so it's on the record, not in the way.
+Far-away friends (not on your Wi-Fi) need the future remote-access work
+first — same rule as everything else: no ports open to the internet.
+
 ## Phase 4 — DLC PACK SYSTEM 💿
 **Goal:** sellable content packs of the owner's music (rights retained).
 - [ ] `pack.json` manifest (name, art, theme, credit) inside any folder

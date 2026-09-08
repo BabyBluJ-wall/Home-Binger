@@ -14,6 +14,36 @@ const { app, BrowserWindow, Menu } = require('electron');
 const net = require('node:net');
 const http = require('node:http');
 const path = require('node:path');
+const fs = require('node:fs');
+
+// t90: STORE DATA LIVES IN %APPDATA%\HomeBinger — NOT inside the app folder.
+// Why: updating used to mean "delete the old folder, unzip the new one" —
+// which deleted every account, login and setting with it. Now the app
+// folder holds only the program; user data survives every update. First
+// run MIGRATES the old in-folder data/ automatically (logins keep working).
+(function placeDataDir() {
+  try {
+    const dataDir = path.join(app.getPath('userData'), 'data');
+    fs.mkdirSync(dataDir, { recursive: true });
+    if (!fs.existsSync(path.join(dataDir, 'db.json'))) {
+      const exeDir = path.dirname(app.getPath('exe') || '');
+      const appDir = app.getAppPath ? app.getAppPath() : '';
+      for (const old of [path.join(exeDir, 'data'), path.join(appDir, 'data')]) {
+        if (old && fs.existsSync(path.join(old, 'db.json'))) {
+          fs.cpSync(old, dataDir, { recursive: true });
+          if (fs.existsSync(path.join(dataDir, 'db.json'))) {
+            try { fs.renameSync(old, old + ' (moved to AppData)'); } catch { /* best effort */ }
+            console.log('[data] moved', old, '→', dataDir);
+          }
+          break;
+        }
+      }
+    }
+    process.env.HB_DATA_DIR = dataDir;   // the server reads this on boot
+  } catch (e) {
+    console.warn('[data] falling back to in-folder data/:', e.message);
+  }
+})();
 
 // One Home Binger at a time — a second launch just focuses the first window.
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }

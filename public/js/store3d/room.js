@@ -7,8 +7,8 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788899102183';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1788899102183';
+import { LAYOUT } from './config.js?v=1788905515415';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1788905515415';
 
 export function buildRoom(theme) {
   const L = LAYOUT;
@@ -30,12 +30,16 @@ export function buildRoom(theme) {
   floor.rotation.x = -Math.PI / 2;
   group.add(floor);
 
+  // t90 FIX: the aisle runner is 10%-opacity decor hovering a hair above the
+  // floor — it must NEVER write depth. At grazing angles down the long aisle,
+  // a 6mm offset is below depth precision and the runner fought the floor for
+  // pixels (the angle-dependent gray flicker straight ahead from the entry).
   const runner = new THREE.Mesh(
     new THREE.PlaneGeometry(LAYOUT.islands.tipX * 2 - 0.35, L.room.l - 1.6),
-    new THREE.MeshStandardMaterial({ color: theme.accent, roughness: 0.95, transparent: true, opacity: 0.10 })
+    new THREE.MeshStandardMaterial({ color: theme.accent, roughness: 0.95, transparent: true, opacity: 0.10, depthWrite: false })
   );
   runner.rotation.x = -Math.PI / 2;
-  runner.position.y = 0.006;
+  runner.position.y = 0.012;   // and a touch higher, so the blend is unambiguous
   group.add(runner);
 
   // ── walls ──
@@ -506,7 +510,10 @@ export function buildTheater(theme) {
     const tex = signTexture(side === 1 ? '🎬 THEATER' : '↩ THE STORE', { accent: theme.accent, bg: '#160f1e' });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.42),
       new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
-    sign.position.set(0, th.door.height + 0.55, -D + side * 0.03);
+    // t90 FIX: the theater-side sign used to sit at -D-0.03 — INSIDE the wall
+    // slab (the wall spans -D-T…-D) — buried 22cm deep, invisible from the
+    // theater. Each face's sign sits 3cm proud of ITS OWN wall face.
+    sign.position.set(0, th.door.height + 0.55, side === 1 ? -D + 0.03 : -D - T - 0.03);
     if (side === -1) sign.rotation.y = Math.PI;
     group.add(sign); signMeshes.push(sign);
   }

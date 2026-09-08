@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1788899102183';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1788899102183';
-import { buildHall } from './hall.js?v=1788899102183';
-import { buildDance } from './dance.js?v=1788899102183';
-import { buildExterior } from './exterior.js?v=1788899102183';   // the world outside the door
-import { buildSignage } from './signage.js?v=1788899102183';
-import { createDjPro } from './djpro.js?v=1788899102183';
-import { buildTV } from './tv.js?v=1788899102183';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1788899102183';
-import { PosterAtlases } from './atlas.js?v=1788899102183';
-import { createControls } from './controls.js?v=1788899102183';
-import { createJukeAudio } from './jukeaudio.js?v=1788899102183';
+import { LAYOUT, TUNING } from './config.js?v=1788905515415';
+import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1788905515415';
+import { buildHall } from './hall.js?v=1788905515415';
+import { buildDance } from './dance.js?v=1788905515415';
+import { buildExterior } from './exterior.js?v=1788905515415';   // the world outside the door
+import { buildSignage } from './signage.js?v=1788905515415';
+import { createDjPro } from './djpro.js?v=1788905515415';
+import { buildTV } from './tv.js?v=1788905515415';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1788905515415';
+import { PosterAtlases } from './atlas.js?v=1788905515415';
+import { createControls } from './controls.js?v=1788905515415';
+import { createJukeAudio } from './jukeaudio.js?v=1788905515415';
 
 export function createScene(container, theme) {
   // ── renderer ──
@@ -36,7 +36,10 @@ export function createScene(container, theme) {
   scene.fog = new THREE.FogExp2(fogColor, 0.02);
   scene.background = fogColor.clone();
 
-  const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.05, 60);
+  // t90: near 0.05→0.15 — nothing in the store is ever closer than ~20cm,
+  // and the wasted near range was costing depth precision on long grazing
+  // walls (fine shimmer at distance on real GPUs)
+  const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.15, 60);
 
   // ── world pieces ──
   const room = buildRoom(theme);

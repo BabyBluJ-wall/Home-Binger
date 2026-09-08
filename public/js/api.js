@@ -78,6 +78,7 @@ export const api = {
   adminDeleteUser: (id) => call('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
   adminRenameUser: (id, username) => call('POST', '/api/admin/users/rename', { id, username }),   // t81
   adminPromoteUser: (id, admin) => call('POST', '/api/admin/users/promote', { id, admin }),   // t82: grant/revoke admin
+  renameSelf: (username) => call('POST', '/api/account/username', { username }),   // t90: change MY name
 
   // Poster URL for an item (proxied through our server — never touches the
   // media-server token). Items without a source return null → placeholders.
