@@ -198,7 +198,7 @@ one item per movie, show, and track.
 
 1. In the store, click **☰ Menu → 🛠️ Admin sign-in** and sign in with
    **BabyBluJ** / **BluJNetwork** (the default — change it in Admin → Users).
-2. Go to **🛰️ Admin: Server** and click the **Plex** card (or **Jellyfin**).
+2. Go to **🛠️ Admin → Server** and click the **Plex** card (or **Jellyfin**).
    The form changes to show only that service's fields.
 3. **Server URL**: `http://` + the IP of the computer running Plex +
    `:32400` — for example `http://192.168.1.50:32400`. If Plex is on THIS
@@ -276,7 +276,7 @@ server is involved.
 the app's own `data/` folder — no registry, no Program Files (exe users can
 also remove the empty `%APPDATA%\HomeBinger` crash-log folder, optional).
 
-Open **☰ Menu → sign in as admin → Admin: Server**. Sources stack — mix and
+Open **☰ Menu → sign in as admin → Admin → Server**. Sources stack — mix and
 match any of them:
 
 | Source | What it gives you |
@@ -339,7 +339,7 @@ open, and everything reconnects when it's back.
 - **The store TV** — select any case → **"📺 Play on the store TV"** and it
   plays right there in the world, with a bottom control bar (stop · ⏪10s ·
   play/pause · 10⏩s · repeat · volume). Albums get a spectrum visualizer.
-  Admins can change the idle screen (Admin: Store TV): a pinned item, a
+  Admins can change the idle screen (Admin → Server): a pinned item, a
   looping video URL, or the white projector screen.
 - **The theater** — bring a movie (or send it from any case's detail card)
   and it plays on the big screen with the same control bar. The sloped floor

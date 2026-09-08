@@ -1,3 +1,35 @@
+## 2026-09-08 — t82–t85: the tester round-2 wave (admin, mobile, invites, jukebox)
+- **t82 · Admin consolidated + admins make admins.** The three admin tabs
+  (Server / Users / Policies) merged into ONE "Admin" section with sub-tab
+  buttons — an admin's settings live in one place now. New per-user
+  "Make admin / Remove admin" button (POST /api/admin/users/promote):
+  add a partner with full admin without a rebuild; the last-admin guard
+  blocks demoting yourself into lockout; demote needs a confirm.
+- **t83 · mobile account creation un-lagged.** Two fixes: full-screen
+  overlays (front desk, settings) now pause the 3D render loop
+  (body.overlay-open) — typing on a phone no longer fights the scene for
+  CPU; and phones drop the frosted-glass backdrop-filter (re-blurring
+  the live canvas per frame was the real cost).
+- **t84 · one-tap invites.** My Profile → "Invite a friend": shows this
+  store's LAN address (GET /api/lan — private ranges only, never a public
+  IP) with a Copy button (clipboard API + execCommand fallback for
+  http:// LAN). No more "which IP do I type?" for friends. Works for
+  guests too. Sidebar tab relabeled "My Profile" (it's self-service:
+  account, password, invite — the sync wording confused people).
+- **t85 · the jukebox is quiet on hover** (owner request) — the zombie
+  hover overlay is gone from the jukebox; the street door keeps its sign.
+- Docs: README/START-HERE admin references updated to the merged tab.
+  Suite: 76 → 80 checks (t82Admin round-trip incl. last-admin guard,
+  t83Mobile pause+CSS, t84Invite endpoint shape, t85Jukebox silence).
+## 2026-09-07 — phones & the exe: the FAQ everyone asks
+- New README subsection **"📱 The exe & phones — the questions everyone
+  asks"** (right after Step 6) and a matching **PHONES, TABLETS & SMART
+  TVs** quick-facts block in START-HERE.txt. Covers: yes, phones work
+  with the exe (same server, same Wi-Fi, http://<PC-IP>:8181); the exe
+  MUST stay running (the PC is the store — close it and the doors close,
+  nothing breaks); same-network only by design, away-from-home = Tailscale;
+  the first-run firewall Allow; keep the PC awake while hosting; per-device
+  guest profiles mean zero setup on visitors' phones.
 ## 2026-09-07 — system requirements, in plain sight
 - Added a **"Will it run on my machine?"** section to the README (full
   table) and the TOP of START-HERE.txt (short list) — the two places
