@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Home Binger — Be Kind, Rewind</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230a0f2e'/><text x='32' y='42' font-size='34' text-anchor='middle' fill='%23ff3ea5' font-family='sans-serif' font-weight='900' font-style='italic'>HB</text></svg>">
-<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/style.css?v=1788852958324">
 </head>
-<body>
+<body class="overlay-open">
 
   <!-- 3D store renders into this container -->
   <div id="scene-container"></div>
@@ -94,11 +94,9 @@
       <button class="side-link" data-tab="look">🎨 <span>My Theme</span><small>colors · visualizer · TV idle</small></button>
       <button class="side-link" data-tab="shelves">📼 <span>My Shelves</span><small>sorting &amp; shelf map</small></button>
       <button class="side-link" data-tab="media">📺 <span>My Media</span><small>what stocks my shelves</small></button>
-      <button class="side-link" data-tab="profile">👤 <span>Profile &amp; Sync</span><small>guest mode or account</small></button>
+      <button class="side-link" data-tab="profile">👤 <span>My Profile</span><small>account · password · invite</small></button>
       <button class="side-link guest-only" id="nav-admin-login" data-tab="profile">🛠️ <span>Admin sign-in</span><small>manage servers · TV · users</small></button>
-      <button class="side-link admin-only hidden" data-tab="server">🛰️ <span>Admin: Server</span><small>Plex / Jellyfin / free shelves / Live TV</small></button>
-      <button class="side-link admin-only hidden" data-tab="users">🧑‍💼 <span>Admin: Users</span><small>accounts &amp; passwords</small></button>
-      <button class="side-link admin-only hidden" data-tab="policies">🔒 <span>Admin: Policies</span><small>locks &amp; defaults</small></button>
+      <button class="side-link admin-only hidden" data-tab="admin">🛠️ <span>Admin</span><small>server · users · policies — one place</small></button>
     </nav>
     <div class="sidebar-foot">
       <button id="btn-leave-store" class="btn wide" style="margin-bottom:8px">🚪 Back to front entrance</button>
@@ -208,7 +206,7 @@
     </div>
   </div>
 
-  <script src="/js/vendor/resonance-audio.min.js?v=1788810462055"></script>
-  <script type="module" src="/js/main.js?v=1788810462055"></script>
+  <script src="/js/vendor/resonance-audio.min.js?v=1788852958324"></script>
+  <script type="module" src="/js/main.js?v=1788852958324"></script>
 </body>
 </html>
