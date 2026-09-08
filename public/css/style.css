@@ -540,3 +540,11 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 .dj-qrow .q-t { flex: 1; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn.sm { padding: 3px 8px; font-size: 12px; }
 #dj-add { width: 100%; }
+
+/* ── t83: mobile perf ─────────────────────────────────────────────────────
+   backdrop-filter forces the phone to re-blur the LIVE WebGL canvas behind
+   every overlay, every frame — that's the "laggy af" account-creation on
+   phones. Frosted glass is a desktop luxury; on small screens we go solid. */
+@media (max-width: 820px) {
+  * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+}
