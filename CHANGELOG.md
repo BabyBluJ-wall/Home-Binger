@@ -1,3 +1,17 @@
+## 2026-09-08 — t91: the ceiling "gray band" — found and fixed
+- **The gray band on the ceiling near the theater is gone** (it sat between
+  the pink and white lights and ran across the whole room). Cause: the
+  roofline caps that ring the building were drawn around the store box —
+  then the whole exterior shifted forward to mount the street facade flush,
+  which dragged the back cap 2.6 m INTO the building. It hovered over the
+  sales floor at exactly ceiling height, dead between the pink accent panel
+  and the white light row: two surfaces sharing one plane, so the GPU could
+  never settle on which one you see — a gray band that blinked as you moved
+  (and depended on the viewing angle). The caps now sit on the walls they
+  were drawn for, wrap the full building (store + front hall), and ride
+  2 cm above the walls so a cap can never again share a plane with any
+  ceiling — all five ceilings audited clean (store, hall, dance hall,
+  DJ library, theater).
 ## 2026-09-08 — t90: exe updates keep your login, self-rename, entry-way polish
 - **exe updates no longer wipe your account.** The desktop app now keeps all
   data (accounts, logins, settings, shelf maps) in `%APPDATA%\HomeBinger`
@@ -17,7 +31,7 @@
   longer writes depth (transparent panes stacking at the entry could fight
   over pixels — now they blend cleanly). Camera near-plane raised for
   better depth precision on long grazing walls.
-- Suite: 85 → 88 checks (t90Rename round-trip, t90Visual sign/glass/near,
+- Suite: 85 → 87 checks (t90Rename round-trip, t90Visual sign/glass/near,
   t62Uninstall extended with the persistence assertions).
 ## 2026-09-08 — t86–t89: multi-source, shelf-map fixes, grabber art, dance-floor lights
 - **t87 · connect as many libraries as you like.** Admin → Server has a new

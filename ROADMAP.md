@@ -145,7 +145,10 @@ Recovery: clone the repo, or rebuild the exe from source
 **GATE:** open and read every supported type in-world; edit a MD file.
 
 ## Phase W — WATCH PARTY 🍿 *(owner request 2026-09-08)*
-Watch together, w2g-style, but it's YOUR store. Staged honestly by size:
+**ORDER (owner, 2026-09-08): remote connections come FIRST — watch party
+work starts once remote access is done.** Far-away friends can't join a
+theater night they can't reach. Watch together, w2g-style, but it's YOUR
+store. Staged honestly by size:
 - **W1 — synced theater nights (small):** the host queues a title; everyone
   in the theater stays frame-synced (the TV state already lives on the
   server — formalize "party mode": host controls, synchronized start,

@@ -16,8 +16,8 @@
 //  whole thing self-contained — no image files.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, STORE } from './config.js?v=1788905515415';
-import { signTexture } from './textures.js?v=1788905515415';
+import { LAYOUT, STORE } from './config.js?v=1788909500676';
+import { signTexture } from './textures.js?v=1788909500676';
 
 // ── procedural material helpers (cached per accent) ─────────────────────────
 function tex(w, h, draw) {
@@ -112,11 +112,26 @@ export function buildExterior(theme) {
   box(W * 2 + 0.3, 0.07, 0.18, std(YELLOW, 0.6), 0, 3.40, F + 0.12);     // yellow pinstripe cap
   box(W * 2 + 0.6, 0.22, 0.36, std('#8d8371', 0.95), 0, 4.16, F + 0.24); // roof edge
   // parapet caps — close the wall tops so the box walls read as a real building
+  // t91 FIX (the "gray band on the ceiling near the theater"): this whole
+  // group is shifted +hall.d for the street (t49 facade-flush), which dragged
+  // these caps 2.6 m INTO the building — the back cap crossed the sales-floor
+  // ceiling at z≈−3.6, full width, its bottom face EXACTLY at ceiling height
+  // (the gray flicker band between the pink accent panel and the white light
+  // row), and the side caps streaked the ceiling edges (store, hall, dance
+  // hall, DJ lib). Caps now (a) compensate the shift so they sit on the walls
+  // they were drawn for, (b) span store + front hall as one building, and
+  // (c) ride 2 cm ABOVE wall height so a cap bottom can never share a plane
+  // with any interior ceiling. Coplanar = flicker; a 2 cm shadow joint at
+  // 4.3 m is invisible from every reachable viewpoint.
   const capMat = std('#8d8371', 0.95);
-  box(LAYOUT.room.w + 2 * T + 0.35, 0.12, T + 0.35, capMat, 0, LAYOUT.room.h + 0.06, D + T / 2);
-  box(LAYOUT.room.w + 2 * T + 0.35, 0.12, T + 0.35, capMat, 0, LAYOUT.room.h + 0.06, -D - T / 2);
-  box(T + 0.35, 0.12, LAYOUT.room.l + 2 * T + 0.35, capMat, -W - T / 2, LAYOUT.room.h + 0.06, 0);
-  box(T + 0.35, 0.12, LAYOUT.room.l + 2 * T + 0.35, capMat, W + T / 2, LAYOUT.room.h + 0.06, 0);
+  const HB = LAYOUT.hall.d;                                    // the t49 group shift to undo
+  const CAPY = LAYOUT.room.h + 0.08;                           // bottom face at H + 0.02
+  const CW = LAYOUT.room.w + 2 * T + 0.35;                     // cap width, across the building
+  const CL = LAYOUT.room.l + 2 * T + LAYOUT.hall.d + 0.35;     // cap length: store + hall, full depth
+  box(CW, 0.12, T + 0.35, capMat, 0, CAPY, D + T / 2);         // street cap — atop the hall's front wall
+  box(CW, 0.12, T + 0.35, capMat, 0, CAPY, -D - T / 2 - HB);   // back cap — back on the store's back wall
+  box(T + 0.35, 0.12, CL, capMat, -W - T / 2, CAPY, -HB / 2);  // side caps — full building depth
+  box(T + 0.35, 0.12, CL, capMat, W + T / 2, CAPY, -HB / 2);
   // brick on the side exterior faces too (seen at an angle through the door)
   const sideV = new THREE.Mesh(new THREE.PlaneGeometry(LAYOUT.room.l, LAYOUT.room.h * 0.62), brickMat);
   sideV.position.set(-W - T - 0.03, LAYOUT.room.h * 0.31, 0); sideV.rotation.y = -Math.PI / 2; g.add(sideV);
