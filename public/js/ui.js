@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788905515415';
-import { createCaseView } from './store3d/caseview.js?v=1788905515415';   // the 3D case in the item modal
-import { state } from './state.js?v=1788905515415';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788905515415';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788905515415';
+import { api } from './api.js?v=1788919797230';
+import { createCaseView } from './store3d/caseview.js?v=1788919797230';   // the 3D case in the item modal
+import { state } from './state.js?v=1788919797230';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788919797230';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788919797230';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

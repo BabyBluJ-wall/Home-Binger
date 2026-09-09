@@ -7,8 +7,8 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788905515415';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1788905515415';
+import { LAYOUT } from './config.js?v=1788919797230';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1788919797230';
 
 export function buildRoom(theme) {
   const L = LAYOUT;
@@ -321,8 +321,16 @@ export function buildTheater(theme) {
   const wallBot = -(slope.drop + 0.35);             // below the deepest floor point
   const wallH = H - wallBot;
   for (const side of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.BoxGeometry(T, wallH, LEN + 2 * T), dimWall);
-    w.position.set(side * (W + T / 2), wallBot + wallH / 2, zc); group.add(w);
+    // t92 FIX: LEN + 2*T centered at zc pushed these walls THROUGH the
+    // shared wall — their end faces landed at z = -6.095, exactly the store's
+    // back-wall surface (coplanar, same-facing) → dark z-fight patches left
+    // & right of the theater door, "showing through" onto the back wall
+    // (same disease as the t91 ceiling band). Length LEN + T, centered
+    // zc - T/2: near end stops at the shared wall's theater-side face; the
+    // far end still reaches the screen wall's outer face for corner
+    // coverage (that face looks out into unseen void — nothing to fight).
+    const w = new THREE.Mesh(new THREE.BoxGeometry(T, wallH, LEN + T), dimWall);
+    w.position.set(side * (W + T / 2), wallBot + wallH / 2, zc - T / 2); group.add(w);
     occluders.push(w);
   }
   const far = new THREE.Mesh(new THREE.BoxGeometry(th.w + 2 * T, wallH, T), dimWall);
@@ -601,9 +609,15 @@ export function buildJukebox(theme) {
   targets.push(body);
 
   // THE CROWN — a glowing cathedral arch (half-cylinder shell, translucent)
+  // t92 FIX: the crown was a half-cylinder with thetaStart 0 → after the
+  // rotation only the RIGHT half of the arch existed (left side had no
+  // geometry — flat-topped and see-through from oblique angles; the tubes
+  // were always built symmetrically for a full arch). thetaStart π/2 spans
+  // the full cathedral arch, left AND right; DoubleSide renders the inside
+  // of the glowing shell so you can't see through it.
   const archMat = new THREE.MeshStandardMaterial({ color: '#fff3d6', emissive: '#ffe9b8',
-    emissiveIntensity: 1.15, transparent: true, opacity: 0.88, roughness: 0.25 });
-  const arch = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.2, 28, 1, true, 0, Math.PI), archMat);
+    emissiveIntensity: 1.15, transparent: true, opacity: 0.88, roughness: 0.25, side: THREE.DoubleSide });
+  const arch = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.2, 28, 1, true, Math.PI / 2, Math.PI), archMat);
   arch.rotation.x = Math.PI / 2;          // axis along z — arch spans the top
   arch.position.set(0, 0.55, 0.16);
   group.add(arch);

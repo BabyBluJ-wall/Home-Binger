@@ -1,3 +1,17 @@
+## 2026-09-08 — t92: theater walls bleeding onto the back wall + the jukebox crown
+- **The theater's side walls no longer "show through" onto the store's back
+  wall.** Same disease as the ceiling band, new spot: the theater's left and
+  right walls ran 25 cm too long — straight through the shared wall — and
+  their ends landed in exactly the same plane as the back wall's surface,
+  so dark patches flickered on it (left and right of the theater door,
+  worse at grazing angles). The walls now stop at the shared wall's
+  theater-side face; nothing in the building shares a plane with a visible
+  surface anymore.
+- **The jukebox crown is a full arch again.** The glowing cathedral top was
+  accidentally built as a half-arch — only the right side curved, the left
+  was flat open (and you could see straight through it from certain
+  angles). It now curves over both sides like a proper crown and renders
+  from the inside too, so the see-through is gone.
 ## 2026-09-08 — t91: the ceiling "gray band" — found and fixed
 - **The gray band on the ceiling near the theater is gone** (it sat between
   the pink and white lights and ran across the whole room). Cause: the
