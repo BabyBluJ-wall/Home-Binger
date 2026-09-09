@@ -156,6 +156,13 @@ const addonMock = http.createServer((req, res) => {
                  { name: 'HLS Only (skip)', url: 'http://127.0.0.1:32790/station.m3u8', url_resolved: 'http://127.0.0.1:32790/station.m3u8', votes: 98, codec: 'MP3', favicon: '' }]);
   }
   if (u.pathname.startsWith('/stream/')) { res.writeHead(200, { 'Content-Type': 'audio/mpeg' }); return res.end(Buffer.alloc(8192, 5)); }
+  if (u.pathname === '/feed2.rss') {   // t93: the multi-source RSS check needs two distinct feeds
+    const ep = i => `<item><title>Late Night ${i}: Rewind</title><pubDate>${new Date(Date.now() - i * 864e5).toUTCString()}</pubDate>
+      <enclosure url="http://127.0.0.1:32790/audio/late${i}.mp3" type="audio/mpeg" length="4096"/></item>`;
+    res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
+    return res.end(`<?xml version="1.0"?><rss><channel><title>The Late Rental</title>
+      ${[1, 2].map(ep).join('')}</channel></rss>`);
+  }
   if (u.pathname === '/feed.rss') {
     const ep = i => `<item><title>Episode ${i}: The Big One</title><pubDate>${new Date(Date.now() - i * 864e5).toUTCString()}</pubDate>
       <enclosure url="http://127.0.0.1:32790/audio/ep${i}.mp3" type="audio/mpeg" length="4096"/></item>`;
@@ -1203,10 +1210,13 @@ const addonMock = http.createServer((req, res) => {
     const docs = fs.readFileSync('START-HERE.txt', 'utf8');
     const store = fs.readFileSync('server/lib/store.js', 'utf8');
     const mainCjs = fs.readFileSync('desktop/main.cjs', 'utf8');
-    const docsOk = /UPDAT/i.test(docs) && /%APPDATA%/.test(docs) && /delete the old app folder/i.test(docs);   // t90: exe data survives updates
+    const docsOk = /UPDAT/i.test(docs) && /delete the app folder/i.test(docs) && /nothing is left behind/i.test(docs);   // t93: portable doctrine — delete folder = complete uninstall
     const portable = /process\.cwd\(\), 'data'/.test(store) && fs.existsSync('data/config.json');   // node/server mode: data really is ./data
-    // t90: the EXE keeps data in %APPDATA% (survives updates) + auto-migrates
-    const persist = /HB_DATA_DIR/.test(mainCjs) && /userData/.test(mainCjs) && /moved to AppData/.test(mainCjs);
+    // t93: the EXE keeps EVERYTHING inside its own folder (delete = complete
+    // uninstall); updates ADOPT the old folder's data; 1.6.x %APPDATA% data
+    // is reverse-adopted and the AppData folder removed.
+    const persist = /HB_DATA_DIR/.test(mainCjs) && /setPath\('userData'/.test(mainCjs)
+      && /old — you can delete this/.test(mainCjs) && /rmSync\(roaming/.test(mainCjs);
     R.checks.t62Uninstall = { docsOk, portable, persist, ok: docsOk && portable && persist };
   }
 
@@ -2250,38 +2260,120 @@ const addonMock = http.createServer((req, res) => {
 
 
   // 17a) t86: DANCE-LIGHT ENERGY + the real mirror ball + adjustable prefs
-  R.checks.t86Dance2 = await page.evaluate(() => {
+  R.checks.t86Dance2 = await page.evaluate(async () => {
     const s = window.__VB.scene;
-    s.danceFakeLevels({ bass: 0, mid: 0, treble: 0, energy: 0, live: false });   // t90: force the real loop silent — the DJ deck may still be playing
+    s.danceFakeLevels({ bass: 0, mid: 0, treble: 0, energy: 0, live: false });   // force the real loop silent — the DJ deck may still be playing
     const hasPrefs = typeof s.setDancePrefs === 'function';
     const i0 = s.danceInfo();               // defaults asserted BEFORE the pattern lock
-    s.setDancePrefs({ pattern: '0' });      // t90: LOCK to sweep — pose drives EVERY beam's yaw target, so the
-    // movement measurement can't land on strobe/chase
-    const lightsOk = !!i0.lights && i0.lights.intensity === 1 && i0.lights.speed === 1 && i0.lights.pattern === 'auto';
+    s.setDancePrefs({ pattern: '2' });      // LOCK to STROBE — the only program whose yaw target has NO
+    // accumulated `pose` term (sweep/chase targets ride pose, which real
+    // playback earlier in the suite has grown huge — the 2.05× target jump
+    // on a movement change would need unbounded catch-up ticks). Strobe
+    // targets are (i·1.7 + ph·0.2)·Mc — small, so beams fully converge.
+    // t93: the knob is MOVEMENT (travel amplitude), never brightness.
+    const lightsOk = !!i0.lights && i0.lights.movement === 1 && i0.lights.speed === 1 && i0.lights.pattern === 'auto';
+    // legacy: prefs saved by 1.6.x under the old "intensity" key map to movement
+    s.setDancePrefs({ intensity: 1.8 });
+    const legacyOk = s.danceInfo().lights.movement === 1.8;
+    s.setDancePrefs({ movement: 1 });
     const ballOk = !!i0.ball && i0.ball.facets === true && i0.ball.glints >= 100 && i0.ball.pinSpot === true;
     let points = 0; s.threeScene.traverse(o => { if (o.isPoints) points++; });   // particle ban holds (glints are instanced)
-    // rig now moves FASTER than the old cap (2.4 rad/s → 4.6): one live 0.05s
-    // step after silence, with a kick, moves a pivot by the (new) cap.
     // 60 idle steps = 3s of synthetic silence — drains the 40-slot bass
-    // history AND makes any earlier real beat stale (kick needs clock-lastBeatT>0.3).
+    // history (constant live levels then never re-fire kicks, so pose is
+    // static and the measurement rides ONLY the ph drift — deterministic).
     s.danceTick({ bass: 0, mid: 0, treble: 0, energy: 0, live: false }, 60);
-    const a = s.danceInfo().rigYaw;
-    s.danceTick({ bass: 0.9, mid: 0.5, treble: 0.4, energy: 0.8, live: true }, 1);
-    const b = s.danceInfo().rigYaw;
-    const move1 = Math.max(...a.map((v, k) => Math.abs(b[k] - v)));
-    // speed 2 doubles the cap (4.6×2×0.05 = 0.46) — the ease still chases a far target
-    s.setDancePrefs({ speed: 2 });
-    const c = s.danceInfo().rigYaw;
-    s.danceTick({ bass: 0.9, mid: 0.5, treble: 0.4, energy: 0.8, live: true }, 1);
-    const d = s.danceInfo().rigYaw;
-    const move2 = Math.max(...c.map((v, k) => Math.abs(d[k] - v)));
+    const LV = { bass: 0.9, mid: 0.5, treble: 0.4, energy: 0.8, live: true };
+    // MEASUREMENT: the settled FAN — the spread of yaw ACROSS beams once
+    // they've converged on their targets. Beam i's target is
+    // (pose·0.9 + i·1.7 + ph·0.2)·Mc, so the across-beam fan is EXACTLY
+    // Mc-scaled (ratio 2.05 between movement 1 and 2.5) and immune to the
+    // per-tick travel caps that saturate a time-based measurement.
+    const settle = (n) => { for (let k = 0; k < n; k++) s.danceTick(LV, 1); };
+    const fan = () => { const y = s.danceInfo().rigYaw; return +(Math.max(...y) - Math.min(...y)).toFixed(3); };
+    settle(80);                                  // converge at movement 1 (targets advance slower than caps)
+    const amp1 = fan();
+    const spot1 = Math.max(...s.danceInfo().rigSpot);
+    s.setDancePrefs({ movement: 2.5 });
+    settle(80);                                  // re-converge — static terms rescale with Mc
+    const amp2 = fan();
+    const spot2 = Math.max(...s.danceInfo().rigSpot);
+    const moveOk = amp1 > 0.5 && amp2 > amp1 * 1.4 && amp2 < amp1 * 2.9;   // wider fan, Mc-proportional
+    const brightOk = Math.abs(spot2 - spot1) < 0.3;             // …and brightness does NOT move
     s.setDancePrefs({ pattern: '1' });
     const patOk = s.danceInfo().lights.pattern === '1' && s.danceInfo().lights.pattern !== 'auto';
-    s.setDancePrefs({ intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' });
-    const restored = s.danceInfo().lights.speed === 1 && s.danceInfo().lights.pattern === 'auto';
+    s.setDancePrefs({ movement: 1, speed: 1, ballSpin: 1, pattern: 'auto' });
+    const restored = s.danceInfo().lights.movement === 1 && s.danceInfo().lights.pattern === 'auto';
     s.danceFakeLevels(null);   // back to real audio for everything after
-    return { hasPrefs, lightsOk, ballOk, points, move1: +move1.toFixed(3), move2: +move2.toFixed(3), patOk, restored,
-      ok: hasPrefs && lightsOk && ballOk && points === 0 && move1 > 0.18 && move2 > 0.4 && patOk && restored };
+    return { hasPrefs, lightsOk, legacyOk, ballOk, points, amp1, amp2, spot1: +spot1.toFixed(2), spot2: +spot2.toFixed(2), patOk, restored,
+      ok: hasPrefs && lightsOk && legacyOk && ballOk && points === 0 && moveOk && brightOk && patOk && restored };
+  });
+
+  // 17b2) t93: RSS MULTI-SOURCE — as many podcast feeds as the admin wants,
+  // each its own labeled shelf (nickname wins); per-feed on/off parks a
+  // feed without deleting it; legacy 1.6.x plain-string feeds keep working.
+  {
+    const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    await put({ podcasts: { feeds: [
+      { url: 'http://127.0.0.1:32790/feed.rss', name: 'First Cast' },
+      { url: 'http://127.0.0.1:32790/feed2.rss' }
+    ] } });
+    let lib = await (await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token)).json();
+    let items = lib.items || [];
+    const counts = {
+      first: items.filter(i => i.sectionTitle === 'First Cast').length,      // nickname wins the label
+      late: items.filter(i => i.sectionTitle === 'The Late Rental').length   // feed's own channel title
+    };
+    const bothOk = counts.first >= 3 && counts.late >= 2;
+    // park the second feed — gone from the shelves, URL kept in config
+    await put({ podcasts: { feeds: [
+      { url: 'http://127.0.0.1:32790/feed.rss', name: 'First Cast' },
+      { url: 'http://127.0.0.1:32790/feed2.rss', on: false }
+    ] } });
+    lib = await (await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token)).json();
+    items = lib.items || [];
+    const parkedOk = items.some(i => i.sectionTitle === 'First Cast') && !items.some(i => i.sectionTitle === 'The Late Rental');
+    // legacy plain-string feeds (saved by 1.6.x) still shelve
+    await put({ podcasts: { feeds: ['http://127.0.0.1:32790/feed.rss'] } });
+    lib = await (await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token)).json();
+    const legacyOk = (lib.items || []).some(i => i.source === 'podcast' && i.sectionTitle === 'The Store Cast');
+    R.checks.t93Rss = { counts, parkedOk, legacyOk, ok: bothOk && parkedOk && legacyOk };
+  }
+
+  // 17z) t93: THEME GOES APP-WIDE — the accent reaches every menu live,
+  // and the change STICKS (state write-back; before, a rebuild reverted
+  // menus to the old accent and the save kept the old color).
+  R.checks.t93Theme = await page.evaluate(async () => {
+    const ctx = window.__VB.mainCtx, state = window.__VB.state;
+    const before = state.prefs.theme.accent;
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.querySelector('.side-link[data-tab="look"]').click();
+    await new Promise(r => setTimeout(r, 400));
+    const input = document.querySelector('[data-color="accent"]');
+    if (!input) { document.getElementById('btn-settings-close')?.click(); return { ok: false, missing: true }; }
+    input.value = '#00ff00';
+    input.dispatchEvent(new Event('input'));          // the REAL user path
+    await new Promise(r => setTimeout(r, 150));
+    const probe = (cls, tag = 'div') => { const el = document.createElement(tag); el.className = cls;
+      el.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(el);
+      const cs = getComputedStyle(el); const out = { bg: cs.backgroundColor, color: cs.color, acc: cs.accentColor };
+      el.remove(); return out; };
+    const cssVar = getComputedStyle(document.documentElement).getPropertyValue('--vb-accent').trim();
+    const btn = probe('btn accent', 'button');        // primary buttons
+    const gate = probe('gate-title');                 // was hardcoded gold
+    const rangeProbe = document.createElement('input'); rangeProbe.type = 'range'; rangeProbe.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(rangeProbe); const rangeAcc = getComputedStyle(rangeProbe).accentColor; rangeProbe.remove();
+    const stuck = state.prefs.theme.accent === '#00ff00';       // t93: the write-back
+    ctx.applyTheme({ style: state.prefs.theme.style });         // a later theme touch must NOT revert it
+    await new Promise(r => setTimeout(r, 100));
+    const kept = getComputedStyle(document.documentElement).getPropertyValue('--vb-accent').trim() === '#00ff00';
+    input.value = before;                                        // restore via the same real path
+    input.dispatchEvent(new Event('input'));
+    await new Promise(r => setTimeout(r, 700));                  // let the save timer fire
+    document.getElementById('btn-settings-close')?.click();
+    const restored = state.prefs.theme.accent === before;
+    const ok = cssVar === '#00ff00' && btn.bg === 'rgb(0, 255, 0)' && gate.color === 'rgb(0, 255, 0)'
+      && rangeAcc === 'rgb(0, 255, 0)' && stuck && kept && restored;
+    return { cssVar, btnBg: btn.bg, gateColor: gate.color, rangeAcc, stuck, kept, restored, ok };
   });
 
   // 17b) t87: MULTI-SOURCE — a second Plex as an instance (default plex stays off)
@@ -2372,6 +2464,55 @@ const addonMock = http.createServer((req, res) => {
     await st.updatePrefs({ sorting: { mode: 'recent', dir: 'desc' } });
     await sleep(200);
     return { dirWorks, committed, staleShown, asc: asc.slice(0, 3), ok: dirWorks && committed && staleShown };
+  });
+
+  // 17c2) t93: SHELF SECTIONS TELL THE TRUTH — in the grouped modes every
+  // unit stocks EXACTLY ONE category (was: mixed pool, so a sign could claim
+  // one category while shelving two others). Plex-strict sections.
+  R.checks.t93Shelves = await page.evaluate(async () => {
+    const s = window.__VB.scene, st = window.__VB.state;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const lib = await (await fetch('/api/library?refresh=1', { credentials: 'include' })).json();
+    st.items = lib.items; st.sections = lib.sections || []; st.shelves = {};
+    const genreOf = new Map(lib.items.map(it => [it.title, (it.genres && it.genres[0]) || 'Other']));
+    const typeName = new Map(lib.items.map(it => [it.title, ({ movie: 'Movies', show: 'TV Series', musicvideo: 'Music Videos', live: 'Live TV' })[it.type] || null]));
+    const CANDIDATES = ['wall-L-0','wall-L-1','wall-L-2','wall-R-0','wall-R-1','wall-R-2','front-L','front-R',
+      'island-L1','island-L2','island-L3','island-R1','island-R2','island-R3'];
+    const audit = () => {
+      const units = [];
+      for (const u of CANDIDATES) {
+        const stock = s.placementsByUnit(u);
+        if (stock.length) units.push({ u, stock, label: s.unitLabel(u) });
+      }
+      return units;
+    };
+    // genre mode: one genre per unit, sign = that genre
+    await new Promise(r => { s.setItems(lib.items, { mode: 'genre', dir: 'desc' }, r, {}); });
+    await sleep(400);
+    const units = audit();
+    const impure = [], labelless = [], cats = new Set(), libGenres = new Set(lib.items.map(it => (it.genres && it.genres[0]) || 'Other'));
+    for (const { u, stock, label } of units) {
+      const gs = new Set(stock.map(t2 => genreOf.get(t2)).filter(Boolean));
+      if (gs.size !== 1) impure.push({ u, genres: [...gs] });
+      if (!label) labelless.push(u); else cats.add(label);
+    }
+    const multiCatExpected = libGenres.size >= 2;
+    // type mode: one media type per unit
+    await new Promise(r => { s.setItems(lib.items, { mode: 'type', dir: 'desc' }, r, {}); });
+    await sleep(400);
+    const impureType = [];
+    for (const { u } of units) {
+      const stock = s.placementsByUnit(u);
+      if (!stock.length) continue;
+      const ts = new Set(stock.map(t2 => typeName.get(t2)).filter(Boolean));
+      if (stock.some(t2 => typeName.get(t2)) && ts.size !== 1) impureType.push({ u, types: [...ts] });
+    }
+    // restore the arrangement later checks expect (t88 leaves genre+map here)
+    await new Promise(r => { s.setItems(lib.items, { mode: 'genre', dir: 'asc' }, r, { 'wall-R-0': 'archive:staff-picks' }); });
+    await sleep(400);
+    const ok = units.length >= 6 && impure.length === 0 && impureType.length === 0 && labelless.length === 0
+      && (!multiCatExpected || cats.size >= 2);
+    return { units: units.length, impure, impureType, labelless, categories: [...cats], libGenres: [...libGenres], ok };
   });
 
   // 17d) t89: GRABBER CASE ART — frame upload + cached poster serve + rejection paths

@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788919797230';
-import { createCaseView } from './store3d/caseview.js?v=1788919797230';   // the 3D case in the item modal
-import { state } from './state.js?v=1788919797230';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788919797230';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788919797230';
+import { api } from './api.js?v=1788937971857';
+import { createCaseView } from './store3d/caseview.js?v=1788937971857';   // the 3D case in the item modal
+import { state } from './state.js?v=1788937971857';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788937971857';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788937971857';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -144,15 +144,15 @@ export function initUI(ctx) {
       <div class="hint" style="margin:-6px 0 14px">What the screen shows while music, podcasts or radio play — it always wears your theme accent.</div>
 
       <div class="section-title" style="margin-top:22px">Dance floor lights</div>
-      <div class="hint" style="margin:-4px 0 10px">The rig wakes when the dance hall's own music plays — these shape how hard it dances. Yours on every device.</div>
-      <div class="field"><label>Intensity <span id="dance-int-val"></span></label><input type="range" id="dance-int" min="0.2" max="2.5" step="0.1"></div>
+      <div class="hint" style="margin:-4px 0 10px">The rig wakes when the dance hall's own music plays — these shape how the lights MOVE (laser-show style: the music drives brightness, you drive the motion). Yours on every device.</div>
+      <div class="field"><label>Movement <span id="dance-int-val"></span></label><input type="range" id="dance-int" min="0.2" max="2.5" step="0.1"></div>
       <div class="field"><label>Speed <span id="dance-spd-val"></span></label><input type="range" id="dance-spd" min="0.3" max="2.5" step="0.1"></div>
       <div class="field"><label>Mirror ball spin <span id="dance-ball-val"></span></label><input type="range" id="dance-ball" min="0" max="3" step="0.1"></div>
-      <div class="field"><label>Pattern</label>
+      <div class="field"><label>Program</label>
         <select id="dance-pattern">
           <option value="auto">Auto — rotate with the music</option>
-          <option value="0">Sweep</option><option value="1">Chase</option>
-          <option value="2">Strobe</option><option value="3">Build &amp; drop</option>
+          <option value="0">Laser sweep</option><option value="1">Chase</option>
+          <option value="2">Strobe hits</option><option value="3">Build &amp; drop</option>
         </select>
       </div>
 
@@ -227,7 +227,10 @@ export function initUI(ctx) {
     });
     // t86: dance-floor light engine — sliders + pattern, live-applied
     {
-      const D = state.prefs.dance || { intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' };
+      // t93: "intensity" (brightness — wrong knob) became "movement";
+      // prefs saved by 1.6.x under the old key are honored.
+      const D0 = state.prefs.dance || {};
+      const D = { movement: D0.movement ?? D0.intensity ?? 1, speed: D0.speed ?? 1, ballSpin: D0.ballSpin ?? 1, pattern: D0.pattern ?? 'auto' };
       const setDance = (patch) => {
         state.updatePrefs({ dance: patch });
         ctx.applyDancePrefs(state.prefs.dance);
@@ -239,7 +242,7 @@ export function initUI(ctx) {
         lab.textContent = fmt(D[key]);
         el.oninput = () => { lab.textContent = fmt(+el.value); setDance({ [key]: +el.value }); };
       };
-      bindSlider('dance-int', 'dance-int-val', 'intensity', v => v + '×');
+      bindSlider('dance-int', 'dance-int-val', 'movement', v => v + '×');
       bindSlider('dance-spd', 'dance-spd-val', 'speed', v => v + '×');
       bindSlider('dance-ball', 'dance-ball-val', 'ballSpin', v => v === 0 ? 'still' : v + '×');
       const pat = root.querySelector('#dance-pattern');
@@ -746,10 +749,12 @@ export function initUI(ctx) {
       <div class="row2" style="margin-top:6px">
         <div class="field"><label>Podcast RSS URL</label>
           <input type="url" id="podcast-url" placeholder="https://feeds.example.com/show.rss"></div>
+        <div class="field"><label>Nickname (optional)</label>
+          <input type="text" id="podcast-name" placeholder="e.g. Drive-In Discourse" maxlength="64"></div>
         <div class="field"><label>&nbsp;</label>
           <button class="btn" id="btn-add-podcast">+ Add feed</button></div>
       </div>
-      <div class="hint" style="margin:-6px 0 14px">Any podcast works: Share → <b>Copy RSS URL</b> in your podcast app, paste here. Newest episodes shelve as CDs in the rack.</div>
+      <div class="hint" style="margin:-6px 0 14px">Any podcast works: Share → <b>Copy RSS URL</b> in your podcast app, paste here — <b>add as many as you like</b>; each gets its own labeled shelf. Newest episodes shelve as CDs in the rack. Untick a feed to park it without deleting it.</div>
 
       <div class="section-title" style="margin-top:14px">📁 Local files — no media server (file grabber)</div>
       <div class="row2" style="align-items:center">
@@ -785,25 +790,36 @@ export function initUI(ctx) {
     root.querySelector('#btn-add-spot').onclick = () => { spotList.push(''); renderSpots();
       const inputs = root.querySelectorAll('.local-path'); inputs[inputs.length - 1]?.focus(); };
     // ── library checkbox lists ──
-    let podcastList = ((adminCfg.podcasts?.feeds) || []).slice();
+    // t93: MULTI-SOURCE podcast rack — feeds are {url, name, on} (legacy
+    // plain-string feeds from 1.6.x are normalized on load). Each feed has
+    // its own on/off switch (park it without losing the URL) + delete.
+    let podcastList = ((adminCfg.podcasts?.feeds) || []).map(f =>
+      typeof f === 'string' ? { url: f, name: null, on: true } : { url: f.url, name: f.name || null, on: f.on !== false });
     const renderPodcastFeeds = () => {
       const box = root.querySelector('#podcast-feeds');
       box.innerHTML = podcastList.length
-        ? podcastList.map((u, i) => `<label class="lib-row"><input type="checkbox" checked disabled>
-            <b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u)}</b>
+        ? podcastList.map((f, i) => `<label class="lib-row"><input type="checkbox" data-feed-on="${i}" ${f.on ? 'checked' : ''}>
+            <b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name || f.url)}</b>
+            ${f.name ? `<small>${esc(f.url)}</small>` : ''}
             <button class="btn" data-del-feed="${i}" style="margin-left:auto;padding:2px 8px">✕</button></label>`).join('')
         : '<div class="hint">No feeds yet — paste an RSS URL below.</div>';
       box.querySelectorAll('[data-del-feed]').forEach(b => {
         b.onclick = () => { podcastList.splice(Number(b.dataset.delFeed), 1); renderPodcastFeeds(); };
       });
+      box.querySelectorAll('[data-feed-on]').forEach(cb => {
+        cb.onchange = () => { podcastList[Number(cb.dataset.feedOn)].on = cb.checked; };
+      });
     };
     renderPodcastFeeds();
     root.querySelector('#btn-add-podcast').onclick = () => {
       const inp = root.querySelector('#podcast-url');
+      const nameInp = root.querySelector('#podcast-name');
       const u = inp.value.trim();
       if (!/^https?:\/\//i.test(u)) return toast('That does not look like an RSS URL', true);
-      if (podcastList.includes(u)) return toast('Already in the rack', true);
-      podcastList.push(u); inp.value = ''; renderPodcastFeeds();
+      if (podcastList.some(f => f.url === u)) return toast('Already in the rack', true);
+      podcastList.push({ url: u, name: (nameInp?.value || '').trim() || null, on: true });
+      inp.value = ''; if (nameInp) nameInp.value = '';
+      renderPodcastFeeds();
     };
     const loadLibs = async (service) => {
       const box = root.querySelector(service === 'plex' ? '#plex-libraries' : '#jf-libraries');

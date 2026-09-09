@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1788919797230';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1788937971857';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;
@@ -369,18 +369,24 @@ export function buildDance(theme) {
   let lightMode = 'idle';
 
   // ── update: a real DJ-set light engine (t51) — beats drive PATTERNS,
-  // t86: ADJUSTABLE + a lot more active — the owner asked for "more life".
+  // t86: ADJUSTABLE + a lot more active. t93: THE OWNER'S CORRECTION —
+  // "Intensity" was scaling BRIGHTNESS, which nobody asked for. It is now
+  // MOVEMENT: how far the fixtures travel (wider sweep fans, bigger chase
+  // jumps, higher build climbs — laser-show / EDM-festival motion). Bright-
+  // ness is NOT user-scaled at all; the music and the program drive it.
   // P = the owner's dance-floor prefs (My Theme → Dance floor lights):
-  // intensity/speed scale the whole show; ballSpin the mirror ball;
-  // pattern locks one look instead of auto-rotating. Defaults (all 1 /
-  // 'auto') = the new tuned spec — and the rig stays ASLEEP unless the
-  // dance hall's own music is playing (owner's rule: free perf when the
-  // room is quiet).
-  let P = { intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' };
+  // movement = travel amplitude; speed = how fast beams get there (the
+  // travel caps); ballSpin the mirror ball; pattern locks one program.
+  // The rig stays ASLEEP unless the dance hall's own music is playing
+  // (owner's rule: free perf when the room is quiet).
+  // Legacy: prefs saved by 1.6.x used the key "intensity" — honored as
+  // movement so nobody's saved setting is lost.
+  let P = { movement: 1, speed: 1, ballSpin: 1, pattern: 'auto' };
   function setPrefs(p) {
     const num = (v, dflt, lo, hi) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : dflt);
+    const mv = p?.movement !== undefined ? p.movement : (p?.intensity !== undefined ? p.intensity : P.movement);
     P = {
-      intensity: num(p?.intensity, P.intensity, 0.2, 2.5),
+      movement: num(mv, P.movement, 0.2, 2.5),
       speed: num(p?.speed, P.speed, 0.3, 2.5),
       ballSpin: num(p?.ballSpin, P.ballSpin, 0, 3),
       pattern: ['auto', '0', '1', '2', '3'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern
@@ -430,14 +436,14 @@ export function buildDance(theme) {
     col.setHSL((hue + 0.08) % 1, 0.95, 0.55);
     for (const t of tileMats) {
       t.mat.emissive.copy(col);
-      t.mat.emissiveIntensity = Math.max(0, (t.even ? lv.bass : lv.mid * 0.7) - ((t.ix + t.iz) % 3) * 0.06) * 1.9 * P.intensity;
+      t.mat.emissiveIntensity = Math.max(0, (t.even ? lv.bass : lv.mid * 0.7) - ((t.ix + t.iz) % 3) * 0.06) * 1.9;
     }
 
 
     // MIRROR BALL (t86: faceted + pin spot + glints — the spin is finally VISIBLE)
     ball.rotation.y += dt * (0.5 + lv.energy * 4.5) * P.ballSpin;
-    ballLight.intensity = (4 + lv.treble * 12) * P.intensity;
-    pinSpot.intensity = live ? (2.2 + lv.energy * 2.6) * P.intensity : 0.4;
+    ballLight.intensity = 4 + lv.treble * 12;
+    pinSpot.intensity = live ? 2.2 + lv.energy * 2.6 : 0.4;
     const glintVis = 0.12 + rigLevel * 0.88;                  // glints live with the rig
     for (let i = 0; i < SHELL_N; i++) {
       const dir = shellDirs[i];
@@ -468,32 +474,39 @@ export function buildDance(theme) {
     floorGlints.instanceMatrix.needsUpdate = true;
     if (floorGlints.instanceColor) floorGlints.instanceColor.needsUpdate = true;
 
-    // RIG — DJ-set PATTERNS (sweep → chase → strobe → build), hue-synced colors
+    // RIG — DJ-set PROGRAMS (sweep → chase → strobe → build), hue-synced.
+    // t93: MOVEMENT, not brightness — the movement pref scales the TRAVEL
+    // AMPLITUDE of every target (wider fans, bigger jumps, higher climbs).
+    // Mc(1) = 1.0 exactly, so the default look keeps the tuned t86 motion;
+    // 0.2 = tight theatrical nudges, 2.5 = full-festival swings. Brightness
+    // (spot/cone/wash/LED) is driven ONLY by the music + program punch.
+    const Mc = 0.3 + 0.7 * P.movement;
     const beamCol = (i) => col.setHSL((hue + i * 0.13) % 1, 1, 0.55);
     for (let i = 0; i < rig.length; i++) {
       const r = rig[i];
-      if (r.spin) { r.spin.rotation.y += dt * (1 + lv.mid * 8); continue; }
+      if (r.spin) { r.spin.rotation.y += dt * (1 + lv.mid * 8) * Mc; continue; }
       let ty, tx = 0, punch = 0.4 + lv.energy * 1.3;
-      if (pattern === 0) { ty = pose * 0.9 + r.phase + ph * 0.2; tx = Math.sin(pose * 0.5 + r.phase) * 0.8; }        // sweep — t86: wider arcs
-      else if (pattern === 1) { ty = Math.floor(barBeats % rig.length) === i ? pose * 1.1 : r.phase + ph * 0.15; punch *= barBeats % rig.length === i ? 2.8 : 0.35; }  // chase — harder hits
-      else if (pattern === 2) { ty = r.phase + ph * 0.15; tx = kick ? 0.3 + ((beats * 7 + i * 3) % 5) * 0.16 : 0.1; punch *= kick ? 3.2 : (lv.bass > 0.3 ? 1.2 : 0.08); }  // strobe — snappier
-      else { ty = (i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15; tx = 0.75 - barBeats * 0.09; if (barBeats === 3 && kick) { tx = 0.95; punch *= 3.2; } }  // build & drop
+      if (pattern === 0) { ty = (pose * 0.9 + r.phase + ph * 0.2) * Mc; tx = Math.sin(pose * 0.5 + r.phase) * 0.8 * Mc; }        // sweep — the laser fan
+      else if (pattern === 1) { ty = Math.floor(barBeats % rig.length) === i ? pose * 1.1 * Mc : (r.phase + ph * 0.15) * Mc; punch *= barBeats % rig.length === i ? 2.8 : 0.35; }  // chase — harder hits
+      else if (pattern === 2) { ty = (r.phase + ph * 0.15) * Mc; tx = kick ? (0.3 + ((beats * 7 + i * 3) % 5) * 0.16) * Mc : 0.1 * Mc; punch *= kick ? 3.2 : (lv.bass > 0.3 ? 1.2 : 0.08); }  // strobe — snappier
+      else { ty = ((i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15) * Mc; tx = (0.75 - barBeats * 0.09) * Mc; if (barBeats === 3 && kick) { tx = 0.95 * Mc; punch *= 3.2; } }  // build & drop
       // t59: EASE to the target, then CAP the travel speed — real moving-head
-      // fixtures SWEEP to their next position; they never snap. Even a far
-      // target glides in at ≤ 2.4 rad/s. Loose, liquid, beat-locked.
+      // fixtures SWEEP to their next position; they never snap. t93: with
+      // movement pushing targets farther, the caps bind more — so the SPEED
+      // pref (how fast beams travel) is now clearly visible too.
       const ease = 1 - Math.exp(-dt * 10);
-      const capY = 4.6 * P.speed * dt, capX = 3.2 * P.speed * dt;   // t86: real movers, really moving
+      const capY = 4.6 * P.speed * dt, capX = 3.2 * P.speed * dt;
       let dy = (ty - r.pivot.rotation.y) * ease;
       let dx2 = (tx - r.pivot.rotation.x) * ease;
       r.pivot.rotation.y += Math.max(-capY, Math.min(capY, dy));
       r.pivot.rotation.x += Math.max(-capX, Math.min(capX, dx2));
-      r.spot.intensity = punch * 3.2 * rigLevel * P.intensity;
-      r.cone.material.opacity = Math.min(0.95, (0.10 + Math.min(0.7, punch * 0.3)) * rigLevel * P.intensity);
+      r.spot.intensity = punch * 3.2 * rigLevel;
+      r.cone.material.opacity = Math.min(0.95, (0.10 + Math.min(0.7, punch * 0.3)) * rigLevel);
       r.cone.material.color.copy(beamCol(i)); r.cone.material.emissive.copy(beamCol(i));
       r.spot.color.copy(beamCol(i));
     }
-    washes[0].intensity = (0.5 + lv.bass * 3.6) * P.intensity;
-    washes[1].intensity = (0.5 + lv.mid * 3.6) * P.intensity;
+    washes[0].intensity = 0.5 + lv.bass * 3.6;
+    washes[1].intensity = 0.5 + lv.mid * 3.6;
     ambient.intensity = 0.4 + lv.energy * 0.6;
 
     // NEON: LED bars ride the hue and PULSE per band; signs breathe with it
@@ -501,7 +514,7 @@ export function buildDance(theme) {
       const m2 = ledBars[i].material;
       m2.color.setHSL((hue + 0.5 + i * 0.07) % 1, 1, 0.6);
       m2.emissive.copy(m2.color);
-      m2.emissiveIntensity = (0.4 + lv.energy * 2.6 + (kick && i % 2 === 0 ? 1.1 : 0)) * P.intensity;
+      m2.emissiveIntensity = 0.4 + lv.energy * 2.6 + (kick && i % 2 === 0 ? 1.1 : 0);
     }
     coveMat.color.setHSL((hue + 0.25) % 1, 1, 0.6); coveMat.emissive.copy(coveMat.color);
     coveMat.emissiveIntensity = 0.5 + lv.bass * 2.2; cove2.material = coveMat;

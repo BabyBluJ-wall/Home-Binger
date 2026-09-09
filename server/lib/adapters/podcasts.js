@@ -74,13 +74,26 @@ export const podcastsAdapter = {
   name: 'Podcasts',
 
   async library(cfg) {
-    const feeds = (Array.isArray(cfg.feeds) ? cfg.feeds : []).filter(u => /^https?:\/\//i.test(u)).slice(0, 50);
+    // t93: MULTI-SOURCE feeds — each entry is {url, name?, on?} (legacy plain
+    // strings still work). `on: false` parks a feed without losing its URL;
+    // `name` is the admin's nickname and wins the section label.
+    const raw = Array.isArray(cfg.feeds) ? cfg.feeds : [];
+    const byUrl = new Map();
+    for (const f of raw.slice(0, 50)) {
+      const o = typeof f === 'string' ? { url: f } : (f && typeof f === 'object' ? f : null);
+      if (!o || !/^https?:\/\//i.test(String(o.url || ''))) continue;
+      const url = String(o.url).trim();
+      if (!byUrl.has(url)) byUrl.set(url, { url, name: o.name ? String(o.name).slice(0, 64) : null, on: o.on !== false });
+    }
+    const feeds = [...byUrl.values()].filter(f => f.on !== false);
     const out = [];
-    for (const url of feeds) {
+    for (const feed of feeds) {
+      const url = feed.url;
       let loaded;
       try { loaded = await loadFeed(url); }
       catch (e) { console.warn(`[podcasts] feed failed (${url}): ${e.message}`); continue; }
       const secId = `podcast:${h(url).slice(0, 12)}`;
+      const secTitle = feed.name || loaded.channel.title;   // t93: nickname wins
       loaded.items.forEach((ep, i) => {
         const key = `pe${h(ep.url).slice(0, 12)}`;
         registry.set(key, ep.url);                 // ONLY admin-feed audio becomes playable
@@ -96,7 +109,7 @@ export const podcastsAdapter = {
           addedAt: dt && !isNaN(dt) ? dt.getTime() / 1000 : (Date.now() / 1000 - i * 3600),
           genres: ['Podcast'],
           sectionId: secId,
-          sectionTitle: loaded.channel.title,
+          sectionTitle: secTitle,
           mediaUrl: ep.url,                        // server-side only (stripped by /api/library)
           artUrl: loaded.channel.art               // server-side only
         });

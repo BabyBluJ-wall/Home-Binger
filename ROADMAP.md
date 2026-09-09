@@ -144,6 +144,27 @@ Recovery: clone the repo, or rebuild the exe from source
 - [ ] Edit: TXT/MD only (honest scope — .docx editing is Google-Docs-sized)
 **GATE:** open and read every supported type in-world; edit a MD file.
 
+## t93 wave — STORE POLISH (owner requests 2026-09-09, in flight)
+- [x] **Portable doctrine restored** — delete-the-folder = complete
+      uninstall (accounts+logins+settings+caches all inside the app folder);
+      updates = unzip new version next to the old, open the new exe, data
+      adopts itself; 1.6.x %APPDATA% data reverse-adopts + cleans up.
+- [x] **Dance-hall lights, take 3** — the owner: "Intensity should be
+      MOVEMENT intensity, not light-beam intensity. I don't want brighter
+      or darker lights. I want them to MOVE the way lights move in a laser
+      show / DJ set / concert / EDM festival — moving heads, sweeps,
+      beat-reactive motion." All three sliders earn their keep
+      (movement amount, motion speed, program/style).
+- [x] **Theme goes app-wide** — every menu, panel and modal follows the
+      theme accent, live, changing together (today most menus don't
+      follow it at all).
+- [x] **Shelf organization deep-dive** — a section must show ONLY its
+      category (today up to 2 others bleed in); overall organization
+      made more like Plex's.
+- [x] **RSS becomes multi-source** — as many podcast/RSS feeds as the
+      admin wants (the t87 instances treatment).
+*(exe 1.7.0 ships when this wave closes; then remote connections → W1.)*
+
 ## Phase W — WATCH PARTY 🍿 *(owner request 2026-09-08)*
 **ORDER (owner, 2026-09-08): remote connections come FIRST — watch party
 work starts once remote access is done.** Far-away friends can't join a

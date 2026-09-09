@@ -137,7 +137,7 @@ export async function handleApi(req, res, pathname) {
         // a lock forces the store's map on everyone
         shelves: locks.shelves ? (cfg.shelves || {}) : (prefs.shelves && Object.keys(prefs.shelves).length ? prefs.shelves : (cfg.shelves || {})),
         tv: prefs.tv || { idleMode: '', itemId: '' },
-        dance: prefs.dance || { intensity: 1, speed: 1, ballSpin: 1, pattern: 'auto' },   // t86
+        dance: prefs.dance || { movement: 1, speed: 1, ballSpin: 1, pattern: 'auto' },   // t86 · t93: movement, not brightness
         sources: locks.sources ? null : (prefs.sources ?? null)
       };
       const status = await libraryStatus();
@@ -218,15 +218,19 @@ export async function handleApi(req, res, pathname) {
           // no color — the visualizer always follows the theme accent
         };
       }
-      if (body.dance) {   // t86: dance-floor light engine (intensity/speed/ballSpin/pattern)
+      if (body.dance) {   // t86: dance-floor light engine · t93: MOVEMENT (travel amplitude),
+        // never brightness — legacy 1.6.x prefs saved under "intensity" are honored.
         const d = body.dance;
         const num = (v, dflt, lo, hi) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : dflt);
+        const prev = prefs.dance || {};
+        const mvIn = d.movement !== undefined ? d.movement : d.intensity;
+        const mvPrev = prev.movement !== undefined ? prev.movement : prev.intensity;
         prefs.dance = {
-          intensity: num(d.intensity, (prefs.dance || {}).intensity ?? 1, 0.2, 2.5),
-          speed: num(d.speed, (prefs.dance || {}).speed ?? 1, 0.3, 2.5),
-          ballSpin: num(d.ballSpin, (prefs.dance || {}).ballSpin ?? 1, 0, 3),
+          movement: num(mvIn, mvPrev ?? 1, 0.2, 2.5),
+          speed: num(d.speed, prev.speed ?? 1, 0.3, 2.5),
+          ballSpin: num(d.ballSpin, prev.ballSpin ?? 1, 0, 3),
           pattern: ['auto', '0', '1', '2', '3'].includes(String(d.pattern)) ? String(d.pattern)
-            : ((prefs.dance || {}).pattern ?? 'auto')
+            : (prev.pattern ?? 'auto')
         };
       }
       // personal shelf map (unitId → sectionKey; '' entries clear mappings)
@@ -466,9 +470,19 @@ export async function handleApi(req, res, pathname) {
           next.archive.url = /^https?:\/\//.test(incoming.archive.url) ? incoming.archive.url.trim() : '';   // '' = real archive.org
       }
       if (incoming.podcasts) {
-        if (Array.isArray(incoming.podcasts.feeds))
-          next.podcasts.feeds = [...new Set(incoming.podcasts.feeds
-            .map(u => String(u).trim()).filter(u => /^https?:\/\//i.test(u)))].slice(0, 50);
+        // t93: feeds are {url, name?, on?} (legacy plain strings still accepted)
+        if (Array.isArray(incoming.podcasts.feeds)) {
+          const seen = new Set(), outF = [];
+          for (const f of incoming.podcasts.feeds.slice(0, 50)) {
+            const o = typeof f === 'string' ? { url: f } : (f && typeof f === 'object' && !Array.isArray(f) ? f : null);
+            if (!o) continue;
+            const url = String(o.url || '').trim();
+            if (!/^https?:\/\//i.test(url) || seen.has(url)) continue;
+            seen.add(url);
+            outF.push({ url, name: o.name ? String(o.name).slice(0, 64) : null, on: o.on !== false });
+          }
+          next.podcasts.feeds = outF;
+        }
       }
       if (incoming.radio) {
         if (Array.isArray(incoming.radio.sections))

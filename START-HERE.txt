@@ -78,9 +78,10 @@ FIRST LAUNCH — WHAT TO EXPECT
   individual files. Grabbed videos grow their own case images
   automatically (the first visitor generates them, once, for everyone).
 • Phones/tablets on the same Wi-Fi: open http://<your-pc-ip>:8181
-• UPDATING to a new version: delete the old app folder, unzip the new one.
-  Your accounts, logins and settings live in %APPDATA%\HomeBinger —
-  they survive every update (moved there automatically the first time).
+• UPDATING to a new version: don't delete anything. Just unzip the new
+  version (next to your old folder is fine) and open the NEW HomeBinger.exe.
+  It finds your old folder, brings your accounts, logins and settings over
+  automatically, and renames the old folder "(old — you can delete this)".
   (the address shows in the console window on first launch).
 
 
@@ -120,15 +121,17 @@ STUCK? ☰ Menu → "Back to front entrance" always returns you to the hallway.
 
 UNINSTALLING — EASY AND COMPLETE
 ────────────────────────
-Everything Home Binger writes (settings, users, cached posters) stays INSIDE
-its own folder — nothing is installed into Windows, no registry entries,
-no Program Files.
-  • Exe version: delete the HomeBinger-win32-x64 folder. That removes the
-    app AND all its data. Done.
+Everything Home Binger writes (settings, users, cached posters, its own
+caches) stays INSIDE its own folder — nothing is installed into Windows, no
+registry entries, no Program Files.
+  • Exe version: delete the app folder ("Home Binger"). That removes the
+    app AND every trace of what it stored — nothing is left behind anywhere
+    else on your PC. Done.
   • Node version: delete the Home Binger source folder (its "data" folder
     inside is the only thing it ever wrote).
-  • Optional tidiness: Windows may have created an empty crash-log folder at
-    %APPDATA%\HomeBinger — deleting it is optional and frees almost nothing.
+  • Upgrading from 1.6.0–1.6.2? Those versions kept data in
+    %APPDATA%\HomeBinger; the first launch of the new version moves it into
+    the app folder and cleans that up for you.
 The exe (PATH 1) and browsers (phones, other PCs) share one server —
 start the exe and your phone can still connect. If you start the exe
 while an old copy is already running, it quietly takes the next port

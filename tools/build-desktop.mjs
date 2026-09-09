@@ -23,6 +23,11 @@ for (const dir of ['server', 'public', 'desktop', 'tools'])
   fs.cpSync(path.join(ROOT, dir), path.join(STAGE, dir), { recursive: true, filter: (f) => !f.includes(`${path.sep}node_modules`) });
 for (const f of ['README.md', 'LICENSE', 'CHANGELOG.md', 'START-HERE.txt', 'START-WITH-NODE.bat'])
   fs.cpSync(path.join(ROOT, f), path.join(STAGE, f));
+// t93: the README's preview screenshots (docs/*.png) ride in the exe too —
+// without them the image links in the bundled README are dead.
+fs.mkdirSync(path.join(STAGE, 'docs'), { recursive: true });
+for (const img of ['og-home-binger.png', 'store-entrance.png', 'theater.png', 'dance-hall.png'])
+  fs.cpSync(path.join(ROOT, 'docs', img), path.join(STAGE, 'docs', img));
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 pkg.main = 'desktop/main.cjs';            // ← the Electron entry (exe opens this)
 delete pkg.scripts; delete pkg.engines;
@@ -69,9 +74,11 @@ fs.writeFileSync(path.join(DEST, '1 - START HERE (double-click HomeBinger.exe).t
 That's the only file you ever need to open. Everything else in this
 folder is the app's machinery — leave it be.
 
-Your account, users and settings are safe: they live in
-%APPDATA%\HomeBinger (NOT in this folder) — so deleting this folder
-to install an update never loses them.
+Your account, users and settings live in this folder — so UPDATING means:
+unzip the new version next to this one and open the new HomeBinger.exe
+(it brings everything over and marks the old folder "(old — you can
+delete this)"). And deleting this folder removes EVERYTHING the app
+ever stored — a complete uninstall in one step.
 
 Phones on the same Wi-Fi: open http://<this-pc-ip>:8181
 Full guide: START-HERE.txt in this folder.

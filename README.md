@@ -35,7 +35,6 @@ Three connected spaces under one roof:
 <p align="center">
   <img src="docs/store-entrance.png" alt="Home Binger — storefront view looking back at the BluJ Network neon sign and stocked shelves" width="880">
 </p>
-
 - **The theater** — behind the store's back wall: a real screening room with
   a sloped floor and its own big screen. Grab a movie off any shelf and hit
   **"Play in the theater"**; a control bar handles stop/seek/volume/repeat.
@@ -47,7 +46,6 @@ Three connected spaces under one roof:
 <p align="center">
   <img src="docs/theater.png" alt="Home Binger — private screening room with tiered seating and 8.2 surround sound" width="880">
 </p>
-
 - **The dance hall** — through the glass sliders in the store's right wall. A
   glossy checkerboard floor that **pulses and changes color with the music**,
   a mirror ball, and sweeping light beams that run **DJ-set patterns** (sweep
@@ -296,14 +294,19 @@ file and uploads it once; every store after that shows it. Ebooks/PDFs are index
 for the coming full-media library. Nothing leaves your computer and no media
 server is involved.
 
-**Updating the exe** (new version out?): delete the old app folder, unzip the
-new one — **your accounts, logins and settings are untouched**. Since 1.6.0
-the exe keeps them in `%APPDATA%\HomeBinger` (the first launch of a new
-version moves them there automatically — nobody has to do anything).
+**Updating the exe** (new version out?): don't delete anything — just unzip
+the new version (right next to your old folder is fine) and open the **new**
+HomeBinger.exe. On its first launch it finds your old folder, moves your
+accounts, logins and settings into itself automatically, and renames the old
+folder to "(old — you can delete this)". Delete the old folder whenever you
+like. (Upgrading from 1.6.0–1.6.2? The first launch brings your data home
+from `%APPDATA%` and cleans that up for you — nothing to do.)
 
-**Uninstalling** is delete-the-folder: no registry, no Program Files. Your
-data lives in `%APPDATA%\HomeBinger` — delete that folder too if you want a
-complete wipe (otherwise a future install picks up right where you left off).
+**Uninstalling** is delete-the-folder: everything the app stored — accounts,
+logins, settings, caches — lives INSIDE the app folder, so deleting it
+removes every trace. No registry, no Program Files, nothing left behind
+anywhere else on your PC. (One tip: keep the app in a normal folder like
+Desktop or Downloads — not Program Files, which Windows keeps locked.)
 
 Open **☰ Menu → sign in as admin → Admin → Server**. Sources stack — mix and
 match any of them:

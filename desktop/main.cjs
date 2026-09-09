@@ -21,25 +21,87 @@ const fs = require('node:fs');
 // which deleted every account, login and setting with it. Now the app
 // folder holds only the program; user data survives every update. First
 // run MIGRATES the old in-folder data/ automatically (logins keep working).
+// t93: PORTABLE DOCTRINE — everything the app stores lives INSIDE its own
+// folder. Deleting the folder is a COMPLETE uninstall: accounts, logins,
+// settings, even the app's caches — nothing is left behind anywhere else.
+// Updates never delete anything: unzip the new version (next to the old
+// folder is fine) and open the NEW exe — first launch ADOPTS the old data
+// automatically and renames the old folder "(old — you can delete this)".
 (function placeDataDir() {
   try {
-    const dataDir = path.join(app.getPath('userData'), 'data');
-    fs.mkdirSync(dataDir, { recursive: true });
-    if (!fs.existsSync(path.join(dataDir, 'db.json'))) {
-      const exeDir = path.dirname(app.getPath('exe') || '');
-      const appDir = app.getAppPath ? app.getAppPath() : '';
-      for (const old of [path.join(exeDir, 'data'), path.join(appDir, 'data')]) {
-        if (old && fs.existsSync(path.join(old, 'db.json'))) {
-          fs.cpSync(old, dataDir, { recursive: true });
-          if (fs.existsSync(path.join(dataDir, 'db.json'))) {
-            try { fs.renameSync(old, old + ' (moved to AppData)'); } catch { /* best effort */ }
-            console.log('[data] moved', old, '→', dataDir);
+    const exeDir = path.dirname(app.getPath('exe') || '');
+    const roaming = app.getPath('userData');             // %APPDATA%\HomeBinger (the t90–t92 data home)
+    const localData = path.join(exeDir, 'data');
+    const localProfile = path.join(exeDir, 'profile');   // Electron's own caches live here too → folder-delete wipes ALL traces
+
+    // Can we write next to the exe? (Program Files would say no.)
+    let portable = false;
+    try {
+      fs.mkdirSync(localProfile, { recursive: true });
+      const probe = path.join(localProfile, '.write-test');
+      fs.writeFileSync(probe, 'ok'); fs.unlinkSync(probe);
+      portable = true;
+    } catch { portable = false; }
+
+    if (portable) {
+      app.setPath('userData', localProfile);             // must run before app ready
+      try { app.setPath('crashDumps', path.join(localProfile, 'crashes')); } catch { /* best effort */ }
+      fs.mkdirSync(localData, { recursive: true });
+      if (!fs.existsSync(path.join(localData, 'db.json'))) {
+        // 1) ADOPT a sibling version folder's data — the update path. The old
+        //    t90–t92 builds moved their data OUT to %APPDATA%, so also look
+        //    for their "(moved to AppData)" leftovers? No — those have no
+        //    db.json; they fall through to step 2 below.
+        const parent = path.dirname(exeDir);
+        let adopted = null;
+        try {
+          const cands = fs.readdirSync(parent, { withFileTypes: true })
+            .filter(d => d.isDirectory() && /^Home ?Binger/i.test(d.name))
+            .map(d => {
+              const db = path.join(parent, d.name, 'data', 'db.json');
+              return { dir: path.join(parent, d.name), db, mtime: fs.existsSync(db) ? fs.statSync(db).mtimeMs : 0 };
+            })
+            .filter(c => c.mtime > 0)
+            .sort((a, b) => b.mtime - a.mtime);          // newest data wins
+          if (cands.length) adopted = cands[0];
+        } catch { /* best effort */ }
+        if (adopted && path.join(path.dirname(adopted.dir)) !== exeDir) {
+          fs.cpSync(path.join(adopted.dir, 'data'), localData, { recursive: true });
+          try {
+            const newName = adopted.dir + ' (old — you can delete this)';
+            if (!fs.existsSync(newName)) fs.renameSync(adopted.dir, newName);
+          } catch { /* best effort */ }
+          console.log('[data] adopted your data from the previous version folder');
+        } else if (fs.existsSync(path.join(roaming, 'data', 'db.json'))) {
+          // 2) REVERSE-ADOPT: bring the t90–t92 %APPDATA% data home, then
+          //    remove the AppData folder so delete-the-folder is complete.
+          fs.cpSync(path.join(roaming, 'data'), localData, { recursive: true });
+          if (fs.existsSync(path.join(localData, 'db.json'))) {
+            try { fs.rmSync(roaming, { recursive: true, force: true }); } catch { /* best effort */ }
+            console.log('[data] moved your data out of %APPDATA% and into the app folder (portable again)');
           }
-          break;
         }
       }
+      process.env.HB_DATA_DIR = localData;               // the server reads this on boot
+      // Electron's crashpad may still create the DEFAULT %APPDATA% dir even
+      // with userData repointed — it never holds data on the portable path.
+      // Sweep it (now and at quit) so delete-the-folder leaves NOTHING
+      // behind anywhere. (If it somehow holds a db.json, we never touch it —
+      // data safety beats tidiness.)
+      const sweepRoaming = () => {
+        try { if (!fs.existsSync(path.join(roaming, 'data', 'db.json'))) fs.rmSync(roaming, { recursive: true, force: true }); } catch { /* best effort */ }
+      };
+      sweepRoaming();
+      app.on('will-quit', sweepRoaming);
+      return;
     }
-    process.env.HB_DATA_DIR = dataDir;   // the server reads this on boot
+
+    // Read-only install folder (e.g. someone unzipped into Program Files):
+    // fall back to %APPDATA% so the app still runs — the docs tell users to
+    // keep the app in a normal folder (Desktop/Downloads) where it's portable.
+    const dataDir = path.join(roaming, 'data');
+    fs.mkdirSync(dataDir, { recursive: true });
+    process.env.HB_DATA_DIR = dataDir;
   } catch (e) {
     console.warn('[data] falling back to in-folder data/:', e.message);
   }

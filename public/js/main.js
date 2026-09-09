@@ -8,11 +8,11 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1788919797230';
-import { api } from './api.js?v=1788919797230';
-import { initUI } from './ui.js?v=1788919797230';
-import { createScene } from './store3d/scene.js?v=1788919797230';
-import { STORE, SUPPORT } from './store3d/config.js?v=1788919797230';
+import { state } from './state.js?v=1788937971857';
+import { api } from './api.js?v=1788937971857';
+import { initUI } from './ui.js?v=1788937971857';
+import { createScene } from './store3d/scene.js?v=1788937971857';
+import { STORE, SUPPORT } from './store3d/config.js?v=1788937971857';
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -141,6 +141,13 @@ async function boot() {
   const ui = initUI(ctx = {
     applyTheme: (patch) => {
       const t = { ...state.prefs.theme, ...patch };
+      // t93 FIX (the "theme doesn't go app-wide" report): the merged theme
+      // is now WRITTEN BACK to state. Before, a color-row edit updated the
+      // CSS variables live but state.prefs.theme kept the OLD accent — so
+      // the save persisted the old color, the case view snapshotted the old
+      // accent, and any store rebuild RESET every menu to the old accent
+      // ("they don't all change together"). One write, everything agrees.
+      state.prefs.theme = t;
       // t45: the DOM UI follows the theme too — accent drives every button,
       // border and hover tint via CSS variables (was hardcoded gold/pink)
       const r = document.documentElement.style;

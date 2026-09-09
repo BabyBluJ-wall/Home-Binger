@@ -17,8 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
 import { RoundedBoxGeometry } from '/vendor/RoundedBoxGeometry.js';   // three.js addon, vendored
-import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1788919797230';
-import { shelfTexture, hashString } from './textures.js?v=1788919797230';
+import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1788937971857';
+import { shelfTexture, hashString } from './textures.js?v=1788937971857';
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  PART 1 — where the shelves are
@@ -330,24 +330,74 @@ export function assignItems(faces, items, sorting, assignment, unitPages) {
   const slotsPerUnit = new Map();
   for (const face of browseOrder(faces))
     slotsPerUnit.set(face.unit, (slotsPerUnit.get(face.unit) || 0) + face.slots.length);
+
+  // t93: AUTO CATEGORY SECTIONS — a section's sign tells the TRUTH. In the
+  // grouped modes (genre · library · type) every unit stocks EXACTLY ONE
+  // category: biggest categories first, a big category spanning consecutive
+  // units, the HUD pager walking that category's whole pool. Before, every
+  // unit drew from one mixed pool, so a sign could claim one category while
+  // showing two others (owner: "it'll say one category but then display up
+  // to 2 others that shouldn't"). Plex-strict sections now; the admin shelf
+  // map still wins over the automatic deal.
+  const TYPE_NAMES = { movie: 'Movies', show: 'TV Series', musicvideo: 'Music Videos', album: 'Music', live: 'Live TV' };
+  const catKeyOf = sorting.mode === 'genre' ? (it) => (it.genres && it.genres[0]) || 'Other'
+    : sorting.mode === 'library' ? (it) => it.sectionId || it.sectionTitle || TYPE_NAMES[it.type] || 'Media'
+    : sorting.mode === 'type' ? (it) => TYPE_NAMES[it.type] || 'Media' : null;
+  const catPools = new Map();          // category key → items (whole catalogue)
+  const catNames = new Map();          // category key → display name
+  const autoCats = new Map();          // unit → category key (unmapped units)
+  if (catKeyOf) {
+    const dir = sorting.dir === 'asc' ? 1 : -1;
+    for (const it of ordered) {
+      if (assignedAway.has(secKey(it))) continue;        // pinned sections stay on their units
+      const k = catKeyOf(it);
+      if (!catPools.has(k)) { catPools.set(k, []); catNames.set(k, k); }
+      catPools.get(k).push(it);
+    }
+    for (const list of catPools.values()) list.sort((a, b) => dir * byTitle(a, b));
+    const catOrder = [...catPools.entries()].sort((a, b) => b[1].length - a[1].length);
+    if (dir < 0) catOrder.reverse();                     // mirrors the group order of sortItems
+    // deal only to UNMAPPED units — the admin shelf map wins its units outright
+    const unitList = [...slotsPerUnit.keys()].filter(u => !(assignment?.[u] && pools.has(assignment[u])));
+    let ui = 0;
+    for (const [k, pool] of catOrder) {
+      if (ui >= unitList.length) break;
+      const perUnit = slotsPerUnit.get(unitList[ui]) || 1;
+      const need = Math.max(1, Math.min(Math.ceil(pool.length / perUnit), unitList.length - ui));
+      for (let n = 0; n < need; n++) { autoCats.set(unitList[ui], k); ui++; }
+    }
+    // spare units cycle categories (duplicate copies, real-store style).
+    // t93 FIX: guarded modulo cycle — an unguarded cycle crashed on an EMPTY
+    // catOrder (e.g. every item pinned by the shelf map) mid-setItems, which
+    // the shelving UI swallowed into stale shelves.
+    if (catOrder.length) {
+      for (let ci = 0; ui < unitList.length; ui++, ci++) {
+        autoCats.set(unitList[ui], catOrder[ci % catOrder.length][0]);
+      }
+    }
+  }
   const unitsSeen = new Map();             // poolKey → units already stocked from it
   const unitCounter = new Map();           // slot index within the current unit
   const unitPaging = {};                   // unit → { page, pages, total, pool } (for the HUD)
+  const effKey = (unit) => {                              // admin map wins · t93 auto category next
+    if (assignment?.[unit] && pools.has(assignment[unit])) return assignment[unit];
+    return autoCats.get(unit) || null;
+  };
   const bumpUnitsSeen = (unit) => {
-    const poolKey = assignment?.[unit] && pools.has(assignment[unit]) ? assignment[unit] : null;
-    const k = poolKey || '*';
+    const k = effKey(unit) || '*';                        // t93: consecutive units on one category still stagger pages
     unitsSeen.set(k, (unitsSeen.get(k) || 0) + 1);
   };
-  const take = (poolKey, unit) => {
-    const pool = poolKey && pools.has(poolKey) ? pools.get(poolKey) : general;
-    if (!pool.length) return null;
+  const take = (mappedKey, unit) => {
+    const key = effKey(unit);
+    const pool = key === null ? general : (pools.has(key) ? pools.get(key) : catPools.get(key));
+    if (!pool || !pool.length) return null;
     const U = slotsPerUnit.get(unit) || 1;
-    const auto = unitsSeen.get(poolKey || '*') || 0;
+    const auto = unitsSeen.get(key || '*') || 0;
     const manual = unitPages && Number.isFinite(unitPages[unit]);
     const page = manual ? unitPages[unit] : auto;
     const i = (page * U + (unitCounter.get(unit) || 0)) % pool.length;
     const pages = Math.max(1, Math.ceil(pool.length / U));
-    unitPaging[unit] = { page: ((page % pages) + pages) % pages, raw: page, pages, total: pool.length, pool: poolKey || null };
+    unitPaging[unit] = { page: ((page % pages) + pages) % pages, raw: page, pages, total: pool.length, pool: key || null };
     return pool[i];
   };
 
@@ -407,13 +457,20 @@ export function assignItems(faces, items, sorting, assignment, unitPages) {
     }
   }
   if (lastUnit !== null) bumpUnitsSeen(lastUnit);
-  return { placements, labels: unitLabels(unitItems, sorting, assignment, sectionNames), unitPaging };
+  return { placements, labels: unitLabels(unitItems, sorting, assignment, sectionNames, autoCats, catNames), unitPaging };
 }
 
-function unitLabels(unitItems, sorting, assignment, sectionNames) {
+function unitLabels(unitItems, sorting, assignment, sectionNames, autoCats, catNames) {
   const labels = new Map();
   for (const [unit, list] of unitItems) {
     if (!list.length) { labels.set(unit, 'COMING SOON'); continue; }
+    // t93: auto category sections — the sign IS the category (pure stock,
+    // no "GenreA · GenreB" joins over mixed shelves)
+    const autoCat = autoCats?.get(unit);
+    if (autoCat && catNames?.has(autoCat)) {
+      labels.set(unit, String(catNames.get(autoCat)).toUpperCase());
+      continue;
+    }
     // Shelf Map wins: the unit's sign is the placed section's real name
     const want = assignment?.[unit];
     if (want && sectionNames?.has(want) && list.some(it => (it.sectionId || it.sectionTitle || it.type) === want)) {

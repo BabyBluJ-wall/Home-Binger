@@ -1,3 +1,37 @@
+## 2026-09-09 — t93: delete-the-folder is a complete uninstall again (+ easier updates)
+- **Everything lives inside the app folder again — accounts, logins,
+  settings, even the app's own caches.** Deleting the folder removes every
+  trace: nothing left behind in AppData or anywhere else on your PC, no
+  registry, no Program Files. (1.6.0–1.6.2 kept data in %APPDATA%; this
+  version's first launch brings it home and cleans that up automatically.)
+- **Updating got easier too:** you no longer delete anything. Unzip the new
+  version (next to your old folder is fine) and open the NEW HomeBinger.exe
+  — it finds your old folder, moves your data into itself, and renames the
+  old folder "(old — you can delete this)". One tip: keep the app in a
+  normal folder like Desktop or Downloads, not Program Files.
+- **Dance-floor lights: the knob is now MOVEMENT, not brightness.** The
+  owner's correction: "Intensity" was making lights brighter/darker —
+  nobody asked for that. The renamed Movement slider now scales how FAR the
+  fixtures travel (tight theatrical nudges → full-festival swings), the
+  music and the program drive brightness on their own, and Speed (how fast
+  the beams sweep) is clearly visible now that bigger movement makes the
+  travel do real work. Saved 1.6.x settings carry over automatically.
+- **Theme goes app-wide.** Found and fixed the real bug: a theme change
+  updated the menus live but was never written back — so the save kept the
+  OLD color, the case-view snapshotted the old accent, and any store
+  rebuild flipped menus back ("they don't all change together"). Now every
+  menu, panel, modal, button, slider and checkbox follows your accent,
+  live, together.
+- **Shelf sections tell the truth.** In Genre / By Library / By Type
+  arrangement, every shelf unit now stocks EXACTLY ONE category — its sign
+  says "Action", the shelf shows Action (big categories span consecutive
+  units, the pager walks that category's whole catalogue). No more "says
+  one category, shows two others." The admin shelf map still wins its
+  shelves. (Plex-style strict sections.)
+- **The podcast rack is properly multi-source.** Add as many RSS feeds as
+  you like — each gets its own labeled shelf (give it a nickname if you
+  want), and each has an on/off switch so you can park a feed without
+  deleting it. Feeds saved by older versions keep working.
 ## 2026-09-08 — t92: theater walls bleeding onto the back wall + the jukebox crown
 - **The theater's side walls no longer "show through" onto the store's back
   wall.** Same disease as the ceiling band, new spot: the theater's left and
