@@ -1,5 +1,9 @@
 # 📼 Home Binger
 
+<p align="center">
+  <img src="docs/og-home-binger.png" alt="Home Binger — a walkable 3D video store with VHS and DVD shelves, real cover art, jukebox, and theater doors" width="960">
+</p>
+
 **Your virtual video store** — a self-hosted, walkable 3D video store with a
 movie theater and a neon dance hall, stocked from your own Plex, Jellyfin, or
 any folder on your server. Free for anyone to use and modify, **not for
@@ -27,6 +31,11 @@ Three connected spaces under one roof:
   **jukebox** against the back wall (a slim bass cabinet sits flush beside it,
   never poking past the machine) — click it and its DJ deck opens: queue,
   fades, EQ, tempo, and a 🎬 Cinema/Flat voicing toggle.
+
+<p align="center">
+  <img src="docs/store-entrance.png" alt="Home Binger — storefront view looking back at the BluJ Network neon sign and stocked shelves" width="880">
+</p>
+
 - **The theater** — behind the store's back wall: a real screening room with
   a sloped floor and its own big screen. Grab a movie off any shelf and hit
   **"Play in the theater"**; a control bar handles stop/seek/volume/repeat.
@@ -34,6 +43,11 @@ Three connected spaces under one roof:
   and the movie never leaks out. Its **8.2 array** plays discrete 7.1 on
   multichannel hardware and **HRTF binaural imaging in a headset** — fronts,
   sides, rears and subs placed around you like a professionally tuned room.
+
+<p align="center">
+  <img src="docs/theater.png" alt="Home Binger — private screening room with tiered seating and 8.2 surround sound" width="880">
+</p>
+
 - **The dance hall** — through the glass sliders in the store's right wall. A
   glossy checkerboard floor that **pulses and changes color with the music**,
   a mirror ball, and sweeping light beams that run **DJ-set patterns** (sweep
@@ -47,6 +61,10 @@ Three connected spaces under one roof:
   **DJ's Library** keeps the vinyl — click a record to spin it for the floor.
   Dance music **stays in the dance hall**: room gates keep each zone's sound
   inside its own wing.
+
+<p align="center">
+  <img src="docs/dance-hall.png" alt="Home Binger — neon dance hall with music-reactive floor, disco ball, and DJ booth" width="880">
+</p>
 
 Between the store and the street, the glass entry sliders stay locked —
 click them and the building answers: **"Zombie warning, Stay and party."**
