@@ -2,7 +2,7 @@
 
 *From a single video-store room to a full media building. Updated every turn.*
 
-**Current phase: 1 — 1.0 BETA FREEZE / TESTER BUG-HUNT** (updated 2026-09-08)
+**Current phase: 1.8.0 BUILT FOR TESTING** (updated 2026-09-09) — next up: remote access on-ramp + friend-to-friend sharing
 
 ---
 
@@ -144,7 +144,7 @@ Recovery: clone the repo, or rebuild the exe from source
 - [ ] Edit: TXT/MD only (honest scope — .docx editing is Google-Docs-sized)
 **GATE:** open and read every supported type in-world; edit a MD file.
 
-## t93 wave — STORE POLISH (owner requests 2026-09-09, in flight)
+## t93 wave — STORE POLISH (owner requests 2026-09-09) — ✅ SHIPPED as 1.7.0, LIVE + VERIFIED on GitHub 2026-09-09
 - [x] **Portable doctrine restored** — delete-the-folder = complete
       uninstall (accounts+logins+settings+caches all inside the app folder);
       updates = unzip new version next to the old, open the new exe, data
@@ -163,8 +163,49 @@ Recovery: clone the repo, or rebuild the exe from source
       made more like Plex's.
 - [x] **RSS becomes multi-source** — as many podcast/RSS feeds as the
       admin wants (the t87 instances treatment).
-*(exe 1.7.0 ships when this wave closes; then remote connections → W1.)*
+*(1.7.0 LIVE + verified 2026-09-09: repo 29/29 files identical, release asset byte-identical.)*
 
+## t94 wave — rides the 1.8.0 release (OPENED 2026-09-09; folded into ONE bigger release by the owner, 2026-09-09)
+- [ ] **In-app new-version notice** — on launch, quietly check GitHub
+      Releases; newer → toast + link to the download. NO auto-download
+      ($0 doctrine; owner-approved 2026-09-09).
+- [ ] **Update-path hardening** — adoption ranks ALL data sources (sibling
+      folders + %APPDATA%) by db.json mtime, newest wins, and only
+      renames/removes a source after the copy VERIFIES (root cause of the
+      lost-profile bug). Code is in tree (desktop/main.cjs); needs full
+      suite + real-Electron click-through at the 1.7.1 build.
+- [ ] **RELEASE-NOTES-v1.8.0.md** (standing release-notes doctrine; renumbered with the fold-in).
+*(Ships inside the 1.8.0 release — which also carries: ZT-number corrections + docs/RESEARCH-REMOTE-ACCESS.md + docs/REMOTE-ACCESS.md + the Tailscale installer inside the zip.)*
+
+## t95 wave — DANCE RIG 3D + BEAT LOCK + personal-settings verification (owner requests 2026-09-09 PM)
+- [x] **Music-synced 3D motion** — the owner: "i really want them to sync to
+      the music and move around not just on an x,y axes." BEAT GRID: motion
+      lands ON the kicks (beats + fraction-of-beat) instead of drifting
+      free. Two new programs: **Orbit cones** (full 3D cones, quarter-phase
+      apart) + **Beat jump** (fresh 3D pose every kick — pan AND tilt); the
+      classic four got real tilt motion on the same grid. The truss itself
+      circles the floor with the music; beams zoom-punch on the kick
+      (lens WIDTH — brightness stays music-only, movement knob never dims).
+      Strobe program untouched (t86 fan contract preserved).
+- [x] **Profiles verified end-to-end** — rename (t90), invite (t84), and
+      password change now has coverage (NEW t95: wrong-old rejected, min
+      length enforced, round-trip login). BUG FOUND + FIXED: "Reset ALL my
+      settings" silently skipped the dance-floor prefs — now it resets them
+      (t95 exercises the real button).
+- [x] **Theme app-wide re-verified** — t93Theme extended with a 5-family
+      accent sweep (brand mark, settings headings, HUD buttons, choice
+      cards, sidebar tabs).
+*(Suite: 90 → 93 checks; rides the 1.8.0 release.)*
+
+## Remote access & friend-sharing 🌐 *(NEXT — in flight 2026-09-09)*
+- [x] Tailscale chosen for the guided path (free: 6 people, unlimited
+      devices each) — facts re-verified against the live pricing page.
+- [x] docs/REMOTE-ACCESS.md — the plain-language how-to (also ships in
+      the exe folder) + docs/CREDITS.md Tailscale notice.
+- [x] The official Tailscale installer rides the exe zip (optional,
+      user-run) — reach your store from anywhere; nothing public, ever.
+- [ ] In-app on-ramp (Admin → Server) + friend-to-friend store sharing
+      — next on the bench.
 ## Phase W — WATCH PARTY 🍿 *(owner request 2026-09-08)*
 **ORDER (owner, 2026-09-08): remote connections come FIRST — watch party
 work starts once remote access is done.** Far-away friends can't join a
@@ -214,3 +255,4 @@ t66 audio/usability audit · t66b ear-level store ring + novice aids ·
 t67 sub-band dynamics + booth flex + dance-ring bug ·
 t68 fresh-install grabber fix + zip hygiene (63/63 on clean data) ·
 t86–t89 multi-source + shelf-map fixes + grabber case art + dance-floor lights 2.0 (85/85 ×2)
+t93 store polish → 1.7.0 LIVE (portable uninstall/update doctrine, movement lights, app-wide theme, pure shelf sections, multi-RSS; 90/90 ×2)

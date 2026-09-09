@@ -101,6 +101,7 @@ const FILMS = [
 const addonMock = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   const json = o => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+  if (u.pathname === '/releases/latest') return json({ tag_name: 'v99.0.0', html_url: 'http://127.0.0.1:32790/fake-release' });   // t96: version-feed mock
   if (u.pathname === '/advancedsearch.php') {
     if (u.searchParams.get('q').includes('feature_films'))
       return json({ response: { numFound: FILMS.length, docs: FILMS } });
@@ -920,7 +921,7 @@ const addonMock = http.createServer((req, res) => {
   R.checks.t51Dance = await page.evaluate(async () => {
     const s = window.__VB.scene, ctx = window.__VB.mainCtx;
     const di = s.danceInfo();
-    const rigOk = di.speakers === 10 && di.subs === 2 && di.ledBars >= 12 && di.patterns === 4;
+    const rigOk = di.speakers === 10 && di.subs === 2 && di.ledBars >= 12 && di.patterns === 6;   // t95: 6 programs
     // MUSIC CONTAINMENT — each zone audible only in its own wing
     const jb = s.jukeboxAudio;
     jb.setZone('dance');
@@ -2308,6 +2309,130 @@ const addonMock = http.createServer((req, res) => {
       ok: hasPrefs && lightsOk && legacyOk && ballOk && points === 0 && moveOk && brightOk && patOk && restored };
   });
 
+  // 17b1b) t95: THE RIG GOES 3D + LOCKS TO THE BEAT — orbit cones trace full
+  // 3D figures in pan AND tilt on the beat grid, the truss circles the floor,
+  // beams zoom-punch on the kick, beat-jump snaps a fresh 3D pose per kick.
+  // The strobe program (t86's fan contract) stays untouched.
+  R.checks.t95Dance3 = await page.evaluate(() => {
+    const s = window.__VB.scene;
+    const SILENT = { bass: 0, mid: 0, treble: 0, energy: 0, live: false };
+    const LV = { bass: 0.9, mid: 0.5, treble: 0.4, energy: 0.8, live: true };
+    const quiet = { bass: 0.04, mid: 0.03, treble: 0.03, energy: 0.03, live: true };
+    s.danceFakeLevels(SILENT);
+    s.danceTick(SILENT, 60);                    // drain the bass history — kicks become deterministic
+    const sixOk = s.danceInfo().patterns === 6;
+    // ORBIT (program 4): 3 beats, each = 1 loud tick (kick) + 6 quiet ticks (0.35 s > refractory)
+    s.setDancePrefs({ pattern: '4', movement: 1, speed: 1, ballSpin: 1 });
+    s.danceTick(SILENT, 20);
+    const b0 = s.danceInfo().beat.beats, truss0 = s.danceInfo().trussYaw;
+    const yaws = [s.danceInfo().rigYaw[0]];
+    for (let k = 0; k < 3; k++) { s.danceTick(LV, 1); s.danceTick(quiet, 6); yaws.push(s.danceInfo().rigYaw[0]); }
+    const iE = s.danceInfo();
+    const beatsD = iE.beat.beats - b0;
+    const steps = yaws.slice(1).map((y, k) => +(y - yaws[k]).toFixed(3));
+    const lockOk = beatsD === 3 && steps.every(d => d > 0.35);      // every beat window sweeps the SAME way — grid-locked
+    const tiltSpread = +(Math.max(...iE.rigPitches) - Math.min(...iE.rigPitches)).toFixed(3);
+    const tiltOk = tiltSpread >= 0.25;                              // full 3D: beams fan in TILT, not just pan
+    const trussOk = Math.abs(iE.trussYaw - truss0) >= 0.1;          // the rig itself travels around the floor
+    // BEAT JUMP (program 5): fresh bounded pose per kick + beat zoom punch
+    s.setDancePrefs({ pattern: '5' });
+    s.danceTick(quiet, 150);                     // converge off the orbit chase onto the bounded poses
+    let prev = s.danceInfo(), kickMove = 0;
+    for (const loud of [1, 0, 0, 0, 0, 0, 0, 1]) {   // two kicks, 0.4 s apart (clear of the refractory)
+      s.danceTick(loud ? LV : quiet, 1);
+      const cur = s.danceInfo();
+      const m = Math.max(...cur.rigYaw.map((y, k) => Math.abs(y - prev.rigYaw[k])));
+      if (loud) kickMove = Math.max(kickMove, m);
+      prev = cur;
+    }
+    const jumpOk = kickMove >= 0.15;                                // beams JUMP on the kick
+    const zoom1 = Math.max(...s.danceInfo().rigZoom);
+    s.danceTick(quiet, 30);                       // the beat envelope decays
+    const zoom2 = Math.max(...s.danceInfo().rigZoom);
+    const zoomOk = zoom1 >= 1.1 && zoom2 <= 1.06;                   // lens punches open on the beat, closes after
+    s.danceTick(quiet, 120);                      // fully converge — beat-jump poses are BOUNDED (no runaway spin)
+    const boundedOk = Math.max(...s.danceInfo().rigYaw.map(y => Math.abs(y))) < 1.6;
+    s.setDancePrefs({ pattern: 'auto', movement: 1, speed: 1, ballSpin: 1 });
+    s.danceFakeLevels(null);
+    const yawMax = +Math.max(...s.danceInfo().rigYaw.map(y => Math.abs(y))).toFixed(3);
+    return { sixOk, beatsD, steps, tiltSpread, trussD: +(iE.trussYaw - truss0).toFixed(3), kickMove: +kickMove.toFixed(3), zoom1: +zoom1.toFixed(3), zoom2: +zoom2.toFixed(3), yawMax,
+      ok: sixOk && lockOk && tiltOk && trussOk && jumpOk && zoomOk && boundedOk };
+  });
+
+  // 17b1c) t95: CHANGE PASSWORD — the one profile change without coverage:
+  // current password required + verified, minimum length, round-trip login.
+  {
+    const login = async (u, p) => { const r = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) }); return { status: r.status, token: r.ok ? (await r.json()).token : null }; };
+    const admin = await login('BabyBluJ', 'BluJNetwork');
+    const purge = async () => {
+      const list = await (await fetch(BASE + '/api/admin/users', { headers: { Authorization: 'Bearer ' + admin.token } })).json();
+      for (const u of list.users) if (u.username === 't95_pw_tmp')
+        await fetch(BASE + '/api/admin/users/' + encodeURIComponent(u.id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + admin.token } });
+    };
+    await purge();                               // idempotent across runs
+    const reg = await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 't95_pw_tmp', password: 'pass1234' }) });
+    const me = await login('t95_pw_tmp', 'pass1234');
+    const H = { 'content-type': 'application/json', Authorization: 'Bearer ' + me.token };
+    const wrongOld = await fetch(BASE + '/api/account/password', { method: 'POST', headers: H, body: JSON.stringify({ oldPassword: 'nope1234', newPassword: 'abcdef99' }) });
+    const shortNew = await fetch(BASE + '/api/account/password', { method: 'POST', headers: H, body: JSON.stringify({ oldPassword: 'pass1234', newPassword: 'abc' }) });
+    const good = await fetch(BASE + '/api/account/password', { method: 'POST', headers: H, body: JSON.stringify({ oldPassword: 'pass1234', newPassword: 'newpass99' }) });
+    const oldWorks = await login('t95_pw_tmp', 'pass1234');
+    const newWorks = await login('t95_pw_tmp', 'newpass99');
+    await purge();
+    R.checks.t95Password = { regOk: reg.ok, wrongOld: wrongOld.status, shortNew: shortNew.status, changed: good.status,
+      oldLogin: oldWorks.status, newLogin: newWorks.status,
+      ok: reg.ok && !!me.token && wrongOld.status === 400 && shortNew.status === 400 && good.ok && oldWorks.status === 401 && newWorks.status === 200 };
+  }
+
+  // 17b1d) t95: RESET ALL really resets ALL — the dance prefs (the newest
+  // personal setting) now return to defaults with everything else, via the
+  // real button in My Profile.
+  R.checks.t95Profile = await page.evaluate(async () => {
+    const state = window.__VB.state;
+    state.updatePrefs({ dance: { movement: 2.5, pattern: '5' } });   // dirty a personal pref the slider way
+    const dirty = state.prefs.dance.movement === 2.5 && state.prefs.dance.pattern === '5';
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.querySelector('.side-link[data-tab="profile"]').click();
+    await new Promise(r => setTimeout(r, 400));
+    const btn = document.getElementById('btn-reset-all');
+    const wired = !!btn;
+    btn?.click();
+    await new Promise(r => setTimeout(r, 900));   // updatePrefs + reloadLibrary
+    const d = state.prefs.dance || {};
+    const resetOk = d.movement === 1 && d.pattern === 'auto';
+    document.getElementById('btn-settings-close')?.click();
+    return { dirty, wired, resetOk, movement: d.movement, pattern: d.pattern, ok: dirty && wired && resetOk };
+  });
+
+  // 17b1e) t96: NEW-VERSION NOTICE — launch check → toast + link, never a
+  // download. The feed URL is admin-configurable (also the test seam);
+  // a check kill-switch exists; bootstrap carries the app version.
+  {
+    const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    const bs = await (await fetch(BASE + '/api/bootstrap')).json();
+    const bootVer = typeof bs.version === 'string' && /^\d+\.\d+\.\d+$/.test(bs.version);
+    await put({ version: { url: 'http://127.0.0.1:32790/releases/latest' } });
+    const v = await (await fetch(BASE + '/api/version/latest')).json();
+    const feedOk = v.checked === true && v.newer === true && v.latest === '99.0.0' && v.url === 'http://127.0.0.1:32790/fake-release' && v.current === bs.version;
+    const pg = await page.evaluate(async () => {
+      const t0 = document.querySelectorAll('#toasts .toast').length;
+      await window.__VB.mainCtx.checkVersion();
+      await new Promise(r => setTimeout(r, 300));
+      const toasts = [...document.querySelectorAll('#toasts .toast')];
+      const el = toasts[t0];
+      const link = el?.querySelector('a');
+      const out = { appeared: !!el, hasLink: !!link, href: link?.href || null };
+      el?.remove();
+      return out;
+    });
+    await put({ version: { check: false, url: 'http://127.0.0.1:32790/releases/latest' } });
+    const off = await (await fetch(BASE + '/api/version/latest')).json();
+    const offOk = off.checked === false && off.newer === false;
+    await put({ version: { check: true, url: '' } });   // back to the real feed
+    R.checks.t96Version = { bootVer, version: bs.version, feedOk, toast: pg, offOk,
+      ok: bootVer && feedOk && pg.appeared && pg.hasLink && pg.href === 'http://127.0.0.1:32790/fake-release' && offOk };
+  }
+
   // 17b2) t93: RSS MULTI-SOURCE — as many podcast feeds as the admin wants,
   // each its own labeled shelf (nickname wins); per-feed on/off parks a
   // feed without deleting it; legacy 1.6.x plain-string feeds keep working.
@@ -2362,6 +2487,16 @@ const addonMock = http.createServer((req, res) => {
     const gate = probe('gate-title');                 // was hardcoded gold
     const rangeProbe = document.createElement('input'); rangeProbe.type = 'range'; rangeProbe.style.cssText = 'position:fixed;left:-9999px';
     document.body.appendChild(rangeProbe); const rangeAcc = getComputedStyle(rangeProbe).accentColor; rangeProbe.remove();
+    // t95: broader sweep — every menu family follows the accent live (brand,
+    // settings headings, HUD buttons, choice cards, sidebar tabs)
+    const mkEl = (html, pick) => { const d = document.createElement('div'); d.innerHTML = html; d.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(d); const el = pick ? d.querySelector(pick) : d.firstElementChild; const cs = getComputedStyle(el); const out = { bg: cs.backgroundColor, color: cs.color, bc: cs.borderColor, blc: cs.borderLeftColor }; d.remove(); return out; };
+    const G = 'rgb(0, 255, 0)';
+    const logo = mkEl('<span class="vb-logo">x</span>');
+    const headTitle = mkEl('<div class="settings-head"><h2>x</h2></div>', 'h2');
+    const hudBtn = mkEl('<button class="hud-btn accent">x</button>');
+    const card = mkEl('<button class="radio-card active">x</button>');
+    const sideLink = mkEl('<a class="side-link active">x</a>');
+    const sweepOk = logo.color === G && headTitle.color === G && hudBtn.bg === G && card.bc === G && sideLink.blc === G;
     const stuck = state.prefs.theme.accent === '#00ff00';       // t93: the write-back
     ctx.applyTheme({ style: state.prefs.theme.style });         // a later theme touch must NOT revert it
     await new Promise(r => setTimeout(r, 100));
@@ -2372,8 +2507,8 @@ const addonMock = http.createServer((req, res) => {
     document.getElementById('btn-settings-close')?.click();
     const restored = state.prefs.theme.accent === before;
     const ok = cssVar === '#00ff00' && btn.bg === 'rgb(0, 255, 0)' && gate.color === 'rgb(0, 255, 0)'
-      && rangeAcc === 'rgb(0, 255, 0)' && stuck && kept && restored;
-    return { cssVar, btnBg: btn.bg, gateColor: gate.color, rangeAcc, stuck, kept, restored, ok };
+      && rangeAcc === 'rgb(0, 255, 0)' && sweepOk && stuck && kept && restored;
+    return { cssVar, btnBg: btn.bg, gateColor: gate.color, rangeAcc, sweepOk, logo: logo.color, headTitle: headTitle.color, hudBtn: hudBtn.bg, card: card.bc, sideLink: sideLink.blc, stuck, kept, restored, ok };
   });
 
   // 17b) t87: MULTI-SOURCE — a second Plex as an instance (default plex stays off)

@@ -28,6 +28,9 @@ for (const f of ['README.md', 'LICENSE', 'CHANGELOG.md', 'START-HERE.txt', 'STAR
 fs.mkdirSync(path.join(STAGE, 'docs'), { recursive: true });
 for (const img of ['og-home-binger.png', 'store-entrance.png', 'theater.png', 'dance-hall.png'])
   fs.cpSync(path.join(ROOT, 'docs', img), path.join(STAGE, 'docs', img));
+// t96: the remote-access guide + the license credits ride in the folder
+for (const doc of ['REMOTE-ACCESS.md', 'CREDITS.md'])
+  fs.cpSync(path.join(ROOT, 'docs', doc), path.join(STAGE, 'docs', doc));
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 pkg.main = 'desktop/main.cjs';            // ← the Electron entry (exe opens this)
 delete pkg.scripts; delete pkg.engines;
@@ -81,7 +84,25 @@ delete this)"). And deleting this folder removes EVERYTHING the app
 ever stored — a complete uninstall in one step.
 
 Phones on the same Wi-Fi: open http://<this-pc-ip>:8181
+Want to reach your store from ANYWHERE (or share it with far-away
+friends)? Run tailscale-setup.exe in this folder (optional, free), then
+open REMOTE-ACCESS.md (also in this folder) for the short how-to.
+No tech skills needed, nothing is ever opened to the public internet.
+
 Full guide: START-HERE.txt in this folder.
 `);
+
+// remote access: the official Tailscale web installer (tiny) rides the
+// folder — optional, user-run, never loaded or executed by Home Binger.
+// the guide + credits also sit at the TOP of the folder (findable)
+for (const doc of ['REMOTE-ACCESS.md', 'CREDITS.md'])
+  fs.copyFileSync(path.join(STAGE, 'docs', doc), path.join(DEST, doc));
+const TS_SRC = process.env.TS_SETUP || '';
+if (TS_SRC && fs.existsSync(TS_SRC)) {
+  fs.cpSync(TS_SRC, path.join(DEST, 'tailscale-setup.exe'));
+  console.log('tailscale: bundled official installer (' + fs.statSync(path.join(DEST, 'tailscale-setup.exe')).size + ' bytes)');
+} else {
+  console.log('tailscale: not bundled (set TS_SETUP=<path> to include)');
+}
 
 console.log('DONE →', DEST);

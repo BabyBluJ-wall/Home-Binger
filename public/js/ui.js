@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788937971857';
-import { createCaseView } from './store3d/caseview.js?v=1788937971857';   // the 3D case in the item modal
-import { state } from './state.js?v=1788937971857';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788937971857';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788937971857';
+import { api } from './api.js?v=1788983715036';
+import { createCaseView } from './store3d/caseview.js?v=1788983715036';   // the 3D case in the item modal
+import { state } from './state.js?v=1788983715036';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788983715036';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788983715036';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -31,13 +31,21 @@ export function initUI(ctx) {
   // ctx = { applyTheme, applySorting, rebuildStore, respawn, reloadLibrary, enterStore }
 
   // ── toasts ──
-  function toast(msg, isError = false) {
+  function toast(msg, isError = false, link = null) {
     const el = document.createElement('div');
     el.className = 'toast' + (isError ? ' error' : '');
     el.textContent = msg;
+    if (link && /^https?:\/\//.test(String(link.url || ''))) {   // t96: clickable link (version notice) — http(s) hrefs only
+      const a = document.createElement('a');
+      a.href = link.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = String(link.text || 'Open');
+      a.style.cssText = 'margin-left:10px;font-weight:700;text-decoration:underline;cursor:pointer;color:inherit';
+      el.appendChild(a);
+    }
     $('#toasts').appendChild(el);
-    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; }, 3400);
-    setTimeout(() => el.remove(), 3900);
+    const life = link ? 12000 : 3400;             // a link needs time to be clicked
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; }, life);
+    setTimeout(() => el.remove(), life + 500);
   }
 
   // ── sidebar ──
@@ -144,7 +152,7 @@ export function initUI(ctx) {
       <div class="hint" style="margin:-6px 0 14px">What the screen shows while music, podcasts or radio play — it always wears your theme accent.</div>
 
       <div class="section-title" style="margin-top:22px">Dance floor lights</div>
-      <div class="hint" style="margin:-4px 0 10px">The rig wakes when the dance hall's own music plays — these shape how the lights MOVE (laser-show style: the music drives brightness, you drive the motion). Yours on every device.</div>
+      <div class="hint" style="margin:-4px 0 10px">The rig wakes when the dance hall's own music plays and locks its moves to the beat — these shape how the lights MOVE in 3D (laser-show style: the music drives brightness, you drive the motion). Yours on every device.</div>
       <div class="field"><label>Movement <span id="dance-int-val"></span></label><input type="range" id="dance-int" min="0.2" max="2.5" step="0.1"></div>
       <div class="field"><label>Speed <span id="dance-spd-val"></span></label><input type="range" id="dance-spd" min="0.3" max="2.5" step="0.1"></div>
       <div class="field"><label>Mirror ball spin <span id="dance-ball-val"></span></label><input type="range" id="dance-ball" min="0" max="3" step="0.1"></div>
@@ -153,6 +161,7 @@ export function initUI(ctx) {
           <option value="auto">Auto — rotate with the music</option>
           <option value="0">Laser sweep</option><option value="1">Chase</option>
           <option value="2">Strobe hits</option><option value="3">Build &amp; drop</option>
+          <option value="4">Orbit cones</option><option value="5">Beat jump</option>
         </select>
       </div>
 
@@ -560,7 +569,7 @@ export function initUI(ctx) {
         </div>
         <div class="section-title" style="margin-top:20px">Start fresh</div>
         <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
-        <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick and media mix all return to the store defaults — no reinstall needed.</div>
+        <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick, dance floor lights and media mix all return to the store defaults — no reinstall needed.</div>
         <div class="section-title" style="margin-top:20px">Invite a friend</div>
         <div id="invite-box"><div class="hint">…</div></div>`;
       root.querySelector('#name-save').onclick = async () => {
@@ -596,7 +605,7 @@ export function initUI(ctx) {
       Create an account at the <b>front entrance</b> if you'd like them to <b>sync across your devices</b>.</p>
       <div class="section-title">Start fresh</div>
       <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
-      <div class="hint" style="margin:6px 0 18px">Theme, shelves, shelf map, TV pick and media mix all return to the store defaults — no reinstall needed.</div>
+      <div class="hint" style="margin:6px 0 18px">Theme, shelves, shelf map, TV pick, dance floor lights and media mix all return to the store defaults — no reinstall needed.</div>
       <div class="section-title">Invite a friend</div>
       <div id="invite-box"><div class="hint">…</div></div>
       <div class="section-title" style="margin-top:18px">Sign in</div>
@@ -1322,6 +1331,7 @@ export function initUI(ctx) {
         sorting: state.boot.defaults.sorting,
         shelves: Object.fromEntries(units.map(u2 => [u2.id, ''])),
         tv: { idleMode: '', itemId: '' },
+        dance: state.boot.defaults.dance || { movement: 1, speed: 1, ballSpin: 1, pattern: 'auto' },   // t95: dance floor lights are personal too — "ALL" means all
         sources: null
       });
       ctx.applyTheme(state.prefs.theme);

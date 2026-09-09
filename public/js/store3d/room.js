@@ -7,8 +7,8 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788937971857';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1788937971857';
+import { LAYOUT } from './config.js?v=1788983715036';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1788983715036';
 
 export function buildRoom(theme) {
   const L = LAYOUT;

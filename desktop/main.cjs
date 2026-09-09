@@ -10,11 +10,20 @@
 //  Users who already have Node installed are never touched: this app is
 //  self-contained and never installs or modifies anything on the system.
 // ─────────────────────────────────────────────────────────────────────────────
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, shell } = require('electron');
 const net = require('node:net');
 const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
+
+// t96: external links (e.g. the version notice's "Get it") open in the user's
+// own browser — the app window never navigates away from the store.
+app.on('web-contents-created', (_e, wc) => {
+  wc.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+});
 
 // t90: STORE DATA LIVES IN %APPDATA%\HomeBinger — NOT inside the app folder.
 // Why: updating used to mean "delete the old folder, unzip the new one" —
@@ -48,37 +57,55 @@ const fs = require('node:fs');
       try { app.setPath('crashDumps', path.join(localProfile, 'crashes')); } catch { /* best effort */ }
       fs.mkdirSync(localData, { recursive: true });
       if (!fs.existsSync(path.join(localData, 'db.json'))) {
-        // 1) ADOPT a sibling version folder's data — the update path. The old
-        //    t90–t92 builds moved their data OUT to %APPDATA%, so also look
-        //    for their "(moved to AppData)" leftovers? No — those have no
-        //    db.json; they fall through to step 2 below.
+        // t94 HARDENING (owner lost a profile + Plex connection on a real
+        // update — data-loss class bug): the update path now considers ALL
+        // data sources at once — sibling version folders AND the 1.6.x
+        // %APPDATA% location — and adopts the NEWEST, wherever it lives.
+        // (Before, ANY stale sibling folder shadowed fresher %APPDATA%
+        // data: the app booted on old data and the profile "vanished".)
+        // And sources are only cleaned up after the copy is VERIFIED.
         const parent = path.dirname(exeDir);
-        let adopted = null;
+        const cands = [];
         try {
-          const cands = fs.readdirSync(parent, { withFileTypes: true })
-            .filter(d => d.isDirectory() && /^Home ?Binger/i.test(d.name))
-            .map(d => {
-              const db = path.join(parent, d.name, 'data', 'db.json');
-              return { dir: path.join(parent, d.name), db, mtime: fs.existsSync(db) ? fs.statSync(db).mtimeMs : 0 };
-            })
-            .filter(c => c.mtime > 0)
-            .sort((a, b) => b.mtime - a.mtime);          // newest data wins
-          if (cands.length) adopted = cands[0];
+          for (const d of fs.readdirSync(parent, { withFileTypes: true })) {
+            if (!d.isDirectory() || !/^Home ?Binger/i.test(d.name)) continue;
+            const dir = path.join(parent, d.name);
+            if (dir === exeDir) continue;
+            const db = path.join(dir, 'data', 'db.json');
+            if (fs.existsSync(db)) cands.push({ kind: 'sibling', dir, db, mtime: fs.statSync(db).mtimeMs });
+          }
         } catch { /* best effort */ }
-        if (adopted && path.join(path.dirname(adopted.dir)) !== exeDir) {
-          fs.cpSync(path.join(adopted.dir, 'data'), localData, { recursive: true });
+        const roamDb = path.join(roaming, 'data', 'db.json');
+        if (fs.existsSync(roamDb)) cands.push({ kind: 'roaming', dir: roaming, db: roamDb, mtime: fs.statSync(roamDb).mtimeMs });
+        cands.sort((a, b) => b.mtime - a.mtime);          // NEWEST data wins, wherever it lives
+        const src = cands[0];
+        if (src) {
+          fs.cpSync(path.join(src.dir, 'data'), localData, { recursive: true });
+          // FAIL-SAFE: the copy must parse and carry EVERY account the
+          // source had before the source is renamed/removed.
+          let verified = false;
           try {
-            const newName = adopted.dir + ' (old — you can delete this)';
-            if (!fs.existsSync(newName)) fs.renameSync(adopted.dir, newName);
+            const a = JSON.parse(fs.readFileSync(src.db, 'utf8'));
+            const b = JSON.parse(fs.readFileSync(path.join(localData, 'db.json'), 'utf8'));
+            verified = Array.isArray(b.users) && b.users.length >= Math.max(1, Array.isArray(a.users) ? a.users.length : 1);
           } catch { /* best effort */ }
-          console.log('[data] adopted your data from the previous version folder');
-        } else if (fs.existsSync(path.join(roaming, 'data', 'db.json'))) {
-          // 2) REVERSE-ADOPT: bring the t90–t92 %APPDATA% data home, then
-          //    remove the AppData folder so delete-the-folder is complete.
-          fs.cpSync(path.join(roaming, 'data'), localData, { recursive: true });
-          if (fs.existsSync(path.join(localData, 'db.json'))) {
+          if (src.kind === 'sibling') {
+            if (verified) {
+              try {
+                const newName = src.dir + ' (old — you can delete this)';
+                if (!fs.existsSync(newName)) fs.renameSync(src.dir, newName);
+              } catch { /* best effort */ }
+              console.log('[data] adopted your data from the previous version folder');
+            } else {
+              console.warn('[data] adoption copy could not be verified — source folder left untouched');
+            }
+          } else if (verified) {
+            // roaming: delete only after the verified copy — data safety
+            // beats tidiness (owner: testers must never lose %APPDATA% data)
             try { fs.rmSync(roaming, { recursive: true, force: true }); } catch { /* best effort */ }
             console.log('[data] moved your data out of %APPDATA% and into the app folder (portable again)');
+          } else {
+            console.warn('[data] %APPDATA% copy could not be verified — %APPDATA% left in place, untouched');
           }
         }
       }

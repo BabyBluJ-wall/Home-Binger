@@ -8,11 +8,11 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1788937971857';
-import { api } from './api.js?v=1788937971857';
-import { initUI } from './ui.js?v=1788937971857';
-import { createScene } from './store3d/scene.js?v=1788937971857';
-import { STORE, SUPPORT } from './store3d/config.js?v=1788937971857';
+import { state } from './state.js?v=1788983715036';
+import { api } from './api.js?v=1788983715036';
+import { initUI } from './ui.js?v=1788983715036';
+import { createScene } from './store3d/scene.js?v=1788983715036';
+import { STORE, SUPPORT } from './store3d/config.js?v=1788983715036';
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -158,6 +158,7 @@ async function boot() {
     currentAccent: () => state.prefs.theme.accent,
     applySorting: (sorting) => { scene.applySorting(sorting); toastIt('Shelves restocked!'); },
     applyDancePrefs: (p) => scene.setDancePrefs?.(p),       // t86: dance-floor light prefs
+    checkVersion,                                           // t96: new-version notice (launch check)
     genLocalThumbs: () => scheduleLocalThumbs(),            // t89: grabber case art (also auto-runs)
     respawn: () => { scene.controls.reset(); },
     getTv: () => scene.tv,
@@ -254,6 +255,19 @@ async function boot() {
     }
   });
   function toastIt(msg, isError) { ui.toast(msg, isError); }
+
+  // t96: NEW-VERSION NOTICE — quietly ask the server if a newer Home Binger
+  // is out; if so, a toast with a link. NEVER downloads anything (you click,
+  // you decide — the $0 doctrine). Fails silent.
+  async function checkVersion() {
+    try {
+      const r = await fetch('/api/version/latest');
+      if (!r.ok) return;
+      const v = await r.json();
+      if (v.newer && v.url)
+        ui.toast(`🎉 Home Binger ${v.latest} is out! (you have ${v.current})`, false, { text: 'Get it', url: v.url });
+    } catch { /* quiet */ }
+  }
 
   // ── support link: click the DOOR (in-store) or the HUD logo → copy ──
   function legacyCopy(text) {
@@ -388,6 +402,7 @@ async function boot() {
 
   // Handy console handle for debugging/tinkering: window.__VB.scene / .state
   window.__VB = { scene, state, ui, library, mainCtx: ctx, atlases: () => scene.threeScene?._atlases };
+  setTimeout(() => ctx.checkVersion?.(), 5000);   // t96: quiet launch check, a beat after the store settles
 
   // first visit → help overlay
   try {

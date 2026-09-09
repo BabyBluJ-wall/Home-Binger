@@ -40,6 +40,18 @@ import { DATA_DIR } from '../lib/store.js';                // t89: grabbed-file 
 import { CATALOG_SECTIONS } from '../lib/adapters/archive.js';
 import { GENRES as RADIO_GENRES } from '../lib/adapters/radio.js';
 
+// t96: own version + the release feed (new-version notice)
+const PKG = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+const GH_RELEASES = 'https://api.github.com/repos/BabyBluJ-wall/Home-Binger/releases/latest';
+const GH_RELEASES_PAGE = 'https://github.com/BabyBluJ-wall/Home-Binger/releases/latest';
+const verCache = new Map();            // feed → { t, data } — 10-minute cache
+function cmpVersion(a, b) {
+  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  return 0;
+}
+
 // ── tiny helpers ─────────────────────────────────────────────────────────────
 const json = (res, status, obj) => {
   const body = JSON.stringify(obj);
@@ -143,6 +155,7 @@ export async function handleApi(req, res, pathname) {
       const status = await libraryStatus();
       const tvTitle = await resolveTvTitle(cfg).catch(() => null);
       return ok(res, {
+        version: PKG.version,          // t96: the app's own version (notice compares against it)
         me: { ...publicUser(user), isGuest: !user },
         profileKey: key,
         prefs: effective,
@@ -153,6 +166,31 @@ export async function handleApi(req, res, pathname) {
         source: { ...status, configured: status.ok },
         tv: { enabled: cfg.tv.enabled, idleMode: cfg.tv.mode, title: tvTitle }
       });
+    }
+
+    // ── t96: NEW-VERSION NOTICE — quiet launch check, toast + link, never a
+    //    download. Fails silent on any network error; 10-minute cache; the
+    //    admin kill-switch (config.version.check === false) short-circuits.
+    if (method === 'GET' && pathname === '/api/version/latest') {
+      const cfg = getConfig();
+      const out = { current: PKG.version, latest: null, newer: false, url: null, checked: false };
+      if (cfg.version?.check === false) return ok(res, out);
+      const feed = (typeof cfg.version?.url === 'string' && /^https?:\/\//.test(cfg.version.url)) ? cfg.version.url : GH_RELEASES;
+      const hit = verCache.get(feed);
+      if (hit && Date.now() - hit.t < 600000) return ok(res, { ...out, ...hit.data });
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 6000);
+        const r = await fetch(feed, { headers: { 'user-agent': 'HomeBinger/' + PKG.version, accept: 'application/json' }, signal: ctl.signal });
+        clearTimeout(timer);
+        if (!r.ok) throw new Error('status ' + r.status);
+        const rel = await r.json();
+        const latest = String(rel.tag_name || '').trim().replace(/^v/i, '');
+        const page = /^https?:\/\//.test(String(rel.html_url || '')) ? String(rel.html_url) : GH_RELEASES_PAGE;
+        const data = { latest, newer: !!latest && cmpVersion(latest, PKG.version) > 0, url: page, checked: true };
+        verCache.set(feed, { t: Date.now(), data });
+        return ok(res, { ...out, ...data });
+      } catch { return ok(res, out); }   // quiet — the store never waits on the internet
     }
 
     // ── public source catalogue: what a visitor can put on THEIR shelves ──
@@ -440,6 +478,13 @@ export async function handleApi(req, res, pathname) {
 
       // Whitelist-merge each section; masked secrets mean "keep current".
       const next = deepMerge(defaultConfig(), cfg);
+      // t96: version-notice controls (check kill-switch + feed URL override)
+      if (incoming.version && typeof incoming.version === 'object') {
+        next.version = {
+          check: incoming.version.check === false ? false : true,
+          url: (typeof incoming.version.url === 'string' && /^https?:\/\//.test(incoming.version.url)) ? incoming.version.url.trim() : ''
+        };
+      }
       // per-source toggles — every source independent, nothing mandatory
       if (incoming.sources && typeof incoming.sources === 'object') {
         next.sources = {

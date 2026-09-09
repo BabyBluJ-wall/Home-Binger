@@ -1,7 +1,7 @@
 # 🙏 Credits — every third-party component
 
 *Complete inventory for publishing (GitHub, Steam, or anywhere else).
-Last audited: 2026-09-06, build t78.*
+Last audited: 2026-09-09 — Tailscale companion installer added (remote-access wave).*
 
 ## Bundled with Home Binger (ships inside the app)
 
@@ -14,6 +14,17 @@ Last audited: 2026-09-06, build t78.*
 Both are vendored **verbatim** (unmodified). Their license notices ship
 alongside them. MIT and Apache-2.0 permit inclusion in this project's
 CC BY-NC-SA distribution as long as the notices are preserved — they are.
+
+## Optional companion installer (inside the exe release zip)
+
+| Component | Version | License | Where it lives | Source |
+|---|---|---|---|---|
+| **Tailscale** — official Windows installer, **unmodified** | stable at build time | Client: BSD-3-Clause · Wintun driver inside the installer: Tailscale's Prebuilt Binaries License | `tailscale-setup.exe` next to the app in the release zip — optional, user-installed, never loaded or run by Home Binger | https://tailscale.com/download · https://github.com/tailscale/tailscale |
+
+Shipped verbatim. BSD-3-Clause and the Wintun Prebuilt Binaries License
+permit redistribution of the unmodified installer with notice — this
+section is that notice. Tailscale is a trademark of Tailscale Inc.; this
+is not an endorsement by them.
 
 ## Inside the Windows desktop build (not in the web source)
 

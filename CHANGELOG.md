@@ -1,3 +1,34 @@
+## 2026-09-09 — 1.8.0: safer updates, dance lights that dance, remote access begins
+- **Updates can't lose your profile anymore.** When a new version adopts
+  your old data on first launch, the copy is now VERIFIED before anything
+  gets renamed or cleaned up — if a check fails, the old folder is left
+  completely untouched. (This is the bug that could eat a profile; it
+  can't anymore.)
+- **The app now tells you when a new version is out.** On launch it
+  quietly checks GitHub and shows a small note with a link to the
+  download. It NEVER downloads anything by itself — you click, you
+  decide.
+- **Optional remote access begins:** the official Tailscale installer
+  (free, tiny, optional) now ships next to the app, with a plain-language
+  guide (docs/REMOTE-ACCESS.md). Reach your store from anywhere — or
+  share it with far-away friends — with nothing ever opened to the
+  public internet.
+
+## 2026-09-09 — t95: the dance rig goes 3D + locks to the beat
+- **The dance-hall lights now MOVE to the music.** Sweeps, orbits and jumps
+  land ON the kicks — every song locks its own groove instead of drifting.
+- **Two new programs:** *Orbit cones* (the beams trace full 3D cones around
+  the floor, quarter-phase apart) and *Beat jump* (a fresh 3D pose on every
+  kick — pan AND tilt, like real moving heads). The classic four (sweep,
+  chase, strobe, build & drop) got the same 3D treatment.
+- **The rig itself now travels:** the light truss slowly circles the dance
+  floor with the music, and each beam's lens punches open on the kick
+  (width, never brightness — the movement knob still never dims anything).
+- **"Reset ALL my settings" now really means ALL:** dance-floor light
+  settings return to the defaults too (they were being skipped).
+- Under the hood: password changes, self-rename and the app-wide theme all
+  have regression coverage now (93 checks, all green).
+
 ## 2026-09-09 — t93: delete-the-folder is a complete uninstall again (+ easier updates)
 - **Everything lives inside the app folder again — accounts, logins,
   settings, even the app's own caches.** Deleting the folder removes every

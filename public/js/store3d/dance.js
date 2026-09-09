@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1788937971857';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1788983715036';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;
@@ -112,19 +112,22 @@ export function buildDance(theme) {
   const beamMat = (hue) => new THREE.MeshStandardMaterial({
     color: hue, emissive: hue, emissiveIntensity: 1.4, transparent: true, opacity: 0.34, depthWrite: false });
   const rig = [];
+  const truss = new THREE.Group();            // t95: the rig hangs from a TRUSS that circles the floor
+  truss.position.set(xc, 0, floorZ);
+  group.add(truss);
   const beamColors = ['#ff2d78', '#2de2ff', '#ffb02d', '#8f2dff'];
   beamColors.forEach((col, i) => {
     const a = (i / beamColors.length) * Math.PI * 2;
     const pivot = new THREE.Group();
-    pivot.position.set(xc + Math.cos(a) * 2.6, H - 0.25, floorZ + Math.sin(a) * 2.6);
+    pivot.position.set(Math.cos(a) * 2.6, H - 0.25, Math.sin(a) * 2.6);   // t95: relative to the truss
     const cone = new THREE.Mesh(new THREE.ConeGeometry(0.95, 6.2, 14, 1, true), beamMat(col));
     cone.position.y = -3.1;   // t86 FIX: NO π-flip — apex AT the fixture (narrow at the ceiling),
                               // base flaring down at the floor. It was inverted before (owner report).
     pivot.add(cone);
     const spot = new THREE.PointLight(col, 0, 8, 1.9);
     spot.position.y = -0.6; pivot.add(spot);
-    group.add(pivot);
-    rig.push({ pivot, spot, cone, phase: i * 1.7 });
+    truss.add(pivot);
+    rig.push({ pivot, spot, cone, phase: i * 1.7, z: 1 });
   });
   // wall washes
   const washes = [];
@@ -389,8 +392,9 @@ export function buildDance(theme) {
       movement: num(mv, P.movement, 0.2, 2.5),
       speed: num(p?.speed, P.speed, 0.3, 2.5),
       ballSpin: num(p?.ballSpin, P.ballSpin, 0, 3),
-      pattern: ['auto', '0', '1', '2', '3'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern
+      pattern: ['auto', '0', '1', '2', '3', '4', '5'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern
     };
+    if (P.pattern !== 'auto') pattern = P.pattern | 0;   // t95: a program pick applies IMMEDIATELY — never wait for the next kick
   }
   //    hues rotate with the music, particles fly on the kick, floor shifts color
   let ph = 0, barBeats = 0, pattern = 0, hue = Math.random();
@@ -402,7 +406,7 @@ export function buildDance(theme) {
   // liquid sweeps instead of per-frame snapping.
   const bassHist = new Array(40).fill(0); let bh = 0, beats = 0, bpm = 0, lastBeatT = -9, lastInt = 0, clock = 0;
   const col = new THREE.Color();
-  let pose = 0;                                 // t59: beat-advanced rig pose target
+  let pose = 0, lastBg = 0;                     // t59: beat-advanced pose target · t95: last beat-grid value (for info)
   function update(dt, levels) {
     const lv = levels || { bass: 0, mid: 0, treble: 0, energy: 0, live: false };
     // t54: no music → the SPOT holds on the booth and the rig rests;
@@ -428,9 +432,18 @@ export function buildDance(theme) {
       barBeats++;
       pose += (1.5 + (barBeats % 2) * 0.8) * P.speed;         // the next pose the rig eases to (t86: bigger jumps)
       hue = (hue + 0.06 + lv.energy * 0.05) % 1;              // every kick nudges the palette
-      if (barBeats >= 4) { barBeats = 0; pattern = (pattern + 1) % 4; }   // t86: rotate the look twice as often
+      if (barBeats >= 4) { barBeats = 0; pattern = (pattern + 1) % 6; }   // t86: rotate the look; t95: 6 programs
       if (P.pattern !== 'auto') pattern = P.pattern | 0;      // t86: locked look wins
     }
+    // t95: THE BEAT GRID + beat envelope. bg = beats + fraction-of-beat, so
+    // continuous motion (orbits, tilt swings) LANDS on the kicks instead of
+    // drifting free — every song locks its own groove. kp spikes to 1 on each
+    // kick and decays (drives beam ZOOM — width; the brightness knob stays
+    // music-only, per the t93 doctrine).
+    const beatFrac = (live && lastInt > 0 && lastBeatT >= 0) ? Math.min(1.15, (clock - lastBeatT) / lastInt) : 0;
+    const bg = beats + beatFrac;
+    const kp = live ? Math.exp(-Math.max(0, clock - lastBeatT) * 5) : 0;
+    lastBg = bg;
 
     // FLOOR: same bass/mid checker pulse, but the COLOR rides the hue
     col.setHSL((hue + 0.08) % 1, 0.95, 0.55);
@@ -481,15 +494,18 @@ export function buildDance(theme) {
     // 0.2 = tight theatrical nudges, 2.5 = full-festival swings. Brightness
     // (spot/cone/wash/LED) is driven ONLY by the music + program punch.
     const Mc = 0.3 + 0.7 * P.movement;
+    truss.rotation.y += dt * (live ? (0.12 + lv.energy * 0.85) * P.speed : 0.015) * (0.4 + 0.6 * P.movement);   // t95: the rig itself circles the floor with the music
     const beamCol = (i) => col.setHSL((hue + i * 0.13) % 1, 1, 0.55);
     for (let i = 0; i < rig.length; i++) {
       const r = rig[i];
       if (r.spin) { r.spin.rotation.y += dt * (1 + lv.mid * 8) * Mc; continue; }
       let ty, tx = 0, punch = 0.4 + lv.energy * 1.3;
-      if (pattern === 0) { ty = (pose * 0.9 + r.phase + ph * 0.2) * Mc; tx = Math.sin(pose * 0.5 + r.phase) * 0.8 * Mc; }        // sweep — the laser fan
-      else if (pattern === 1) { ty = Math.floor(barBeats % rig.length) === i ? pose * 1.1 * Mc : (r.phase + ph * 0.15) * Mc; punch *= barBeats % rig.length === i ? 2.8 : 0.35; }  // chase — harder hits
-      else if (pattern === 2) { ty = (r.phase + ph * 0.15) * Mc; tx = kick ? (0.3 + ((beats * 7 + i * 3) % 5) * 0.16) * Mc : 0.1 * Mc; punch *= kick ? 3.2 : (lv.bass > 0.3 ? 1.2 : 0.08); }  // strobe — snappier
-      else { ty = ((i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15) * Mc; tx = (0.75 - barBeats * 0.09) * Mc; if (barBeats === 3 && kick) { tx = 0.95 * Mc; punch *= 3.2; } }  // build & drop
+      if (pattern === 0) { ty = (pose * 0.9 + r.phase + ph * 0.2) * Mc; tx = (0.28 + 0.5 * Math.sin(bg * Math.PI + r.phase * 0.7)) * Mc; }        // sweep — the fan, tilt now swings on the BEAT GRID (t95)
+      else if (pattern === 1) { const on = Math.floor(barBeats % rig.length) === i; ty = on ? pose * 1.1 * Mc : (r.phase + ph * 0.15) * Mc; tx = on ? (0.2 + 0.55 * Math.sin(beats * 1.7 + i)) * Mc : 0.3 * Mc; punch *= on ? 2.8 : 0.35; }  // chase — harder 3D hits
+      else if (pattern === 2) { ty = (r.phase + ph * 0.15) * Mc; tx = kick ? (0.3 + ((beats * 7 + i * 3) % 5) * 0.16) * Mc : 0.1 * Mc; punch *= kick ? 3.2 : (lv.bass > 0.3 ? 1.2 : 0.08); }  // strobe — UNTOUCHED (t86 fan contract)
+      else if (pattern === 3) { ty = ((i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15) * Mc; tx = (0.2 + 0.6 * (1 - barBeats * 0.22) + (barBeats === 3 && kick ? 0.5 : 0)) * Mc; if (barBeats === 3 && kick) { punch *= 3.2; } }  // build & drop — tilt climbs the bar, DROPS on the four (t95)
+      else if (pattern === 4) { ty = (bg * Math.PI * 0.5 + i * Math.PI / 2) * Mc * 1.15; tx = (0.3 + 0.42 * Math.sin(bg * Math.PI + i * 1.3)) * Mc; punch *= 1 + kp * 0.9; }  // t95 ORBIT — full 3D cones, quarter-phase apart, locked to the beat grid
+      else { const h1 = ((beats * 2654435761 + i * 40503) >>> 0) % 1000 / 1000, h2 = ((beats * 97 + i * 13 + 7) >>> 0) % 1000 / 1000; ty = (h1 * 2.4 - 1.2) * Mc; tx = (0.08 + h2 * 0.85) * Mc; punch *= 1 + kp * 1.4; }  // t95 BEAT JUMP — a fresh 3D pose on every kick, holds between
       // t59: EASE to the target, then CAP the travel speed — real moving-head
       // fixtures SWEEP to their next position; they never snap. t93: with
       // movement pushing targets farther, the caps bind more — so the SPEED
@@ -500,6 +516,9 @@ export function buildDance(theme) {
       let dx2 = (tx - r.pivot.rotation.x) * ease;
       r.pivot.rotation.y += Math.max(-capY, Math.min(capY, dy));
       r.pivot.rotation.x += Math.max(-capX, Math.min(capX, dx2));
+      const zt = 1 + (live ? kp * 0.45 + lv.energy * 0.15 : 0);   // t95: BEAM ZOOM — the lens punches open on the kick (width; never the brightness knob)
+      r.z += (zt - r.z) * (1 - Math.exp(-dt * 9));
+      r.cone.scale.set(r.z, 1, r.z);
       r.spot.intensity = punch * 3.2 * rigLevel;
       r.cone.material.opacity = Math.min(0.95, (0.10 + Math.min(0.7, punch * 0.3)) * rigLevel);
       r.cone.material.color.copy(beamCol(i)); r.cone.material.emissive.copy(beamCol(i));
@@ -537,7 +556,7 @@ export function buildDance(theme) {
       },
       sharedWallOpen: L.dance.door.width, doorCenterZ: Z1 - L.dance.door.width / 2 - 0.35,
       speakers: speakerPts.length, subs: 2, ledBars: ledBars.length + 2,
-      boothX, boothZ, patterns: 4,    // t51 · t54: booth by the DOOR, apron behind
+      boothX, boothZ, patterns: 6,    // t51 · t54 · t95: booth by the DOOR, apron behind; 6 programs
       boothApron: +(boothZ - 0.55 - Z0).toFixed(2),   // walkable gap behind (m)
       subsAtFront: +(subPositions[0].z - Z0).toFixed(2) > 2.4,   // t58: mouths visible past the counter
       boothSideLane: +(boothX - 1.7 - X0).toFixed(2), // walkable left lane (m)
@@ -546,6 +565,9 @@ export function buildDance(theme) {
       beat: { beats, bpm, lastBeatAgo: +(clock - lastBeatT).toFixed(2) },      // t59: the beat engine
       rigYaws: rig.slice(0, 4).map(r => +r.pivot.rotation.y.toFixed(3)),        // t59: per-beam angles (beams only)
       rigPitches: rig.slice(0, 4).map(r => +r.pivot.rotation.x.toFixed(3)),
+      rigZoom: rig.slice(0, 4).map(r => +r.cone.scale.x.toFixed(3)),        // t95: beat-punched beam zoom
+      trussYaw: +truss.rotation.y.toFixed(3),                                // t95: the rig circling the floor
+      beatGrid: +lastBg.toFixed(3),                                          // t95: beats + fraction — motion locked to the kicks
       boothLayout: { counterH: 0.94, laptopX: 0, mixerX: -0.62, deckX: DECKX } // t59: side-by-side, laptop centered
     };
   }

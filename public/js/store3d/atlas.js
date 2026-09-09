@@ -15,9 +15,9 @@
 //       and overwrites just the cover region — shelves "fill in" live.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { TUNING } from './config.js?v=1788937971857';
-import { drawPlaceholderCover, hashString } from './textures.js?v=1788937971857';
-import { api } from '../api.js?v=1788937971857';
+import { TUNING } from './config.js?v=1788983715036';
+import { drawPlaceholderCover, hashString } from './textures.js?v=1788983715036';
+import { api } from '../api.js?v=1788983715036';
 
 export class PosterAtlases {
   constructor() {

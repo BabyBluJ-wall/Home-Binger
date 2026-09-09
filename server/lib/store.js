@@ -66,6 +66,10 @@ export const defaultConfig = () => ({
   locks: { theme: false, sorting: false, shelves: false, sources: false },
   // Allow open account registration (for cross-device pref syncing)
   registration: true,
+  // t96: new-version notice — check GitHub Releases on launch (toast + link,
+  // NEVER a download). url '' = the real feed; admins can point it elsewhere
+  // or set check:false to switch the notice off entirely.
+  version: { check: true, url: '' },
   // Store-wide defaults used when a user has never customized anything,
   // and what everyone is forced to when a lock is enabled.
   defaults: {
