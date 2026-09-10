@@ -14,6 +14,7 @@ const { app, BrowserWindow, Menu, shell } = require('electron');
 const net = require('node:net');
 const http = require('node:http');
 const path = require('node:path');
+const os = require('node:os');
 const fs = require('node:fs');
 
 // t96: external links (e.g. the version notice's "Get it") open in the user's
@@ -64,23 +65,65 @@ app.on('web-contents-created', (_e, wc) => {
         // (Before, ANY stale sibling folder shadowed fresher %APPDATA%
         // data: the app booted on old data and the profile "vanished".)
         // And sources are only cleaned up after the copy is VERIFIED.
-        const parent = path.dirname(exeDir);
+        // t98: WIDER SEARCH (owner report 2026-09-09: "my profile didn't
+        // move from 1.7 to 1.8"). The old scan only looked at IMMEDIATE
+        // siblings — but "Extract All" gives each version its own wrapper
+        // folder (…\HomeBinger-1.7.0-beta\HomeBinger-win32-x64), so the old
+        // data sat one wrapper away, invisible, and the app booted fresh.
+        // Now we walk UP from the exe (≤3 ancestors) and scan each
+        // ancestor's subtree for Home?Binger* folders holding data\db.json —
+        // same parent, wrapper folders, even a different subfolder of
+        // Desktop/Downloads. Bounded (visit cap), quiet-fail, and system
+        // dirs / AppData / the OS temp dir are never scanned or adopted
+        // from. If the exe itself runs FROM the temp dir (double-clicked
+        // inside a zip), adoption never happens — data must never land in a
+        // folder Windows wipes.
         const cands = [];
-        try {
-          for (const d of fs.readdirSync(parent, { withFileTypes: true })) {
-            if (!d.isDirectory() || !/^Home ?Binger/i.test(d.name)) continue;
-            const dir = path.join(parent, d.name);
-            if (dir === exeDir) continue;
-            const db = path.join(dir, 'data', 'db.json');
-            if (fs.existsSync(db)) cands.push({ kind: 'sibling', dir, db, mtime: fs.statSync(db).mtimeMs });
+        const seen = new Set();
+        let visits = 0;
+        const osTmp = os.tmpdir() || '';
+        const inside = (base, p) => { try { const r = path.relative(base, p); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); } catch { return false; } };
+        const skipDir = (p) => inside(osTmp, p) || /\\(windows|program files|appdata)(\\|$)/i.test(p) || inside(roaming, p);
+        const consider = (dir) => {
+          if (!dir || dir === exeDir) return;
+          const db = path.join(dir, 'data', 'db.json');
+          try {
+            if (!fs.existsSync(db)) return;
+            const key = path.normalize(dir).toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            cands.push({ kind: 'sibling', dir, db, mtime: fs.statSync(db).mtimeMs });
+          } catch { /* best effort */ }
+        };
+        if (!inside(osTmp, exeDir)) {            // ran-from-zip guard: never adopt into temp
+          const scan = (root, depth) => {
+            if (depth < 0 || visits > 2500) return;
+            try {
+              for (const d of fs.readdirSync(root, { withFileTypes: true })) {
+                if (!d.isDirectory()) continue;
+                visits++;
+                const dir = path.join(root, d.name);
+                if (skipDir(dir)) continue;
+                if (/^Home ?Binger/i.test(d.name)) consider(dir);
+                scan(dir, depth - 1);            // matching wrappers can hold the app folder inside
+              }
+            } catch { /* unreadable — skip */ }
+          };
+          let anc = exeDir;
+          for (let up = 0; up < 3; up++) {
+            const parent = path.dirname(anc);
+            if (!parent || parent === anc) break;
+            scan(parent, 2 + up);                // higher ancestors look deeper
+            anc = parent;
           }
-        } catch { /* best effort */ }
+        }
         const roamDb = path.join(roaming, 'data', 'db.json');
         if (fs.existsSync(roamDb)) cands.push({ kind: 'roaming', dir: roaming, db: roamDb, mtime: fs.statSync(roamDb).mtimeMs });
         cands.sort((a, b) => b.mtime - a.mtime);          // NEWEST data wins, wherever it lives
         const src = cands[0];
         if (src) {
           fs.cpSync(path.join(src.dir, 'data'), localData, { recursive: true });
+          try { fs.writeFileSync(path.join(localData, 'adopted-from.txt'), `Home Binger adopted your data from:\r\n  ${src.dir} (${src.kind})\r\nWhen: ${new Date().toISOString()}\r\n`); } catch { /* best effort */ }   // t98: provenance note
           // FAIL-SAFE: the copy must parse and carry EVERY account the
           // source had before the source is renamed/removed.
           let verified = false;
@@ -89,21 +132,30 @@ app.on('web-contents-created', (_e, wc) => {
             const b = JSON.parse(fs.readFileSync(path.join(localData, 'db.json'), 'utf8'));
             verified = Array.isArray(b.users) && b.users.length >= Math.max(1, Array.isArray(a.users) ? a.users.length : 1);
           } catch { /* best effort */ }
+          // t98b: a source whose data was touched in the last 10 minutes may
+          // be a SECOND live install (two copies of the same version), not an
+          // old one — its data still adopts, but the folder is never renamed
+          // or removed out from under it.
+          const recentlyUsed = (Date.now() - src.mtime) < 10 * 60 * 1000;
           if (src.kind === 'sibling') {
-            if (verified) {
+            if (verified && !recentlyUsed) {
               try {
                 const newName = src.dir + ' (old — you can delete this)';
                 if (!fs.existsSync(newName)) fs.renameSync(src.dir, newName);
               } catch { /* best effort */ }
               console.log('[data] adopted your data from the previous version folder');
+            } else if (verified) {
+              console.log('[data] adopted your data — source was used moments ago, folder left as-is');
             } else {
               console.warn('[data] adoption copy could not be verified — source folder left untouched');
             }
-          } else if (verified) {
+          } else if (verified && !recentlyUsed) {
             // roaming: delete only after the verified copy — data safety
             // beats tidiness (owner: testers must never lose %APPDATA% data)
             try { fs.rmSync(roaming, { recursive: true, force: true }); } catch { /* best effort */ }
             console.log('[data] moved your data out of %APPDATA% and into the app folder (portable again)');
+          } else if (verified) {
+            console.log('[data] copied your %APPDATA% data in — %APPDATA% left in place (used moments ago)');
           } else {
             console.warn('[data] %APPDATA% copy could not be verified — %APPDATA% left in place, untouched');
           }

@@ -29,7 +29,8 @@ fs.mkdirSync(path.join(STAGE, 'docs'), { recursive: true });
 for (const img of ['og-home-binger.png', 'store-entrance.png', 'theater.png', 'dance-hall.png'])
   fs.cpSync(path.join(ROOT, 'docs', img), path.join(STAGE, 'docs', img));
 // t96: the remote-access guide + the license credits ride in the folder
-for (const doc of ['REMOTE-ACCESS.md', 'CREDITS.md'])
+// t97: the friend-sharing how-to too (ships in 1.8.1)
+for (const doc of ['REMOTE-ACCESS.md', 'CREDITS.md', 'FRIEND-SHARING.md'])
   fs.cpSync(path.join(ROOT, 'docs', doc), path.join(STAGE, 'docs', doc));
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 pkg.main = 'desktop/main.cjs';            // ← the Electron entry (exe opens this)
@@ -78,8 +79,10 @@ That's the only file you ever need to open. Everything else in this
 folder is the app's machinery — leave it be.
 
 Your account, users and settings live in this folder — so UPDATING means:
-unzip the new version next to this one and open the new HomeBinger.exe
-(it brings everything over and marks the old folder "(old — you can
+unzip the new version ANYWHERE NEARBY (the same folder as this one is
+perfect; Desktop and Downloads both work) and open the new HomeBinger.exe
+— it finds your old data on its own (even inside the new version's own
+unzipped folder layout) and marks the old folder "(old — you can
 delete this)"). And deleting this folder removes EVERYTHING the app
 ever stored — a complete uninstall in one step.
 
@@ -87,6 +90,8 @@ Phones on the same Wi-Fi: open http://<this-pc-ip>:8181
 Want to reach your store from ANYWHERE (or share it with far-away
 friends)? Run tailscale-setup.exe in this folder (optional, free), then
 open REMOTE-ACCESS.md (also in this folder) for the short how-to.
+Made a friend? FRIEND-SHARING.md (also in this folder) is the
+two-minute how-to for sharing shelves between two Home Bingers.
 No tech skills needed, nothing is ever opened to the public internet.
 
 Full guide: START-HERE.txt in this folder.
@@ -95,7 +100,7 @@ Full guide: START-HERE.txt in this folder.
 // remote access: the official Tailscale web installer (tiny) rides the
 // folder — optional, user-run, never loaded or executed by Home Binger.
 // the guide + credits also sit at the TOP of the folder (findable)
-for (const doc of ['REMOTE-ACCESS.md', 'CREDITS.md'])
+for (const doc of ['REMOTE-ACCESS.md', 'CREDITS.md', 'FRIEND-SHARING.md'])
   fs.copyFileSync(path.join(STAGE, 'docs', doc), path.join(DEST, doc));
 const TS_SRC = process.env.TS_SETUP || '';
 if (TS_SRC && fs.existsSync(TS_SRC)) {

@@ -13,6 +13,7 @@ import { archiveAdapter } from './adapters/archive.js';
 import { podcastsAdapter } from './adapters/podcasts.js';
 import { radioAdapter } from './adapters/radio.js';
 import { localAdapter } from './adapters/local.js';
+import { friendAdapter } from './friends.js';            // t97: HB↔HB
 
 export const ADAPTERS = {
   plex: plexAdapter, jellyfin: jellyfinAdapter,
@@ -37,6 +38,7 @@ function addonSignature(cfg) {
     plex: cfg.plex?.sections || [],
     jellyfin: cfg.jellyfin?.sections || [],
     instances: (cfg.instances || []).map(i => [i.id, i.kind, i.on !== false, i.url || '', i.token || i.apiKey || '', i.sections || []]),   // t87
+    stores: (cfg.friendStores || []).map(s => [s.id, s.on !== false, s.url || '', s.token || '']),   // t97: friend stores bust the cache
     addons: ADDONS.map(a => [a.cfgKey, cfg[a.cfgKey]?.sections || [], cfg[a.cfgKey]?.feeds || [],
       !!cfg[a.cfgKey]?.on, cfg[a.cfgKey]?.path || ''])    // t51: local on/path busts the cache
   });
@@ -53,6 +55,7 @@ export function defaultView(cfg) {
     local: cfg.local || { on: false, path: '' },     // t61: file grabber root
     // t87: extra Plex/Jellyfin connections — on + credentialed only
     instances: (cfg.instances || []).filter(i => i.on !== false && i.url && (i.token || i.apiKey)),
+    stores: (cfg.friendStores || []).filter(s => s.on !== false && /^https?:\/\//.test(s.url || '') && !!s.token),   // t97
   };
 }
 export function userView(cfg, userSources) {
@@ -70,6 +73,8 @@ export function userView(cfg, userSources) {
     podcasts: d.podcasts, local: d.local,           // t61: local files stack for everyone
     // t87: each extra instance honors the user's own toggle (default: on)
     instances: d.instances.filter(i => (typeof u[i.id] === 'boolean' ? u[i.id] : true)),
+    // t97: each friend's store honors the user's own toggle (default: on)
+    stores: d.stores.filter(s => (typeof u[s.id] === 'boolean' ? u[s.id] : true)),
   };
 }
 
@@ -88,6 +93,8 @@ export function sourceConfig(source) {
   if (ADAPTERS[source] && cfg[source]) return { adapter: ADAPTERS[source], cfg: cfg[source] };
   const inst = (cfg.instances || []).find(i => i.id === source);
   if (inst && ADAPTERS[inst.kind]) return { adapter: ADAPTERS[inst.kind], cfg: { ...inst } };
+  const store = (cfg.friendStores || []).find(s => s.id === source);   // t97: a friend's store resolves like any source
+  if (store) return { adapter: friendAdapter, cfg: store };
   return null;
 }
 
@@ -152,6 +159,17 @@ export async function getLibrary(force = false, view = null) {
       console.warn(`[${inst.id}] instance failed: ${e.message}`);
     }
   }
+  // ── t97: FRIENDS' STORES — each followed store stacks on the shelves as
+  // its own sections (namespace: store id), exactly like extra instances.
+  // A friend's items stream through THEIR store — our proxy fetches with
+  // the friend code; their media-server tokens never leave their machine.
+  for (const st of (v.stores || [])) {
+    try {
+      items = items.concat(await friendAdapter.library(st));
+    } catch (e) {
+      console.warn(`[${st.id}] friend store failed: ${e.message}`);
+    }
+  }
   // ── free add-on sources stack on top ──
   for (const addon of ADDONS) {
     if (!addon.wants(v[addon.cfgKey])) continue;
@@ -171,6 +189,7 @@ export async function librarySections(view = null) {
   const items = await getLibrary(false, view);
   const cfg = getConfig();
   const instName = new Map((cfg.instances || []).map(i => [i.id, i.name]));
+  const storeName = new Map((cfg.friendStores || []).map(s => [s.id, s.name]));   // t97
   const SRC = { plex: 'Plex', jellyfin: 'Jellyfin', archive: 'Archive', radio: 'Radio', podcasts: 'Podcasts', local: 'Grabber' };
   const map = new Map();
   for (const it of items) {
@@ -180,7 +199,7 @@ export async function librarySections(view = null) {
     if (e) e.count++;
     else map.set(key, {
       key, name, count: 1, source: it.source,
-      sourceLabel: instName.get(it.source) || SRC[it.source] || it.source   // t87/88: "Bob's Plex · Movies"
+      sourceLabel: storeName.get(it.source) || instName.get(it.source) || SRC[it.source] || it.source   // t87/88/97: "Bob's Plex · Movies" / "Dave's store"
     });
   }
   return [...map.values()].sort((a, b) => b.count - a.count);

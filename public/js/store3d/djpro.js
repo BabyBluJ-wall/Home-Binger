@@ -12,7 +12,7 @@
 //  wing (the set never leaves the hall).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788983715036';
+import { LAYOUT } from './config.js?v=1788996243385';
 
 const D = LAYOUT.room.l / 2;
 const AUDIO_RE = /\.(mp3|wav|ogg|oga|flac|m4a|aac|opus)$/i;

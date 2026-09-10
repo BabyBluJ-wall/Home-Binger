@@ -8,11 +8,11 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1788983715036';
-import { api } from './api.js?v=1788983715036';
-import { initUI } from './ui.js?v=1788983715036';
-import { createScene } from './store3d/scene.js?v=1788983715036';
-import { STORE, SUPPORT } from './store3d/config.js?v=1788983715036';
+import { state } from './state.js?v=1788996243385';
+import { api } from './api.js?v=1788996243385';
+import { initUI } from './ui.js?v=1788996243385';
+import { createScene } from './store3d/scene.js?v=1788996243385';
+import { STORE, SUPPORT } from './store3d/config.js?v=1788996243385';
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {

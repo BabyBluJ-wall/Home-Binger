@@ -79,7 +79,10 @@ FIRST LAUNCH — WHAT TO EXPECT
   automatically (the first visitor generates them, once, for everyone).
 • Phones/tablets on the same Wi-Fi: open http://<your-pc-ip>:8181
 • UPDATING to a new version: don't delete anything. Just unzip the new
-  version (next to your old folder is fine) and open the NEW HomeBinger.exe.
+  version anywhere nearby — the same folder as your old one is perfect,
+  and Desktop/Downloads both work — then open the NEW HomeBinger.exe.
+  It finds your old data on its own (even across the version's own
+  unzipped folder) and brings everything over.
   It finds your old folder, brings your accounts, logins and settings over
   automatically, and renames the old folder "(old — you can delete this)".
   (the address shows in the console window on first launch).

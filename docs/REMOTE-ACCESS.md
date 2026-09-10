@@ -62,7 +62,25 @@ machine's 100.x.y.z address shown on that same page, same port.)
 publishes port 8181 to the host (our `docker-compose.yml` already does),
 and connect to the HOST machine's name/IP — not the container's.
 
+## "Exit node"? You don't need one (a common mix-up)
+
+Tailscale's menus mention **exit nodes** — the app's Exit Nodes picker,
+or the Exit Nodes tab at login.tailscale.com — and if you pick your
+Home Binger machine there, Tailscale says something like "this device
+doesn't advertise as an exit node." That is not a problem with your
+setup, and the fix is simple: **don't use that menu.** An exit node
+routes a device's ENTIRE internet connection through another machine
+(that's what commercial VPNs do) — Home Binger never needs that. All we
+use is the private device-to-device wire Tailscale already made when
+both machines logged in. The store address from Step 3 is all there is.
+
 ## Sharing with a friend (without giving them your network)
+
+**Once you're both on Tailscale:** Home Binger itself can now share
+shelves store-to-store — friend codes, per-friend shelf lists, everything
+inside the app. See **FRIEND-SHARING.md**. The steps below (sharing one
+machine via Tailscale) are still how your friend's Home Binger reaches
+YOUR machine in the first place.
 
 Share ONE machine — the Home Binger machine — never your whole network:
 
@@ -104,6 +122,14 @@ default policy they can already only reach machines you explicitly shared.
 
 ## Troubleshooting
 
+- **Saw "doesn't advertise as an exit node" / "not an exit node"?** Not
+  a problem — that's Tailscale's route-everything feature, which Home
+  Binger doesn't use. See the "Exit node?" note above; just open
+  `http://MACHINENAME:8181`.
+- **Windows Firewall (store loads on the PC itself, but not from the
+  other device):** Start → type "Windows Security" → Firewall & network
+  protection → Advanced settings → Inbound Rules → New Rule… → Port →
+  TCP → `8181` → Allow the connection. One time, about a minute.
 - **Store won't load:** is Tailscale "Connected" on BOTH devices? Same
   account (or a valid share)?
 - **Wrong address:** `tailscale status` lists each machine's name + 100.x

@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788983715036';
-import { createCaseView } from './store3d/caseview.js?v=1788983715036';   // the 3D case in the item modal
-import { state } from './state.js?v=1788983715036';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788983715036';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788983715036';
+import { api } from './api.js?v=1788996243385';
+import { createCaseView } from './store3d/caseview.js?v=1788996243385';   // the 3D case in the item modal
+import { state } from './state.js?v=1788996243385';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788996243385';
+import { placeholderDataUrl } from './store3d/textures.js?v=1788996243385';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -474,6 +474,11 @@ export function initUI(ctx) {
         <div><div class="t-label">🛰️ ${esc(i.name)}</div><div class="t-sub">extra ${i.kind === 'plex' ? 'Plex' : 'Jellyfin'} connection</div></div>
         <label class="switch"><input type="checkbox" id="md-inst-${CSS.escape(i.id)}" ${(mine ? mine[i.id] : i.on) !== false ? 'checked' : ''}><span class="track"></span></label>
       </div>`).join('')}
+      ${(cat.stores || []).filter(s => s.ready).map(s => `
+      <div class="toggle-row">
+        <div><div class="t-label">🤝 ${esc(s.name)}</div><div class="t-sub">friend's Home Binger</div></div>
+        <label class="switch"><input type="checkbox" id="md-fs-${CSS.escape(s.id)}" ${(mine ? mine[s.id] : s.on) !== false ? 'checked' : ''}><span class="track"></span></label>
+      </div>`).join('')}
       <div class="section-title" style="margin-top:14px">🎞️ Classics wing</div>
       <div id="media-archive" class="lib-list">
         ${cat.archive.map(c => `<label class="lib-row"><input type="checkbox" value="${esc(c.key)}" ${eff.archive.includes(c.key) ? 'checked' : ''}>
@@ -499,6 +504,10 @@ export function initUI(ctx) {
       for (const i of (cat.instances || [])) {          // t87: per-instance toggles
         const el = root.querySelector(`#md-inst-${CSS.escape(i.id)}`);
         if (el) out[i.id] = el.checked;
+      }
+      for (const s of (cat.stores || [])) {              // t97: per-friend-store toggles
+        const el = root.querySelector(`#md-fs-${CSS.escape(s.id)}`);
+        if (el) out[s.id] = el.checked;
       }
       return out;
     };
@@ -744,6 +753,22 @@ export function initUI(ctx) {
         <button class="btn" id="btn-add-jf">+ Add another Jellyfin</button>
       </div>
 
+      <div class="section-title" style="margin-top:16px">🤝 Friends' stores — their shelves, in your store</div>
+      <div class="hint" style="margin:-4px 0 10px">Add a friend's <b>Home Binger</b> with the address + friend code they give you. Their shared shelves appear as new sections — their media streams through <b>their</b> store, so nobody's logins ever leave home. Everyone can toggle each friend in My Media.</div>
+      <div id="friend-store-list"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btn-add-fstore">+ Add a friend's Home Binger</button>
+      </div>
+
+      <div class="section-title" style="margin-top:16px">🤝 Friend sharing — your store, for your friends</div>
+      <div class="hint" style="margin:-4px 0 10px">Invite a friend and the app mints a <b>friend code</b>. Hand them your store address + the code (text it, say it out loud — your call). Tick which of <b>your</b> shelves each friend sees; untick everything to pause them. Things a friend shared to <b>you</b> can never be shared onward — only your own shelves are ever offered.</div>
+      <div class="field" style="margin-bottom:10px"><label class="switch"><input type="checkbox" id="fs-share-on" ${(adminCfg.friendShare?.on) ? 'checked' : ''}><span class="track"></span></label>
+        <span style="margin-left:8px">Let friends connect to my store</span></div>
+      <div id="friend-share-list"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btn-add-friend">+ Invite a friend</button>
+      </div>
+
       <div class="section-title" style="margin-top:16px">Free shelves — stack with anything above</div>
       <div class="hint" style="margin:-4px 0 12px">Public-domain classics from the <b>Internet Archive</b>, live radio from <b>Radio-Browser</b>, and any podcast's RSS feed. Free, legal, no account. Nothing checked = that shelf stays off.</div>
 
@@ -976,6 +1001,95 @@ export function initUI(ctx) {
       instDrafts.push({ id: '', kind: 'jellyfin', name: '', url: '', token: '', apiKey: '', sections: [], on: true, _new: true, _k: ++instSeq });
       renderInstances();
     };
+    // ── t97: HB↔HB — friends' stores (in) + friend sharing (out) ──
+    let fsDrafts = (adminCfg.friendStores || []).map(s => ({ ...s, _new: false }));
+    let shareDrafts = (adminCfg.friendShare?.entries || []).map(e => ({ ...e, _new: false }));
+    let mySections = null;
+    const loadMySections = async () => {              // own shelves only — server enforces the no-transitive rule
+      if (mySections) return mySections;
+      try { const r = await fetch('/api/admin/friend-sections', { credentials: 'include' }); mySections = (await r.json()).sections || []; }
+      catch { mySections = []; }
+      return mySections;
+    };
+    const renderFStores = () => {
+      const box = root.querySelector('#friend-store-list');
+      if (!fsDrafts.length) { box.innerHTML = '<div class="hint" style="margin:0">No friends added yet.</div>'; return; }
+      box.innerHTML = fsDrafts.map((s, idx) => {
+        const k = CSS.escape(s.id || `new-${idx}`);
+        return `
+        <div class="lib-card" style="margin-bottom:10px;padding:10px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field"><label>Nickname</label><input type="text" data-fs-name="${k}" value="${esc(s.name || '')}" placeholder="e.g. Dave"></div>
+            <div class="field" style="flex:1;min-width:170px"><label>Their store address</label><input type="url" data-fs-url="${k}" value="${esc(s.url || '')}" placeholder="http://their-pc:8181"></div>
+            <div class="field"><label>Friend code</label><input type="text" data-fs-code="${k}" value="${esc(s.token || '')}" placeholder="the code they gave you" style="font-family:monospace"></div>
+            <div class="field" style="align-self:flex-end"><label class="switch"><input type="checkbox" data-fs-on="${k}" ${s.on !== false ? 'checked' : ''}><span class="track"></span></label></div>
+            <div class="field" style="align-self:flex-end"><button class="btn" data-fs-test="${k}">Test</button></div>
+            <div class="field" style="align-self:flex-end"><button class="btn" data-fs-del="${k}">🗑</button></div>
+          </div>
+        </div>`;
+      }).join('');
+      for (const s of fsDrafts) {
+        const k = CSS.escape(s.id || `new-${fsDrafts.indexOf(s)}`);
+        const q = (sel) => root.querySelector(`[data-fs-${sel}="${k}"]`);
+        q('del').onclick = () => { fsDrafts = fsDrafts.filter(x => x !== s); renderFStores(); };
+        q('test').onclick = async () => {
+          const url = q('url').value.trim();
+          if (!url) return toast('Enter their store address first', true);
+          toast('Testing the connection…');
+          try {
+            const r = await api.adminTest({ source: 'friend', url, token: q('code').value.trim() });
+            toast(`✅ ${r.name} — ${r.detail}`);
+          } catch (err) { toast(err.message, true); }
+        };
+      }
+    };
+    renderFStores();
+    root.querySelector('#btn-add-fstore').onclick = () => {
+      fsDrafts.push({ id: '', name: '', url: '', token: '', on: true, _new: true });
+      renderFStores();
+    };
+    const renderFShare = async () => {
+      const box = root.querySelector('#friend-share-list');
+      const secs = await loadMySections();
+      if (!shareDrafts.length) { box.innerHTML = '<div class="hint" style="margin:0">Nobody invited yet — "+ Invite a friend" creates a code to hand out.</div>'; return; }
+      box.innerHTML = shareDrafts.map((e, idx) => {
+        const k = CSS.escape(e.id || `new-${idx}`);
+        const secsHtml = e._new
+          ? '<div class="hint" style="margin:4px 0 0">Click Save Settings first — the code appears here, then tick the shelves they see.</div>'
+          : (secs.length
+            ? secs.map(sec => `
+              <label class="lib-row"><input type="checkbox" value="${esc(sec.key)}" ${(e.sections || []).includes(sec.key) ? 'checked' : ''}>
+                <b>${esc(sec.name)}</b><small>${sec.count} titles</small></label>`).join('')
+            : '<div class="hint" style="margin:4px 0 0">Nothing on your shelves yet — stock the store first, then come back.</div>');
+        return `
+        <div class="lib-card" style="margin-bottom:10px;padding:10px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field"><label>Friend's name</label><input type="text" data-sh-name="${k}" value="${esc(e.name || '')}" placeholder="e.g. Mom"></div>
+            <div class="field" style="flex:1"><label>Their friend code — give them this + your store address</label>
+              <input type="text" readonly data-sh-code="${k}" value="${esc(e.token || '')}" placeholder="appears after Save" style="font-family:monospace;cursor:pointer" title="click to copy"></div>
+            <div class="field" style="align-self:flex-end"><label class="switch"><input type="checkbox" data-sh-on="${k}" ${e.on !== false ? 'checked' : ''}><span class="track"></span></label></div>
+            <div class="field" style="align-self:flex-end"><button class="btn" data-sh-del="${k}">🗑</button></div>
+          </div>
+          <div class="lib-list" data-sh-secs="${k}" style="margin-top:6px">${secsHtml}</div>
+        </div>`;
+      }).join('');
+      for (const e of shareDrafts) {
+        const k = CSS.escape(e.id || `new-${shareDrafts.indexOf(e)}`);
+        const q = (sel) => root.querySelector(`[data-sh-${sel}="${k}"]`);
+        q('del').onclick = () => { shareDrafts = shareDrafts.filter(x => x !== e); renderFShare(); };
+        const codeEl = q('code');
+        if (codeEl) codeEl.onclick = () => {
+          codeEl.select?.();
+          try { navigator.clipboard?.writeText(codeEl.value); toast('Friend code copied'); }
+          catch { toast('Code: ' + codeEl.value); }
+        };
+      }
+    };
+    renderFShare();
+    root.querySelector('#btn-add-friend').onclick = () => {
+      shareDrafts.push({ id: '', name: '', token: '', sections: [], on: true, _new: true });
+      renderFShare();
+    };
     const draft = () => ({
       sources: {
         plex: root.querySelector('#src-plex').checked,
@@ -1004,7 +1118,33 @@ export function initUI(ctx) {
           sections: hasBoxes ? [...libBox.querySelectorAll('input:checked')].map(c => c.value) : (i.sections || []),
           on: root.querySelector(`[data-inst-on="${k}"]`)?.checked ?? (i.on !== false)
         };
-      })
+      }),
+      friendStores: fsDrafts.map((s, idx) => {            // t97: friends' stores (in)
+        const k = CSS.escape(s.id || `new-${idx}`);
+        return {
+          id: s._new ? '' : s.id,
+          name: root.querySelector(`[data-fs-name="${k}"]`)?.value.trim() || '',
+          url: root.querySelector(`[data-fs-url="${k}"]`)?.value.trim() || '',
+          token: root.querySelector(`[data-fs-code="${k}"]`)?.value.trim() || '',
+          on: root.querySelector(`[data-fs-on="${k}"]`)?.checked ?? true
+        };
+      }),
+      friendShare: {                                      // t97: friend sharing (out)
+        on: root.querySelector('#fs-share-on')?.checked ?? false,
+        entries: shareDrafts.map((e, idx) => {
+          const k = CSS.escape(e.id || `new-${idx}`);
+          const box = root.querySelector(`[data-sh-secs="${k}"]`);
+          return {
+            id: e._new ? '' : e.id,
+            name: root.querySelector(`[data-sh-name="${k}"]`)?.value.trim() || '',
+            token: e.token || '',
+            sections: box?.querySelector('input[type="checkbox"]')
+              ? [...box.querySelectorAll('input:checked')].map(c => c.value)
+              : (e.sections || []),
+            on: root.querySelector(`[data-sh-on="${k}"]`)?.checked ?? true
+          };
+        })
+      }
     });
     root.querySelector('#btn-save-server').onclick = async () => {
       // t66: show grabber folder problems right where the user is looking
@@ -1018,6 +1158,10 @@ export function initUI(ctx) {
       for (const i of d.instances) {                       // t87: instances must be complete when on
         if (i.on && !i.url)
           return toast(`"${i.name || (i.kind === 'plex' ? 'Plex' : 'Jellyfin')}" is switched on but has no server URL`, true);
+      }
+      for (const s of d.friendStores) {                    // t97: a friend store needs address + code
+        if (s.on && (!s.url || !s.token))
+          return toast(`"${s.name || 'Friend store'}" needs both their store address and their friend code`, true);
       }
       if (d.sources.plex && d.plex.sections.length === 0)
         return toast('No Plex libraries are ticked — hit "↻ Load libraries" and tick at least one (or switch Plex off)', true);

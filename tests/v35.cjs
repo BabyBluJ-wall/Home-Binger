@@ -101,7 +101,7 @@ const FILMS = [
 const addonMock = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   const json = o => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
-  if (u.pathname === '/releases/latest') return json({ tag_name: 'v99.0.0', html_url: 'http://127.0.0.1:32790/fake-release' });   // t96: version-feed mock
+  if (u.pathname === '/releases/latest') return json({ tag_name: 'Rv99.0.0', html_url: 'http://127.0.0.1:32790/fake-release' });   // t96/t96b: version-feed mock (Rv prefix = the owner's real tag style)
   if (u.pathname === '/advancedsearch.php') {
     if (u.searchParams.get('q').includes('feature_films'))
       return json({ response: { numFound: FILMS.length, docs: FILMS } });
@@ -1218,7 +1218,12 @@ const addonMock = http.createServer((req, res) => {
     // is reverse-adopted and the AppData folder removed.
     const persist = /HB_DATA_DIR/.test(mainCjs) && /setPath\('userData'/.test(mainCjs)
       && /old — you can delete this/.test(mainCjs) && /rmSync\(roaming/.test(mainCjs);
-    R.checks.t62Uninstall = { docsOk, portable, persist, ok: docsOk && portable && persist };
+    // t98: the update finder searches WIDER (owner: "my profile didn't move
+    // from 1.7 to 1.8") — subtree walk around the exe, temp-run guard,
+    // adopted-from provenance note. Real-Electron proof: scenarios B/C/E/E2/F.
+    const wideFind = /os\.tmpdir\(\)/.test(mainCjs) && /adopted-from\.txt/.test(mainCjs)
+      && /2 \+ up/.test(mainCjs) && /visits > 2500/.test(mainCjs);
+    R.checks.t62Uninstall = { docsOk, portable, persist, wideFind, ok: docsOk && portable && persist && wideFind };
   }
 
   // 16v) t61: the FILE GRABBER — recursive folders, INDIVIDUAL FILES only,
@@ -2431,6 +2436,119 @@ const addonMock = http.createServer((req, res) => {
     await put({ version: { check: true, url: '' } });   // back to the real feed
     R.checks.t96Version = { bootVer, version: bs.version, feedOk, toast: pg, offOk,
       ok: bootVer && feedOk && pg.appeared && pg.hasLink && pg.href === 'http://127.0.0.1:32790/fake-release' && offOk };
+  }
+
+  // 17b1f) t97: HB↔HB — a friend's Home Binger as a source. Spawns a REAL
+  // second Home Binger (own data dir + port), stocks it from the archive +
+  // radio mocks, invites a friend, and follows it from THIS store: catalog,
+  // labels, detail, streaming THROUGH the host, share-list narrowing,
+  // per-user toggles, revocation, and the no-transitive-sharing rule.
+  {
+    const { spawn } = require('node:child_process');
+    const fsx = require('node:fs');
+    const H2 = 'http://127.0.0.1:32795';
+    fsx.rmSync('/tmp/hb2-data', { recursive: true, force: true });
+    const hb2 = spawn(process.execPath, ['server/server.js'], {
+      env: { ...process.env, PORT: '32795', HB_DATA_DIR: '/tmp/hb2-data' }, stdio: 'ignore'
+    });
+    try {
+      let up = false;
+      for (let i = 0; i < 50 && !up; i++) {
+        try { up = (await fetch(H2 + '/api/bootstrap', { signal: AbortSignal.timeout(1000) })).ok; } catch {}
+        if (!up) await new Promise(r => setTimeout(r, 300));
+      }
+      if (!up) throw new Error('friend store never came up');
+      const h2login = await (await fetch(H2 + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+      const H2H = { 'content-type': 'application/json', Authorization: 'Bearer ' + h2login.token };
+      const h2put = (body) => fetch(H2 + '/api/admin/config', { method: 'PUT', headers: H2H, body: JSON.stringify(body) });
+      await h2put({ sources: { plex: false, jellyfin: false },
+        archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] },
+        radio: { url: 'http://127.0.0.1:32790', sections: ['oldies'] },
+        podcasts: { feeds: [] },
+        friendShare: { on: true, entries: [{ name: 'Buddy', sections: [] }] } });
+      const h2cfg = await (await fetch(H2 + '/api/admin/config', { headers: H2H })).json();
+      const ent = h2cfg.config.friendShare.entries[0];
+      const code = ent.token;
+      // wrong code → 401; right code → catalog with BOTH shelves (empty share list = all own)
+      const badCode = (await fetch(H2 + '/api/friend/catalog?token=deadbeefdeadbeef')).status === 401;
+      const cat0 = await (await fetch(H2 + '/api/friend/catalog?token=' + code)).json();
+      const bothOk = cat0.ok === true && cat0.items.length >= 4 &&
+        new Set(cat0.items.map(i => i.sectionKey)).size >= 2;
+      // follow the friend from THIS store
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ friendStores: [{ name: 'Buddy', url: H2, token: code }] });
+      let lib = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+      const fsItems = (lib.items || []).filter(i => i.source === 'fs-1');
+      const shelved = fsItems.length >= 4 && fsItems.every(i => i.id.startsWith('fs-1:'));
+      const labeled = (lib.sections || []).some(s => s.sourceLabel === 'Buddy');
+      // detail + stream THROUGH the friend's store (their tokens stay home)
+      const one = fsItems.find(i => i.type === 'movie') || fsItems[0];
+      const detailOk = (await fetch(BASE + `/api/item/fs-1/${encodeURIComponent(one.key)}?vb_auth=` + login.token)).status === 200;
+      const stream = await fetch(BASE + `/api/play/fs-1/${encodeURIComponent(one.key)}?vb_auth=` + login.token, { redirect: 'manual' });
+      const buf = stream.ok ? Buffer.from(await stream.arrayBuffer()) : Buffer.alloc(0);
+      const streamOk = (stream.status === 200 || stream.status === 206) && buf.length > 1000;
+      // share list narrows to ONE shelf; the unshared item is refused even with a valid code
+      await h2put({ friendShare: { on: true, entries: [{ id: ent.id, name: 'Buddy', token: code, sections: ['archive:staff-picks'] }] } });
+      const cat1 = await (await fetch(H2 + '/api/friend/catalog?token=' + code)).json();
+      const narrowedOk = cat1.items.length > 0 && cat1.items.every(i => i.sectionKey === 'archive:staff-picks');
+      const radioItem = cat0.items.find(i => i.source === 'radio');
+      let unsharedBlocked = true;
+      if (radioItem) {
+        const r = await fetch(H2 + `/api/friend/stream/${radioItem.source}/${encodeURIComponent(radioItem.key)}?token=` + code, { redirect: 'manual' });
+        unsharedBlocked = r.status === 403 || r.status === 404;
+      }
+      // per-user toggle (My Media) — opt out, then back in
+      await fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ sources: { 'fs-1': false } }) });
+      const libOff = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+      const offOk = !(libOff.items || []).some(i => i.source === 'fs-1');
+      await fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ sources: { 'fs-1': null } }) });
+      // NO TRANSITIVE SHARING: shelves a friend shared INTO this store never
+      // appear in this store's own share lists (the pickers' only source)
+      const mySecs = await (await fetch(BASE + '/api/admin/friend-sections', { headers: authH })).json();
+      const noTransitive = !(mySecs.sections || []).some(s => String(s.key).startsWith('fs-1:'));
+      // revocation: the host deletes the friend → the code dies, the source quietly drops
+      await h2put({ friendShare: { on: true, entries: [] } });
+      const libRev = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+      const revokedOk = !(libRev.items || []).some(i => i.source === 'fs-1');
+      const deadCode = (await fetch(H2 + '/api/friend/catalog?token=' + code)).status === 401;
+      R.checks.t97Friends = { badCode, bothOk, n: fsItems.length, shelved, labeled, detailOk, streamOk, narrowedOk, unsharedBlocked, offOk, noTransitive, revokedOk, deadCode,
+        ok: badCode && bothOk && shelved && labeled && detailOk && streamOk && narrowedOk && unsharedBlocked && offOk && noTransitive && revokedOk && deadCode };
+
+      // 17b1g) t99: MUTUAL FOLLOWS — both stores follow each other at once
+      // (the owner's Person A / Person B case). Before t99, the cold-cache
+      // catalog builds fetched in a circle (A's build pulled B's catalog,
+      // which pulled A's) and boots stalled on 8 s timeouts; the friend
+      // endpoints now serve OWN content only, so the circle cannot form.
+      // Self-sufficient stock (t88 doctrine): the long-stream checks leave
+      // this store's archive pointed at the trickle mock — re-point it.
+      await put({ sources: { plex: false, jellyfin: false }, archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] } });
+      await h2put({ friendShare: { on: true, entries: [{ name: 'Buddy', sections: [] }] } });
+      const code2 = (await (await fetch(H2 + '/api/admin/config', { headers: H2H })).json()).config.friendShare.entries[0].token;
+      await put({ friendShare: { on: true, entries: [{ name: 'Pal', sections: [] }] } });
+      const myCode = (await (await fetch(BASE + '/api/admin/config', { headers: authH })).json()).config.friendShare.entries[0].token;
+      await h2put({ friendStores: [{ name: 'Pal', url: BASE, token: myCode }] });   // B follows A…
+      await put({ friendStores: [{ name: 'Buddy', url: H2, token: code2 }] });      // …and A follows B (fresh id — the old fs-1 still holds the revoked code)
+      const cfgNow = (await (await fetch(BASE + '/api/admin/config', { headers: authH })).json()).config;
+      const myStoreId = (cfgNow.friendStores || []).find(x => x.url === H2 && x.token === code2)?.id;   // what A calls B
+      const cfgB = (await (await fetch(H2 + '/api/admin/config', { headers: H2H })).json()).config;
+      const bStoreId = (cfgB.friendStores || []).find(x => x.url === BASE)?.id;                          // what B calls A
+      const t0 = Date.now();
+      const libMutual = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+      const mutualMs = Date.now() - t0;
+      const ownItems = (libMutual.items || []).filter(i => i.source === 'archive').length;   // my own staff-picks
+      const fromB = (libMutual.items || []).filter(i => i.source === myStoreId).length;      // B's items here
+      const libAtB = await j(await fetch(H2 + '/api/library?refresh=1&vb_auth=' + h2login.token));
+      const fromA = (libAtB.items || []).filter(i => i.source === bStoreId).length;          // my items at B
+      const noStall = mutualMs < 8000;   // the pre-t99 circle stalled past 8 s
+      R.checks.t99MutualFollows = { mutualMs, ownItems, fromB, fromA, myStoreId, bStoreId, noStall,
+        ok: !!myStoreId && !!bStoreId && ownItems >= 3 && fromB >= 4 && fromA >= 3 && noStall };
+      await put({ friendShare: { on: false, entries: [] } });   // leave this store tidy
+    } finally {
+      try { hb2.kill(); } catch {}
+      // leave this store clean for the checks that follow
+      await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ friendStores: [] }) });
+      await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
+    }
   }
 
   // 17b2) t93: RSS MULTI-SOURCE — as many podcast feeds as the admin wants,

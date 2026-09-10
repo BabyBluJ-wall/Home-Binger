@@ -30,10 +30,11 @@ import {
   hashPassword, verifyPassword, findUser, publicUser, createSession, destroySession,
   getSessionUser, profileKeyFor, readPrefs, writePrefs, migrateDevicePrefs, sanitizeShelfMap, sanitizeSourcesPref } from '../lib/auth.js';
 import {
-  getLibrary, findItem, posterUrlFor, streamUrlFor, libraryStatus, invalidateCache, librarySections, userView, ADAPTERS, sourceConfig
+  getLibrary, findItem, posterUrlFor, streamUrlFor, libraryStatus, invalidateCache, librarySections, userView, defaultView, ADAPTERS, sourceConfig
 } from '../lib/library.js';
 import { proxyImage, proxyVideo, streamLocalFile } from '../lib/proxy.js';
 import { localAdapter } from '../lib/adapters/local.js';   // t61: mime lookup for disk streams
+import { friendAdapter, findShareEntry, friendSourceIds, shareableWith, sectionKeyOf, newCode } from '../lib/friends.js';   // t97: HB↔HB
 import fs from 'node:fs';                                 // t66: grabber spot validation
 import path from 'node:path';                             // t89: thumb cache dir
 import { DATA_DIR } from '../lib/store.js';                // t89: grabbed-file case art
@@ -185,12 +186,74 @@ export async function handleApi(req, res, pathname) {
         clearTimeout(timer);
         if (!r.ok) throw new Error('status ' + r.status);
         const rel = await r.json();
-        const latest = String(rel.tag_name || '').trim().replace(/^v/i, '');
+        const latest = String(rel.tag_name || '').trim().replace(/^v/i, '').replace(/^[^0-9.]+/, '');   // t96b: tolerate tag prefixes (e.g. "Rv1.8" → 1.8)
         const page = /^https?:\/\//.test(String(rel.html_url || '')) ? String(rel.html_url) : GH_RELEASES_PAGE;
         const data = { latest, newer: !!latest && cmpVersion(latest, PKG.version) > 0, url: page, checked: true };
         verCache.set(feed, { t: Date.now(), data });
         return ok(res, { ...out, ...data });
       } catch { return ok(res, out); }   // quiet — the store never waits on the internet
+    }
+
+    // ── t97: HB↔HB FRIEND API (host side). Token-gated, LAN/VPN only: a
+    //    friend reaches these solely with a code the owner deliberately gave
+    //    them. Items a friend shared INTO this store are NEVER served onward
+    //    (no transitive sharing) and only shelves ticked for THAT friend go
+    //    out. Media streams through THIS store — tokens stay home.
+    if (method === 'GET' && pathname === '/api/friend/catalog') {
+      const cfg = getConfig();
+      const fq = new URL(req.url, 'http://x');
+      const entry = findShareEntry(cfg, fq.searchParams.get('token') || '');
+      if (!cfg.friendShare?.on || !entry) return fail(res, 401, 'Not invited');
+      // t99: OWN content only — friend stores are excluded from this view.
+      // (a) items a friend shared INTO this store are never shareable onward
+      // anyway (the no-chains rule), and (b) including them made two stores
+      // that follow EACH OTHER fetch catalogs in a circle on cold cache.
+      const ownView = { ...defaultView(cfg), stores: [] };
+      const items = await getLibrary(false, ownView);
+      const fIds = friendSourceIds(cfg);
+      const vis = items.filter(it => shareableWith(entry, it, fIds));
+      const secs = [...new Map(vis.map(it => [sectionKeyOf(it), { key: sectionKeyOf(it), title: it.sectionTitle || it.type || 'Media' }])).values()];
+      return ok(res, {
+        ok: true, store: entry.name, sections: secs,
+        items: vis.map(it => ({
+          source: it.source, key: it.key, title: it.title, type: it.type, year: it.year,
+          summary: it.summary || '', sectionKey: sectionKeyOf(it),
+          sectionTitle: it.sectionTitle || it.type || 'Media', addedAt: it.addedAt || 0
+        }))
+      });
+    }
+    if (method === 'GET' && pathname.startsWith('/api/friend/stream/')) {
+      const cfg = getConfig();
+      const fq = new URL(req.url, 'http://x');
+      const entry = findShareEntry(cfg, fq.searchParams.get('token') || '');
+      if (!cfg.friendShare?.on || !entry) { res.writeHead(401, { 'Content-Type': 'text/plain' }); res.end('not invited'); return true; }
+      const _fp = pathname.split('/').map(decodeURIComponent);
+      const fSrc = _fp[4], fKey = _fp.slice(5).join('/');
+      const item = await findItem(fSrc, fKey, { ...defaultView(cfg), stores: [] });   // t99: own view — the shared item is by definition ours
+      if (!item || !shareableWith(entry, item, friendSourceIds(cfg))) { res.writeHead(403, { 'Content-Type': 'text/plain' }); res.end('not shared to you'); return true; }
+      const upstream = await streamUrlFor(fSrc, fKey).catch(() => null);
+      if (String(upstream).startsWith('local-file:')) {
+        const abs = String(upstream).slice('local-file:'.length);
+        streamLocalFile(req, res, abs, localAdapter.mimeFor(abs));
+        return true;
+      }
+      if (!upstream) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('no stream for this item'); return true; }
+      await proxyVideo(req, res, upstream);
+      return true;
+    }
+    if (method === 'GET' && pathname.startsWith('/api/friend/poster/')) {
+      const cfg = getConfig();
+      const fq = new URL(req.url, 'http://x');
+      const entry = findShareEntry(cfg, fq.searchParams.get('token') || '');
+      if (!cfg.friendShare?.on || !entry) { res.writeHead(401); res.end(); return true; }
+      const _pp = pathname.split('/').map(decodeURIComponent);
+      const fSrc = _pp[4], fKey = _pp.slice(5).join('/');
+      const item = await findItem(fSrc, fKey, { ...defaultView(cfg), stores: [] });   // t99: own view
+      if (!item || !shareableWith(entry, item, friendSourceIds(cfg))) { res.writeHead(403); res.end(); return true; }
+      const up = await posterUrlFor(fSrc, fKey).catch(() => null);
+      if (!up) { res.writeHead(404); res.end(); return true; }
+      await proxyImage(req, res, up);
+      return true;
     }
 
     // ── public source catalogue: what a visitor can put on THEIR shelves ──
@@ -204,6 +267,9 @@ export async function handleApi(req, res, pathname) {
         instances: (cfg.instances || []).map(i => ({    // t87: extra connections, My Media toggles
           id: i.id, kind: i.kind, name: i.name, on: i.on !== false,
           ready: !!(i.url && (i.token || i.apiKey))
+        })),
+        stores: (cfg.friendStores || []).map(s => ({     // t97: friends' stores, My Media toggles
+          id: s.id, name: s.name, on: s.on !== false, ready: !!(s.url && s.token)
         })),
         storeDefaults: {
           sources: cfg.sources || {},
@@ -462,6 +528,17 @@ export async function handleApi(req, res, pathname) {
     }
 
     // ── ADMIN ────────────────────────────────────────────────────────────────
+    // t97: the host's shareable shelves for the per-friend share lists —
+    // OWN shelves only: shelves a friend shared INTO this store are excluded
+    // (the no-transitive-sharing rule, enforced at the list source).
+    if (method === 'GET' && pathname === '/api/admin/friend-sections') {
+      if (!requireAdmin(req, res)) return true;
+      const cfg = getConfig();
+      const fIds = friendSourceIds(cfg);
+      const sections = (await librarySections({ ...defaultView(cfg), stores: [] })).filter(s => !fIds.has(s.source));   // t99: own shelves only, no circular fetches
+      return ok(res, { sections });
+    }
+
     if (method === 'GET' && pathname === '/api/admin/config') {
       if (!requireAdmin(req, res)) return true;
       const cfg = getConfig();
@@ -577,6 +654,49 @@ export async function handleApi(req, res, pathname) {
         next.instances = nextInst;
         invalidateCache();
       }
+      // t97: FRIEND SHARING (host) — invite friends by name; the app mints
+      // each code. Per-friend share lists (empty list = all of MY OWN shelves).
+      if (incoming.friendShare && typeof incoming.friendShare === 'object') {
+        const prevE = new Map((cfg.friendShare?.entries || []).map(e => [e.id, e]));
+        const entries = [];
+        for (const raw of (Array.isArray(incoming.friendShare.entries) ? incoming.friendShare.entries : []).slice(0, 50)) {
+          if (!raw || typeof raw !== 'object') continue;
+          const prev = prevE.get(String(raw.id || ''));
+          const id = prev?.id || ('fr-' + (entries.length + 1) + '-' + crypto.randomBytes(2).toString('hex'));
+          let token = (typeof raw.token === 'string' && /^[a-z0-9]{8,64}$/i.test(raw.token)) ? raw.token : '';
+          if (!token) token = prev?.token || newCode();
+          entries.push({
+            id, token,
+            name: String(raw.name || '').trim().slice(0, 40) || prev?.name || 'Friend',
+            sections: Array.isArray(raw.sections) ? raw.sections.map(String).slice(0, 80) : (prev?.sections || []),
+            on: raw.on !== false, createdAt: prev?.createdAt || Date.now()
+          });
+        }
+        next.friendShare = { on: incoming.friendShare.on !== false, entries };
+        invalidateCache();
+      }
+      // t97: FRIEND STORES (follower) — friends' shared shelves as sources
+      if (Array.isArray(incoming.friendStores)) {
+        const taken = new Set(['plex', 'jellyfin', 'archive', 'podcasts', 'radio', 'local', 'tv']);
+        for (const s of cfg.friendStores || []) taken.add(s.id);
+        const stores = [];
+        for (const raw of incoming.friendStores.slice(0, 24)) {
+          if (!raw || typeof raw !== 'object') continue;
+          let id = String(raw.id || '').trim();
+          if (!id || taken.has(id) || !/^[a-z][a-z0-9-]{0,31}$/.test(id)) { let n = 1; while (taken.has(`fs-${n}`)) n++; id = `fs-${n}`; }
+          taken.add(id);
+          const prev = (cfg.friendStores || []).find(s => s.id === id);
+          stores.push({
+            id,
+            name: String(raw.name || '').trim().slice(0, 40) || prev?.name || 'Friend',
+            url: String(raw.url ?? prev?.url ?? '').trim().slice(0, 300),
+            token: String(raw.token ?? prev?.token ?? '').trim().slice(0, 100),
+            on: raw.on !== false
+          });
+        }
+        next.friendStores = stores;
+        invalidateCache();
+      }
       // Shelf Map — unitId → sectionKey ('' = automatic). Unit ids are slugs.
       if (incoming.shelves && typeof incoming.shelves === 'object' && !Array.isArray(incoming.shelves)) {
         const map = {};
@@ -619,6 +739,12 @@ export async function handleApi(req, res, pathname) {
       const body = await readBody(req);
       // Test either the provided draft creds or the saved ones.
       // t87: tests a built-in slot OR any saved extra instance ('plex-2'…)
+      if (String(body.source || '') === 'friend') {     // t97: test a friend's store before saving
+        const url = String(body.url || '').trim(), token = String(body.token || '').trim();
+        if (!/^https?:\/\//.test(url)) return fail(res, 400, 'Enter the friend store address first');
+        try { return ok(res, await friendAdapter.test({ url, token })); }
+        catch (e) { return fail(res, 400, e.message); }
+      }
       const sc = sourceConfig(String(body.source || ''));
       if (!sc?.adapter?.test) return fail(res, 400, 'Unknown source');
       const saved = sc.cfg || {};

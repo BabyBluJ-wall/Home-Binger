@@ -1,3 +1,29 @@
+## 2026-09-09 — 1.8.1: friends' shelves, safer updates
+
+*The fixing release. Everything here landed after 1.8.0 went live — if
+you're on 1.8.0, this is the one to grab.*
+
+- **A friend's shelves, right in your store.** In Admin → Server, add
+  their Home Binger (their address + a friend code they hand you) and
+  the shelves they share become new sections you can browse and play
+  like your own. Their movies stream through THEIR machine — nobody's
+  Plex/Jellyfin logins ever move. They pick exactly which shelves you
+  see, friend by friend; delete the friend and access ends instantly.
+  No friend-chains: anything shared into your store can never be shared
+  onward. Full how-to: FRIEND-SHARING.md (in the app folder).
+- **Updating always finds your data now.** "Extract All" gives each
+  version its own wrapper folder, and 1.8.0's updater only looked one
+  level deep — some updates booted blank (your old data was never
+  harmed, just not found). The finder now searches the surrounding
+  folders properly and leaves a note (adopted-from.txt) saying where it
+  took your data from.
+- **Two friends following each other no longer stall.** If you and a
+  friend added each other, the first shelf build could chase its own
+  tail and open half-stocked for a few seconds. Found in our own
+  two-store simulation; fixed and locked with a permanent self-check.
+- **The new-version notice understands tags like "Rv1.8".** A release
+  tag with a letter prefix no longer hides the update from anyone.
+
 ## 2026-09-09 — 1.8.0: safer updates, dance lights that dance, remote access begins
 - **Updates can't lose your profile anymore.** When a new version adopts
   your old data on first launch, the copy is now VERIFIED before anything

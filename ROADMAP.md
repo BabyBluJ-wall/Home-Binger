@@ -2,7 +2,7 @@
 
 *From a single video-store room to a full media building. Updated every turn.*
 
-**Current phase: 1.8.0 BUILT FOR TESTING** (updated 2026-09-09) — next up: remote access on-ramp + friend-to-friend sharing
+**Current phase: 1.8.1 BUILT FOR TESTING** (updated 2026-09-09) — friends' shelves are in; next up: the built-in remote-access helper + finer sharing controls
 
 ---
 
@@ -197,15 +197,18 @@ Recovery: clone the repo, or rebuild the exe from source
       cards, sidebar tabs).
 *(Suite: 90 → 93 checks; rides the 1.8.0 release.)*
 
-## Remote access & friend-sharing 🌐 *(NEXT — in flight 2026-09-09)*
+## Remote access & friend-sharing 🌐 *(in flight 2026-09-09)*
 - [x] Tailscale chosen for the guided path (free: 6 people, unlimited
       devices each) — facts re-verified against the live pricing page.
 - [x] docs/REMOTE-ACCESS.md — the plain-language how-to (also ships in
       the exe folder) + docs/CREDITS.md Tailscale notice.
 - [x] The official Tailscale installer rides the exe zip (optional,
       user-run) — reach your store from anywhere; nothing public, ever.
-- [ ] In-app on-ramp (Admin → Server) + friend-to-friend store sharing
-      — next on the bench.
+- [x] Friend-to-friend store sharing (1.8.1): a friend's Home Binger as
+      a source — friend codes, per-friend shelf lists, streams relayed
+      through the host's store. See docs/FRIEND-SHARING.md.
+- [ ] In-app on-ramp (Admin → Server) walks you through the Tailscale
+      setup — next on the bench.
 ## Phase W — WATCH PARTY 🍿 *(owner request 2026-09-08)*
 **ORDER (owner, 2026-09-08): remote connections come FIRST — watch party
 work starts once remote access is done.** Far-away friends can't join a

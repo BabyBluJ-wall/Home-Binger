@@ -1,51 +1,42 @@
-HOW TO PUT HOME BINGER ON GITHUB (about 15 minutes, free)
-==========================================================
+PUTTING A HOME BINGER UPDATE ON GITHUB (about 10 minutes, free)
+===============================================================
 
-You have: this zip = the complete Home Binger source, ready to commit.
-(The .gitignore inside already keeps out runtime data, test media, and
-builds — nothing to configure.)
+You have: this zip = the complete, ready-to-commit source for this
+release. (The .gitignore inside already keeps out runtime data, test
+media, and builds — nothing to configure.)
 
-THE EASY WAY — GITHUB DESKTOP (no command line)
------------------------------------------------
-1. Create a free account at github.com (remember your username).
-2. Install GitHub Desktop from desktop.github.com, open it, sign in.
-3. Extract this zip anywhere (Documents is fine).
-4. In GitHub Desktop: File → Add Local Repository → pick the extracted
-   folder → it says the folder isn't a Git repository yet and offers to
-   create one → click Create Repository.
-     Name: home-binger
-     Git ignore dropdown: NONE  (our .gitignore is already in the folder —
-     picking one here would overwrite it)
-     License dropdown: NONE     (our LICENSE file is already included)
-5. Click "Publish repository" (top right). Keeping "Private" checked is
-   fine and free — flip to public later in the repo Settings whenever
-   you're ready.
-6. Done — your browser opens the repo page.
+FIRST TIME ONLY — create the repo
+---------------------------------
+GitHub Desktop (desktop.github.com) → File → Add Local Repository →
+pick the extracted folder → it offers to create one → name: home-binger,
+Git ignore: NONE, License: NONE (both already included) → Publish.
+Private is fine; flip to public later in repo Settings.
 
-ATTACH THE WINDOWS EXE (permanent tester download)
---------------------------------------------------
-Use the HomeBinger-Windows.zip (115 MB) you already downloaded.
-1. On the repo page → Releases (right column) → "Create a release".
-2. Tag: v1.0.0-beta   Title: Home Binger 1.0 beta   Notes: anything.
-3. Drag HomeBinger-Windows.zip into "Attach binaries".
-4. Publish. (GitHub allows 2 GB per file; ours is 115 MB.)
-That link never expires — share it everywhere instead of file-share links.
+EVERY UPDATE — three drags
+--------------------------
+1. On github.com, open your repo → "Add file" → "Upload files" → drag
+   EVERYTHING from inside this zip in (matching files get replaced).
+   Commit message: a one-liner like "1.8.1".
+2. Releases (right column) → "Draft a new release".
+3. Tag: v1.8.1        <- plain "v" + the version number, no extra letters
+   Title: Home Binger 1.8.1
+   Notes: paste the release-notes file delivered next to this zip
+   (RELEASE-NOTES-v1.8.1.md).
+   Drag the exe zip (HomeBinger-1.8.1-beta.zip) into "Attach binaries",
+   then Publish. Do NOT tick "Set as a pre-release" — the app's update
+   notice only looks at regular releases.
 
-THE COMMAND LINE WAY (if you prefer)
-------------------------------------
-    cd home-binger
-    git init && git add -A && git commit -m "Home Binger 1.0 beta"
-    git remote add origin https://github.com/<your-username>/home-binger.git
-    git branch -M main
-    git push -u origin main
+WHY THE TAG MATTERS
+-------------------
+Every copy of the app checks this release's TAG on launch and shows a
+"new version out" note when the number is higher. Plain v1.8.1 parses
+cleanly. (Tags with letters in front, like "Rv1.8", used to hide the
+note — 1.8.1 tolerates them, but plain v-tags keep it simple.)
 
 ONE CHECK BEFORE GOING PUBLIC
 -----------------------------
-Make sure the rights-encumbered test media is NOT in the commit:
-    git ls-files | grep tests/media
-must print NOTHING. (.gitignore excludes it — this just proves it.)
+The rights-encumbered test media must not be in the commit:
 
-NEXT
-----
-Post the itch.io page with the same exe zip — docs/RELEASE.md walks
-through it. Good luck! — packed with 💙
+    git ls-files | grep tests/media
+
+must print NOTHING. (.gitignore excludes it — this just proves it.)
