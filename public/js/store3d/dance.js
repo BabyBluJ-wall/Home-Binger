@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1789027155999';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1789061225548';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;
@@ -384,14 +384,16 @@ export function buildDance(theme) {
   // (owner's rule: free perf when the room is quiet).
   // Legacy: prefs saved by 1.6.x used the key "intensity" — honored as
   // movement so nobody's saved setting is lost.
-  let P = { movement: 1, speed: 1, ballSpin: 1, pattern: 'auto' };
+  let P = { movement: 1, speed: 1, ballSpin: 1, pattern: 'auto', sweep: 1, spread: 0.5 };
   function setPrefs(p) {
     const num = (v, dflt, lo, hi) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : dflt);
     const mv = p?.movement !== undefined ? p.movement : (p?.intensity !== undefined ? p.intensity : P.movement);
     P = {
       movement: num(mv, P.movement, 0.2, 3),          // t103: wider top end (3×) — full-festival swings
       speed: num(p?.speed, P.speed, 0.3, 3),          // t103: wider top end too
-      pattern: ['auto', '0', '1', '2', '3', '4', '5'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern
+      pattern: ['auto', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern,
+      sweep: num(p?.sweep, P.sweep, 0.2, 2.5),        // t109: shape SIZE — circle diameter, arc width, fan reach
+      spread: num(p?.spread, P.spread, 0, 1)          // t109: how staggered the four heads are (0 = lockstep, 1 = full ripple)
     };   // t103: ballSpin removed (owner) — saved prefs with it are simply ignored
     if (P.pattern !== 'auto') pattern = P.pattern | 0;   // t95: a program pick applies IMMEDIATELY — never wait for the next kick
   }
@@ -431,7 +433,7 @@ export function buildDance(theme) {
       barBeats++;
       pose += (1.5 + (barBeats % 2) * 0.8) * P.speed;         // the next pose the rig eases to (t86: bigger jumps)
       hue = (hue + 0.06 + lv.energy * 0.05) % 1;              // every kick nudges the palette
-      if (barBeats >= 4) { barBeats = 0; pattern = (pattern + 1) % 6; }   // t86: rotate the look; t95: 6 programs
+      if (barBeats >= 4) { barBeats = 0; pattern = (pattern + 1) % 13; }   // t86: rotate the look; t95→t109: 13 programs now
       if (P.pattern !== 'auto') pattern = P.pattern | 0;      // t86: locked look wins
     }
     // t95: THE BEAT GRID + beat envelope. bg = beats + fraction-of-beat, so
@@ -497,6 +499,9 @@ export function buildDance(theme) {
     // bolted to the ceiling; the FIXTURES pivot and their beams trace the
     // circles. The old carousel spin is gone; the orbit program (and the
     // per-beat poses) carry all of the motion now.
+    const sg = bg * Math.PI / 2;                   // t109: the shape clock — one full figure per bar, beat-locked
+    const sw = P.sweep;                            // t109: shape size (diameter / width / reach)
+    const wrapA = (v) => Math.atan2(Math.sin(v), Math.cos(v));   // t109: shortest-path pan — no multi-turn unwinds
     const beamCol = (i) => col.setHSL((hue + i * 0.13) % 1, 1, 0.55);
     for (let i = 0; i < rig.length; i++) {
       const r = rig[i];
@@ -507,7 +512,29 @@ export function buildDance(theme) {
       else if (pattern === 2) { ty = (r.phase + ph * 0.15) * Mc; tx = kick ? (0.3 + ((beats * 7 + i * 3) % 5) * 0.16) * Mc : 0.1 * Mc; punch *= kick ? 3.2 : (lv.bass > 0.3 ? 1.2 : 0.08); }  // strobe — UNTOUCHED (t86 fan contract)
       else if (pattern === 3) { ty = ((i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15) * Mc; tx = (0.14 + 0.7 * (1 - barBeats * 0.24) + (barBeats === 3 && kick ? 0.55 : 0)) * Mc; if (barBeats === 3 && kick) { punch *= 3.5; } }  // build & drop — steeper climb, HARDER drop on the four (t103)
       else if (pattern === 4) { ty = (bg * Math.PI * 0.62 + i * Math.PI / 2) * Mc * 1.3; tx = (0.24 + 0.52 * Math.sin(bg * Math.PI + i * 1.3)) * Mc; punch *= 1 + kp * 0.9; }  // ORBIT — THE circle: full 3D cones, wider + faster now the truss is bolted (t103)
+      // ── t109: THE MOVEMENT WAVE — continuous shapes on the BEAT GRID. One
+      // full figure per bar (sg), frozen between beats (the t59 stillness
+      // contract holds), sweeping while the music drives. The moving-head
+      // recipe: PAN describes the circle, TILT sets its diameter. sweep
+      // scales the diameter; spread staggers the heads; movement (Mc) scales
+      // all travel, as everywhere. The kick flares the beams out a touch —
+      // MOVEMENT, never the brightness knob.
+      else if (pattern === 6) { ty = r.phase + sg; tx = 0.42 + 0.30 * sw * Mc * Math.cos(sg); punch *= 1 + kp * 0.6; }   // CIRCLE — all four heads draw ONE circle together (owner's ask)
+      else if (pattern === 7) { ty = r.phase + 0.55 * sw * Mc * Math.sin(sg); tx = 0.42 + 0.30 * sw * Mc * Math.sin(2 * sg); punch *= 1 + kp * 0.6; }   // FIGURE-8 — pan 1×, tilt 2× (the classic accident, now on purpose)
+      else if (pattern === 8) { const br = 0.30 + 0.70 * (0.5 + 0.5 * Math.sin(bg * Math.PI / 8)); ty = r.phase + sg; tx = 0.42 + 0.34 * sw * Mc * br * Math.cos(sg); punch *= 1 + kp * 0.6; }   // BREATH — the circle's diameter swells over 4 bars
+      else if (pattern === 9) { ty = r.phase + 0.85 * sw * Mc * Math.sin(sg / 2 + i * Math.PI / 2 * P.spread); tx = 0.38 + 0.16 * Mc * Math.sin(sg + i * 0.5); punch *= 1 + kp * 0.5; }   // STADIUM ARC — wide slow fanned sweeps across the room
+      else if (pattern === 10) { const f = 0.30 + 0.70 * (0.5 - 0.5 * Math.cos(bg * Math.PI / 2)); ty = r.phase + ((i / 3) - 0.5) * 1.5 * sw * Mc * f; tx = 0.36 + Math.abs(i - 1.5) / 1.5 * 0.34 * Mc * f; punch *= 1 + kp * 0.8; }   // FAN — peacock open across the bar, close on the one (outer heads dip lower)
+      else if (pattern === 11) { ty = r.phase + sg; tx = 0.42 + 0.30 * sw * Mc * Math.cos(sg + i * Math.PI / 2 * P.spread); punch *= 1 + kp * 0.6; }   // SNAKE — the circle ripples around the truss (spread 0 = lockstep, 1 = full ripple)
+      else if (pattern === 12) { const sep = 0.12 + kp * 1.1 * sw; ty = r.phase * 0.15 + 0.35 * Mc * Math.sin(sg * 0.25) + (i - 1.5) * sep * Mc; tx = 0.40 + 0.10 * Mc * Math.sin(sg * 0.5); punch *= 1 + kp * 1.2; }   // ALL-EYES — converge, searchlight together, BURST on the kick
       else { const h1 = ((beats * 2654435761 + i * 40503) >>> 0) % 1000 / 1000, h2 = ((beats * 97 + i * 13 + 7) >>> 0) % 1000 / 1000; ty = (h1 * 2.6 - 1.3) * Mc; tx = (0.1 + h2 * 0.9) * Mc; punch *= 1 + kp * 1.5; }  // BEAT JUMP — a fresh 3D pose on every kick, bigger scatter + punch (t103)
+      // t109: the shape programs get a kick FLARE (the beams push out ON the
+      // kick and settle after — movement, not brightness) and shortest-path
+      // pan (a circling head never unwinds through turns it doesn't need).
+      if (pattern >= 6) {
+        tx += kp * 0.30 * Mc;
+        r.pivot.rotation.y = wrapA(r.pivot.rotation.y);
+        ty = wrapA(ty);
+      }
       // t59: EASE to the target, then CAP the travel speed — real moving-head
       // fixtures SWEEP to their next position; they never snap. t93: with
       // movement pushing targets farther, the caps bind more — so the SPEED
@@ -558,13 +585,14 @@ export function buildDance(theme) {
       },
       sharedWallOpen: L.dance.door.width, doorCenterZ: Z1 - L.dance.door.width / 2 - 0.35,
       speakers: speakerPts.length, subs: 2, ledBars: ledBars.length + 2,
-      boothX, boothZ, patterns: 6,    // t51 · t54 · t95: booth by the DOOR, apron behind; 6 programs
+      boothX, boothZ, patterns: 13,   // t51 · t54 · t95→t109: booth by the DOOR; 13 programs (6 poses + 7 shapes)
       boothApron: +(boothZ - 0.55 - Z0).toFixed(2),   // walkable gap behind (m)
       subsAtFront: +(subPositions[0].z - Z0).toFixed(2) > 2.4,   // t58: mouths visible past the counter
       boothSideLane: +(boothX - 1.7 - X0).toFixed(2), // walkable left lane (m)
       libSignOverDoor: { x: +libSign.position.x.toFixed(2), y: +libSign.position.y.toFixed(2) },
       lightMode, djSpot: +djSpot.intensity.toFixed(1),   // t54: idle spot ↔ live rig
       beat: { beats, bpm, lastBeatAgo: +(clock - lastBeatT).toFixed(2) },      // t59: the beat engine
+      program: pattern,                                                   // t109: the live program id (0–12)
       rigYaws: rig.slice(0, 4).map(r => +r.pivot.rotation.y.toFixed(3)),        // t59: per-beam angles (beams only)
       rigPitches: rig.slice(0, 4).map(r => +r.pivot.rotation.x.toFixed(3)),
       rigZoom: rig.slice(0, 4).map(r => +r.cone.scale.x.toFixed(3)),        // t95: beat-punched beam zoom

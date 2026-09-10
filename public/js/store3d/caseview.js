@@ -12,9 +12,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
 import { RoundedBoxGeometry } from '/vendor/RoundedBoxGeometry.js';
-import { TUNING } from './config.js?v=1789027155999';
-import { drawPlaceholderCover, hashString } from './textures.js?v=1789027155999';
-import { api } from '../api.js?v=1789027155999';
+import { TUNING } from './config.js?v=1789061225548';
+import { drawPlaceholderCover, hashString } from './textures.js?v=1789061225548';
+import { api } from '../api.js?v=1789061225548';
 
 const CORNER = { vhs: 0.014, dvd: 0.010, cd: 0.006 };
 

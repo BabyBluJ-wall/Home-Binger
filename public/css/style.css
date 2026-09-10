@@ -532,9 +532,6 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 .dj-ctl b { font-size: 12px; text-align: right; color: var(--vb-ink, #eef1ff); }
 .dj-ctl input[type=range] { width: 100%; accent-color: var(--vb-accent, #ffd23f); }
 .dj-row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 2px; }
-.dj-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }   /* t104: playlist | lights */
-@media (max-width: 720px) { .dj-cols { grid-template-columns: 1fr; } }
-.dj-col { min-width: 0; }
 .dj-queue { border: 1px solid var(--vb-line, #2a3354); border-radius: 10px; padding: 4px; }
 .dj-qrow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 7px; }
 .dj-qrow:hover { background: color-mix(in srgb, var(--vb-accent, #ffd23f) 8%, transparent); }

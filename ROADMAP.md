@@ -295,7 +295,9 @@ in the folder; repo pack 75 files TCC-swept ×0. Awaiting owner upload.)*
       · light-rig realism (truss BOLTED — beams sweep, fixtures don't
       carousel; all 6 programs sharpened; movement/speed ranges to 3×) ·
       mirror-ball spin setting removed (ball spins with the music) ·
-      light controls moved INTO the DJ menu (50/50 playlist | lights) ·
+      light controls OUT of settings (t108b: into the DJ BOOTH panel —
+      owner course-correction 2026-09-10; the jukebox menu is music-only
+      again, as before t104) ·
       friend-share lists = groups only (All/None picks, source-grouped;
       Test toast reports shelf names, never a title). Suite 99/99 ×2.
 - [x] **1.8.8 wave, part 2 (DONE 2026-09-10, suite 101/101 ×2):**
@@ -312,6 +314,21 @@ in the folder; repo pack 75 files TCC-swept ×0. Awaiting owner upload.)*
       live booth-laptop monitor (CanvasTexture HUD), responsive
       compact mode <1100px. PENDING SUB-ITEMS: ♭/♯ key shift, PFL
       headphone cue. Package bumps to 1.8.8 at ship.
+      **SHIPPED 2026-09-10: pkg 1.8.8, suite 101/101 ×2 (version verified),
+      exe + source zips + release notes built, gofile backup
+      gofile.io/d/WkUW01f0 — waiting on the owner's GitHub upload
+      (tag v1.8.8, not pre-release).**
+- [x] **MOVEMENT WAVE t109 (owner 2026-09-10: "each light can go on an x y
+      axis and make a circle… I want the lights to point and make a circle
+      where its pointing" + "the spotlights need to move more") — DONE
+      2026-09-10, suite 102/102 ×2:** 7 continuous shape programs (Circle
+      · Figure-8 · Breath · Stadium arc · Fan · Snake · All-eyes) on the
+      beat grid (one figure/bar; pan describes, tilt = diameter; frozen
+      when the music rests — t59 stillness contract held), kick flare
+      (kp-coupled tilt push), sweep + spread knobs in the booth strip,
+      shortest-path pan (no unwinds), Auto rotates all 13. Research:
+      docs/RESEARCH-DANCE-LIGHTS.md wave-2 section. Ships as the NEXT
+      version (1.8.8 zips already delivered; pkg bump at ship).
 - [ ] **HB↔HB rung 2** — item-level share granularity · "friend store
       offline" indicator in the UI · follower-side browse polish.
 *(DECIDED: ONE BIGGER RELEASE — t94 hardening + version notice + remote

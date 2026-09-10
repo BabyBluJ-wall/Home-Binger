@@ -921,7 +921,7 @@ const addonMock = http.createServer((req, res) => {
   R.checks.t51Dance = await page.evaluate(async () => {
     const s = window.__VB.scene, ctx = window.__VB.mainCtx;
     const di = s.danceInfo();
-    const rigOk = di.speakers === 10 && di.subs === 2 && di.ledBars >= 12 && di.patterns === 6;   // t95: 6 programs
+    const rigOk = di.speakers === 10 && di.subs === 2 && di.ledBars >= 12 && di.patterns === 13;  // t95: 6 programs → t109: 13 (6 poses + 7 shapes)
     // MUSIC CONTAINMENT — each zone audible only in its own wing
     const jb = s.jukeboxAudio;
     jb.setZone('dance');
@@ -2438,7 +2438,7 @@ const addonMock = http.createServer((req, res) => {
     const quiet = { bass: 0.04, mid: 0.03, treble: 0.03, energy: 0.03, live: true };
     s.danceFakeLevels(SILENT);
     s.danceTick(SILENT, 60);                    // drain the bass history — kicks become deterministic
-    const sixOk = s.danceInfo().patterns === 6;
+    const programsOk = s.danceInfo().patterns === 13;   // t109: 6 pose programs + 7 continuous shapes
     // ORBIT (program 4): 3 beats, each = 1 loud tick (kick) + 6 quiet ticks (0.35 s > refractory)
     s.setDancePrefs({ pattern: '4', movement: 1, speed: 1, ballSpin: 1 });
     s.danceTick(SILENT, 20);
@@ -2473,9 +2473,109 @@ const addonMock = http.createServer((req, res) => {
     s.setDancePrefs({ pattern: 'auto', movement: 1, speed: 1, ballSpin: 1 });
     s.danceFakeLevels(null);
     const yawMax = +Math.max(...s.danceInfo().rigYaw.map(y => Math.abs(y))).toFixed(3);
-    return { sixOk, beatsD, steps, tiltSpread, trussD: +(iE.trussYaw - truss0).toFixed(3), kickMove: +kickMove.toFixed(3), zoom1: +zoom1.toFixed(3), zoom2: +zoom2.toFixed(3), yawMax,
-      ok: sixOk && lockOk && tiltOk && trussOk && jumpOk && zoomOk && boundedOk };
+    return { programsOk, beatsD, steps, tiltSpread, trussD: +(iE.trussYaw - truss0).toFixed(3), kickMove: +kickMove.toFixed(3), zoom1: +zoom1.toFixed(3), zoom2: +zoom2.toFixed(3), yawMax,
+      ok: programsOk && lockOk && tiltOk && trussOk && jumpOk && zoomOk && boundedOk };
   });
+
+  // 17b1b2) t109: THE MOVEMENT WAVE — the owner's ask (2026-09-10): "each
+  //         light can go on an x y axis and make a circle… I want the lights
+  //         to point and make a circle where its pointing" + the full menu
+  //         (shapes, group moves, beat-driven flare, sweep/spread knobs).
+  //         Continuous shapes ride the BEAT GRID: one figure per bar, frozen
+  //         between beats (the t59 stillness contract), pan DESCRIBES the
+  //         circle while tilt sets its diameter (the moving-head recipe).
+  {
+    R.checks.t109LightMoves = await page.evaluate(async () => {
+      const s = window.__VB.scene, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      const SILENT = { bass: 0, mid: 0, treble: 0, energy: 0, live: false };
+      const LV = { bass: 0.9, mid: 0.5, treble: 0.4, energy: 0.8, live: true };
+      const quiet = { bass: 0.04, mid: 0.03, treble: 0.03, energy: 0.03, live: true };
+      s.danceFakeLevels(SILENT);
+      s.danceTick(SILENT, 60);                    // drain bass history — deterministic kicks
+      const programsOk = s.danceInfo().patterns === 13;
+      const drive = (wins) => {                   // one beat per window: kick + 6 quiet ticks
+        const Y = [], P4 = [];
+        for (let k = 0; k < wins; k++) {
+          s.danceTick(LV, 1); Y.push(s.danceInfo().rigYaw[0]); P4.push(s.danceInfo().rigPitches[0]);
+          for (let q = 0; q < 6; q++) { s.danceTick(quiet, 1); Y.push(s.danceInfo().rigYaw[0]); P4.push(s.danceInfo().rigPitches[0]); }
+        }
+        return { Y, P4 };
+      };
+      const range = (a) => +(Math.max(...a) - Math.min(...a)).toFixed(3);
+      const xBeam = () => { const p = s.danceInfo().rigPitches, y = s.danceInfo().rigYaw;
+        return { p: +(Math.max(...p) - Math.min(...p)).toFixed(3), y: +(Math.max(...y) - Math.min(...y)).toFixed(3) }; };
+      // 1) CIRCLE — continuous between beats, tilt orbits (the diameter), pan stays bounded (shortest path)
+      s.setDancePrefs({ pattern: '6', movement: 1, speed: 1, sweep: 1, spread: 0.5 });
+      const c1 = drive(3);
+      const moving = c1.Y.slice(1).filter((y, k) => Math.abs(y - c1.Y[k]) > 0.01).length;
+      const continuous = moving >= c1.Y.length - 1 - 2;   // every tick moves (a couple of ease-settling ticks allowed)
+      const tiltOrbits = range(c1.P4) > 0.12;             // the tilt swings through its diameter
+      const bounded = Math.max(...c1.Y.map(Math.abs)) < Math.PI + 0.3;
+      const yawSpreadCircle = range(c1.Y.slice(0, 8));    // all heads in phase — pan spread stays tiny vs snake
+      // 2) SWEEP scales the shape (figure-8 tilt amplitude: 0.3 vs 2.2)
+      s.setDancePrefs({ pattern: '7', sweep: 0.3 });
+      const f1 = drive(4);
+      s.setDancePrefs({ pattern: '7', sweep: 2.2 });
+      const f2 = drive(4);
+      const sweepOk = range(f2.P4) > range(f1.P4) * 1.6;
+      // 3) SNAKE + SPREAD — the ripple staggers the heads (pitch spread across beams)
+      s.setDancePrefs({ pattern: '11', sweep: 1, spread: 0.05 });
+      s.danceTick(LV, 1); s.danceTick(quiet, 3);
+      let snakeTight = 0; for (let k = 0; k < 5; k++) { s.danceTick(quiet, 1); snakeTight = Math.max(snakeTight, xBeam().p); }
+      s.setDancePrefs({ pattern: '11', spread: 0.95 });
+      s.danceTick(LV, 1); s.danceTick(quiet, 3);
+      let snakeWide = 0; for (let k = 0; k < 5; k++) { s.danceTick(quiet, 1); snakeWide = Math.max(snakeWide, xBeam().p); }
+      const spreadOk = snakeWide > snakeTight + 0.15;
+      // 4) BEAT FLARE — the kick pushes the beams out on top of the circle
+      s.setDancePrefs({ pattern: '6', sweep: 1, spread: 0.5 });
+      s.danceTick(quiet, 20);
+      let pre = s.danceInfo().rigPitches[0];
+      s.danceTick(LV, 1);
+      const kickDelta = Math.abs(s.danceInfo().rigPitches[0] - pre);
+      s.danceTick(quiet, 2);
+      const settleDelta = Math.abs(s.danceInfo().rigPitches[0] - pre);
+      const flareOk = kickDelta > 0.06 && settleDelta > kickDelta * 0.8;   // the push PERSISTS a couple of ticks (an envelope, not a blip)
+      // 5) FAN — opens across the bar (cross-beam spread grows)
+      s.setDancePrefs({ pattern: '10' });
+      s.danceTick(quiet, 30);
+      let fanMin = 9, fanMax = 0;                  // the fan BREATHES with the bar: spread swings as f cycles
+      for (let k = 0; k < 8; k++) {                // two full 4-beat cycles, continuous stream (grid never saturates)
+        s.danceTick(LV, 1);
+        for (let q = 0; q < 6; q++) { s.danceTick(quiet, 1); const p = xBeam().p; if (p < fanMin) fanMin = p; if (p > fanMax) fanMax = p; }
+      }
+      const fanOk = fanMax > fanMin + 0.06;        // opens and closes within the bar — PITCH spread (no r.phase base in it)
+      // 6) ALL-EYES — burst on the kick (spread spikes)
+      s.setDancePrefs({ pattern: '12' });
+      s.danceTick(quiet, 30);
+      const eyesA = xBeam().y;
+      s.danceTick(LV, 1); s.danceTick(quiet, 1);
+      const eyesB = xBeam().y;
+      const burstOk = eyesB > eyesA + 0.1;
+      // 7) AUTO rotation over 13 programs
+      s.setDancePrefs({ pattern: 'auto' });
+      s.danceTick(SILENT, 60);                     // drain, then 4 kicks = 1 rotation
+      const p0 = s.danceInfo().program;
+      for (let k = 0; k < 4; k++) { s.danceTick(LV, 1); s.danceTick(quiet, 6); }
+      const rotateOk = s.danceInfo().program !== p0;
+      // 8) the BOOTH strip carries the new knobs (real DOM)
+      window.__VB.ui.openDj('booth');
+      await sleep(400);
+      const selN = document.querySelectorAll('#dance-pattern option').length;
+      const hasKnobs = !!document.querySelector('#dance-sweep') && !!document.querySelector('#dance-spread');
+      const swEl = document.querySelector('#dance-sweep');
+      let uiApplied = false;
+      if (swEl) { swEl.value = '2'; swEl.dispatchEvent(new Event('input')); await sleep(200);
+        uiApplied = s.danceInfo().lights.sweep === 2; }
+      document.getElementById('dj-modal').classList.add('hidden');
+      // restore everything
+      window.__VB.state.updatePrefs({ dance: { movement: 1, speed: 1, pattern: 'auto', sweep: 1, spread: 0.5 } });
+      s.setDancePrefs({ movement: 1, speed: 1, pattern: 'auto', sweep: 1, spread: 0.5 });
+      s.danceFakeLevels(null);
+      return { programsOk, continuous, tiltOrbits, bounded, yawSpreadCircle, sweepSmall: range(f1.P4), sweepBig: range(f2.P4), sweepOk, fanMin, fanMax,
+        snakeTight, snakeWide, spreadOk, kickDelta, settleDelta, flareOk, fanOk, eyesA, eyesB, burstOk, rotateOk,
+        selN, hasKnobs, uiApplied, ok: programsOk && continuous && tiltOrbits && bounded && sweepOk && spreadOk && flareOk && fanOk && burstOk && rotateOk && selN === 14 && hasKnobs && uiApplied };
+    });
+  }
 
   // 17b1c) t95: CHANGE PASSWORD — the one profile change without coverage:
   // current password required + verified, minimum length, round-trip login.
@@ -2547,18 +2647,19 @@ const addonMock = http.createServer((req, res) => {
       ok: tw.menuSurface === '#e6c8a0' && tw.inkFlipped === '#171c3f' && tw.inkDark === '#e8edff' && tw.restored };
   }
 
-  // 17b1d3) t104: the dance-floor LIGHT CONTROLS live in the DJ menu now —
-  // 50/50 with the music list — and the My Theme panel no longer carries them.
+  // 17b1d3) t104: the dance-floor LIGHT CONTROLS live in the DJ BOOTH panel
+  // (t108b, owner course-correction 2026-09-10: "not the jukebox menu — the
+  // booth panel we just revamped"). The jukebox menu is back to music-only,
+  // and the My Theme panel still doesn't carry them.
   // t103: the mirror-ball spin setting is GONE (the ball just spins).
   {
     const dj = await page.evaluate(async () => {
       const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
-      w.__VB.ui.openDj('jukebox');
-      await sleep(350);
+      w.__VB.ui.openDj('booth');
+      await sleep(400);
       const body = document.getElementById('dj-body');
-      const panelInDj = !!body && !!body.querySelector('#dance-int') && !!body.querySelector('#dance-spd') && !!body.querySelector('#dance-pattern');
+      const panelInBooth = !!body && !!body.querySelector('#dance-int') && !!body.querySelector('#dance-spd') && !!body.querySelector('#dance-pattern');
       const noBall = !!body && !body.querySelector('#dance-ball');
-      const cols = !!body && !!body.querySelector('.dj-cols');
       const mv = body?.querySelector('#dance-int');
       if (mv) { mv.value = '2.2'; mv.dispatchEvent(new Event('input')); }
       await sleep(250);
@@ -2568,6 +2669,12 @@ const addonMock = http.createServer((req, res) => {
       await sleep(250);
       const patternApplied = w.__VB.scene.danceInfo().lights.pattern === '4';
       document.getElementById('dj-modal').classList.add('hidden');   // close
+      // the JUKEBOX menu must be music-only again (owner: restore it)
+      w.__VB.ui.openDj('jukebox');
+      await sleep(350);
+      const jb = document.getElementById('dj-body');
+      const jukeboxClean = !!jb && !jb.querySelector('#dance-int') && !jb.querySelector('#dance-pattern') && !jb.querySelector('.dj-cols');
+      document.getElementById('dj-modal').classList.add('hidden');
       // the settings panel must NOT carry the section anymore
       w.__VB.ui.openSettings('look');
       await sleep(350);
@@ -2577,10 +2684,10 @@ const addonMock = http.createServer((req, res) => {
       // restore the prefs this check touched
       w.__VB.state.updatePrefs({ dance: { movement: 1, speed: 1, pattern: 'auto' } });
       w.__VB.scene.setDancePrefs({ movement: 1, speed: 1, pattern: 'auto' });
-      return { panelInDj, noBall, cols, movementApplied, patternApplied, goneFromSettings };
+      return { panelInBooth, noBall, movementApplied, patternApplied, jukeboxClean, goneFromSettings };
     });
     R.checks.t104DjLights = { ...dj,
-      ok: dj.panelInDj && dj.noBall && dj.cols && dj.movementApplied && dj.patternApplied && dj.goneFromSettings };
+      ok: dj.panelInBooth && dj.noBall && dj.movementApplied && dj.patternApplied && dj.jukeboxClean && dj.goneFromSettings };
   }
 
   // 17b1d4) t105: SLIDER MEMORY — the pro rig's sliders remember where you

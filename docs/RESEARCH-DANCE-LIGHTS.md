@@ -98,3 +98,79 @@ cap SpotLight count — 4 fixture spots + 1 pin spot is fine); the t54/t59
 suite checks assert current idle/live behavior — the lights panel must
 default to today's numbers so checks stay green (or get updated
 deliberately in the same session).
+
+---
+
+# 💡 RESEARCH — Movement wave 2: "the lights need to move more" (2026-09-10)
+
+> **STATUS: BUILT 2026-09-10 (t109) — the whole menu, suite 102/102 ×2.**
+> Circle · Figure-8 · Breath · Stadium arc · Fan · Snake · All-eyes +
+> Sweep/Spread knobs + kick flare, all beat-grid-locked. Kept for the
+> reasoning.
+
+*Owner: "Each light can go on an x y axis and make a circle using the x y
+axis. I dont want the whole rig rotating I want the lights to point and
+make a circle where its pointing." + "research how lights in light shows
+move more." Not yet implemented — this is the menu for the next update.*
+
+## What the rig does today (t103/t95)
+
+Each of the 10 fixtures already has its own pan/tilt pivot
+(`pivot.rotation.y` = pan, `.x` = tilt) — but motion is **per-beat pose
+eases**: every beat picks a new pose and the head glides there. Subtle
+glides, no continuous movement. The owner wants **continuous, big,
+visible sweeps** — heads actively drawing shapes, rig never rotating
+(the truss is bolted since t103 and stays bolted).
+
+## What the pros do (researched 2026-09-10)
+
+**The circle recipe** (High End Systems / ETC community forum — the
+industry-standard answer): put a sine on pan and a cosine on tilt (90°
+phase offset) → the beam tip draws a circle. Two real-world details:
+- **Tilt the head to ~45° first** — from straight-ahead "home" the same
+  math reads as a figure-8, not a circle.
+- **Keep the circle modest (~20°)** — oversize circles read sloppy.
+- Advanced variant (Wikipedia, intelligent lighting): one axis draws
+  the circle while the other slowly changes the **diameter** — the
+  circle breathes. Noted as the smoothest-looking effect.
+
+**Effect vocabulary** (DMXDesktop's effect engine — mirrors what DMX
+consoles ship): Move effects = **Circle, Figure of 8, Arc (with Fan),
+Triangle**; parameters = **Phase** (per-fixture timing offset) and
+**Fan** (angular spread across fixtures). Chase family = **Chase,
+Wave** (smooth rolling chase), variants L→R / In→Out / Out→In.
+**Spread** staggers any effect across fixtures so it cascades.
+**VU-Meter** = intensity rides the music level.
+
+**SoundSwitch / Engine Lighting** (the DJ-software gold standard):
+autoscripted, BPM- and PHRASE-synced shows (build vs drop treated
+differently). Validates our beat-lock + Build&Drop; phrase awareness
+(e.g. calmer shapes during breakdowns) is a future refinement.
+
+**Haze physics**: beams "come alive" in haze — our visible cones ARE
+our haze; fatter cones = wash look, thinner = beam look (a "zoom"
+setting maps to this).
+
+## The menu (proposed for the next update)
+
+**A. Continuous shapes per head** (his core ask + the shape family
+from the same two motors — Program entries):
+- **Circle** — sin/cos pan+tilt, 45° tilt bias, size-controlled
+- **Figure-8** — pan at 2× tilt frequency (the accidental classic)
+- **Breath** — circle whose diameter swells/shrinks (pan circles,
+  tilt ramps) — the "smoothest" per Wikipedia
+- **Stadium arc** — big slow fanned arcs across the room
+**B. Group moves** (all 10 as one instrument):
+- **Fan** — peacock spread ↔ converge on the beat
+- **Snake / wave** — phase-offset ripple around the truss
+- **All-eyes** — converge to one floor point, burst on the drop
+**C. Beat-driven movement (never brightness)** — beams dip toward the
+floor on the kick, rise between; movement energy rides the VU.
+**D. New settings in the booth lights strip**: **Sweep size** (circle
+diameter) + **Spread** (how staggered the 10 heads are). Program list
+gains the new shapes; Auto keeps rotating. Doctrine intact: movement
+full-3D, per-device prefs, cheap math (sin/cos × 10).
+
+Sources: community.etcconnect.com (HES) circle thread · en.wikipedia.org
+/wiki/Intelligent_lighting · dmxdesktop.com/knowledgebase/effect-types ·
+soundswitch.com · r/lightingdesign, r/DJs, r/Beatmatch threads.

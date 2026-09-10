@@ -18,7 +18,7 @@ const djpUi = { eq: [{}, {}], trim: [1, 1], fader: [1, 1], rate: [1, 1], xf: 0.5
   pitch: 0, pitchRange: 8, xfAssign: ['a', 'b'], color: [0.5, 0.5], colorMode: ['filter', 'filter'] };   // t108
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789027155999';
+import { LAYOUT } from './config.js?v=1789061225548';
 
 const D = LAYOUT.room.l / 2;
 const AUDIO_RE = /\.(mp3|wav|ogg|oga|flac|m4a|aac|opus)$/i;
@@ -635,13 +635,13 @@ export function createDjPro() {
   }
 
   // ═══════════════════════ THE PANEL (mounted by ui.js) ══════════════════════
-  function mount(container, { items = [], onClose } = {}) {
+  function mount(container, { items = [], onClose, dance, setDance } = {}) {
     mounted = true;
     mode = localStorage.getItem('hb_djpro_mode') || 'beginner';
     container.innerHTML = '';
     const style = document.createElement('style');
     style.textContent = `
-      .djp{display:flex;flex-direction:column;gap:8px;color:#dfe6ff;font-family:system-ui}
+      .djp{display:flex;flex-direction:column;gap:6px;color:#dfe6ff;font-family:system-ui}
       .djp *{box-sizing:border-box}
       /* t108: obsidian glassmorphism — blur 16, near-black panels, neon accents */
       .djp-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -678,6 +678,12 @@ export function createDjPro() {
       .djp-vinyl-art{position:absolute;inset:26%;border-radius:50%;background:#0b0e20 center/cover;box-shadow:0 0 0 1px #ffffff22}
       .djp-vinyl-dot{position:absolute;left:50%;top:4px;width:5px;height:14px;margin-left:-2px;border-radius:3px;background:#00f0ff}
       .djp-deck.b .djp-vinyl-dot{background:#ff2a85}
+      .djp-lights{display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid #232a4d;border-radius:8px;padding:2px 8px;background:rgba(10,10,18,.88);font-size:11px}
+      .djp-lights>b{letter-spacing:.1em;color:#ffb800;font-size:10px}
+      .djp-lights>span{color:#8fa0d8}
+      .djp-lights input[type="range"]{flex:1 1 70px;min-width:60px}
+      .djp-lights b:not(:first-of-type){min-width:30px;text-align:right}
+      .djp-lights select{background:rgba(10,10,18,.88);border:1px solid #2a3358;color:#dfe6ff;border-radius:6px;padding:2px 4px;font-size:11px}
       .djp-list{flex:1 1 auto;min-height:64px;overflow-y:auto;overflow-x:hidden;border:1px solid #232a4d;border-radius:8px;background:rgba(10,10,18,.88);backdrop-filter:blur(16px)}   /* t67: the ONLY thing that scrolls */
       .djp-rowitem{display:flex;gap:8px;padding:5px 8px;font-size:12px;border-bottom:1px solid #171c36;cursor:pointer;align-items:center}
       .djp-rowitem:hover{background:#121731}
@@ -841,13 +847,28 @@ export function createDjPro() {
             </select></div>
         </div>
       </div>
+      <div class="djp-lights" title="The rig wakes when the dance hall's music plays and locks to the beat — you shape how the lights MOVE (the music drives brightness)">
+        <b>💡 FLOOR LIGHTS</b>
+        <span>move</span><input type="range" id="dance-int" min="0.2" max="3" step="0.1"><b id="dance-int-v"></b>
+        <span>speed</span><input type="range" id="dance-spd" min="0.3" max="3" step="0.1"><b id="dance-spd-v"></b>
+        <span title="How wide the shapes are — circle diameter, arc width">sweep</span><input type="range" id="dance-sweep" min="0.2" max="2.5" step="0.1"><b id="dance-sweep-v"></b>
+        <span title="How staggered the four heads are — 0 = lockstep, 1 = full ripple">spread</span><input type="range" id="dance-spread" min="0" max="1" step="0.05"><b id="dance-spread-v"></b>
+        <select id="dance-pattern" title="Program">
+          <option value="auto">Auto</option><option value="0">Laser sweep</option><option value="1">Chase</option>
+          <option value="2">Strobe hits</option><option value="3">Build &amp; drop</option>
+          <option value="4">Orbit cones</option><option value="5">Beat jump</option>
+          <option value="6">Circle</option><option value="7">Figure-8</option><option value="8">Breath</option>
+          <option value="9">Stadium arc</option><option value="10">Fan</option><option value="11">Snake</option>
+          <option value="12">All-eyes</option>
+        </select>
+      </div>
       <div class="djp-row">
         <button class="djp-btn" id="djp-tab-lib">📚 Library</button>
         <button class="djp-btn" id="djp-tab-crate" title="Your staging crate — tracks parked for later">🏷️ Staging (0)</button>
         <input id="djp-search" placeholder="Search title / BPM / key…" style="flex:1;background:#0b0e20;border:1px solid #232a4d;color:#dfe6ff;border-radius:6px;padding:6px 8px" title="Filter the playlist">
         <select id="djp-fkey" title="Camelot key filter"><option value="">Key: All</option></select>
-        <input id="djp-fbpm1" type="number" min="60" max="200" placeholder="BPM ≥" style="width:64px" title="BPM range — low end">
-        <input id="djp-fbpm2" type="number" min="60" max="200" placeholder="BPM ≤" style="width:64px" title="BPM range — high end">
+        <input id="djp-fbpm1" type="number" min="60" max="200" placeholder="BPM ≥" style="width:60px;padding:3px 4px" title="BPM range — low end">
+        <input id="djp-fbpm2" type="number" min="60" max="200" placeholder="BPM ≤" style="width:60px;padding:3px 4px" title="BPM range — high end">
       </div>
       <div class="djp-list" id="djp-list"></div>
       <div class="djp-hint">Green rows mix with the playing deck · <b>A</b>/<b>B</b> load · <b>Q</b> → AUTO-DJ · <b>🏷️</b> staging.</div>`;
@@ -929,6 +950,24 @@ export function createDjPro() {
     root.querySelector('#djp-fbpm1').oninput = renderList;
     root.querySelector('#djp-fbpm2').oninput = renderList;
     root.querySelector('#djp-tab-lib').onclick = () => { listTab = 'lib'; renderList(); };
+    // t108b: DANCE-FLOOR LIGHTS — the booth owns them now (moved out of the
+    // jukebox menu per the owner). Prefs ride state.prefs.dance (server-side,
+    // so they're remembered across reboots, not just reopens).
+    {
+      const D0 = dance || {};
+      const D = { movement: D0.movement ?? D0.intensity ?? 1, speed: D0.speed ?? 1, pattern: D0.pattern ?? 'auto' };
+      const wi = root.querySelector('#dance-int'), ws = root.querySelector('#dance-spd'), wp = root.querySelector('#dance-pattern');
+      if (wi) { wi.value = D.movement; root.querySelector('#dance-int-v').textContent = D.movement + '×';
+        wi.oninput = () => { root.querySelector('#dance-int-v').textContent = (+wi.value) + '×'; setDance?.({ movement: +wi.value }); }; }
+      if (ws) { ws.value = D.speed; root.querySelector('#dance-spd-v').textContent = D.speed + '×';
+        ws.oninput = () => { root.querySelector('#dance-spd-v').textContent = (+ws.value) + '×'; setDance?.({ speed: +ws.value }); }; }
+      const wsw = root.querySelector('#dance-sweep'), wpr = root.querySelector('#dance-spread');
+      if (wsw) { wsw.value = D0.sweep ?? 1; root.querySelector('#dance-sweep-v').textContent = (D0.sweep ?? 1) + '×';
+        wsw.oninput = () => { root.querySelector('#dance-sweep-v').textContent = (+wsw.value) + '×'; setDance?.({ sweep: +wsw.value }); }; }
+      if (wpr) { wpr.value = D0.spread ?? 0.5; root.querySelector('#dance-spread-v').textContent = Math.round((D0.spread ?? 0.5) * 100) + '%';
+        wpr.oninput = () => { root.querySelector('#dance-spread-v').textContent = Math.round((+wpr.value) * 100) + '%'; setDance?.({ spread: +wpr.value }); }; }
+      if (wp) { wp.value = String(D.pattern); wp.onchange = () => setDance?.({ pattern: wp.value }); }
+    }
     root.querySelector('#djp-tab-crate').onclick = () => { listTab = 'crate'; renderList(); };
 
     // per-deck wiring

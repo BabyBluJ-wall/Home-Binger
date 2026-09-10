@@ -17,8 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
 import { RoundedBoxGeometry } from '/vendor/RoundedBoxGeometry.js';   // three.js addon, vendored
-import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1789027155999';
-import { shelfTexture, hashString } from './textures.js?v=1789027155999';
+import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1789061225548';
+import { shelfTexture, hashString } from './textures.js?v=1789061225548';
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  PART 1 — where the shelves are

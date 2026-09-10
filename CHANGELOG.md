@@ -1,3 +1,31 @@
+## The lights really move now — the movement wave (built for the next release)
+- **Each spotlight draws real shapes.** The four heads now sweep
+  continuously — pan and tilt working together like real moving-head
+  fixtures — instead of gliding to a new pose on each beat. Seven new
+  programs:
+  - **Circle** — all four heads draw one circle together, right where
+    they're pointing (the classic pan-describes / tilt-sets-diameter
+    recipe)
+  - **Figure-8** — the infinity loop
+  - **Breath** — a circle whose size slowly swells and shrinks (the
+    smoothest look in the lighting books — great on slow songs)
+  - **Stadium arc** — big slow fanned sweeps across the whole room
+  - **Fan** — a peacock spread that opens across the bar and closes on
+    the downbeat
+  - **Snake** — the circle ripples around the rig, head to head
+  - **All-eyes** — every beam converges, pans around like a searchlight
+    team, then bursts outward on the kick
+- **Two new knobs** in the booth's floor-lights strip: **Sweep** (how
+  wide the shapes are) and **Spread** (how staggered the heads are —
+  lockstep to full ripple).
+- **The kick now pushes the beams** — every shape gets a little outward
+  flare on each kick that settles before the next. Movement, never
+  brightness.
+- **Everything stays beat-locked**: one full figure per bar, on your
+  song's own beat grid; when the music stops, the rig rests. The truss
+  stays bolted — only the heads aim. Auto still rotates through all 13
+  programs.
+
 ## 2026-09-10 — the 1.8.8 wave, part 2: the shelf fix + the FULL-FEATURED DJ booth
 - **Custom shelf placements actually place now.** The bug you hit —
   pick a way to organize, set a few custom placements, and the custom
@@ -38,6 +66,10 @@
     with artwork, a master VU in the top bar, and the booth's
     laptop screen is now a live monitor (track names, VU, AUTO-DJ /
     REC / MIC badges).
+- **The light controls live in the booth, not the jukebox menu.** The
+  dance-floor lights (Movement · Speed · Program) sit in the DJ booth
+  panel right under the decks — the jukebox menu is music-only, the way
+  it was.
 - **Honesty notes:** the key-shift (♭/♯ while locked) and headphone
   PFL cue are the two spec items still pending — both need deeper
   audio plumbing and are queued rather than half-shipped. Recording
@@ -62,9 +94,9 @@
   3×.
 - **The mirror-ball spin setting is gone** — the ball just spins with the
   music, like it always wanted to.
-- **Light controls moved into the DJ menu**, right next to the music list
-  (50/50: playlist on the left, lights on the right). The Look menu now
-  points there.
+- **Light controls moved into the DJ booth.** Movement, Speed, and the
+  program picker live in the booth panel now, right under the decks —
+  the lights are part of the rig. The Look menu points there.
 - **Friend sharing speaks in shelves, not titles.** The connection test
   reports shelf names and counts — never an individual movie name — and
   the per-friend share list groups your shelves under their source, with

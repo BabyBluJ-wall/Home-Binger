@@ -7,8 +7,8 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789027155999';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1789027155999';
+import { LAYOUT } from './config.js?v=1789061225548';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1789061225548';
 
 // t102: blend two hex colors (k = share of b) — drives the theme-tinted ceiling
 function mixHex(a, b, k) {

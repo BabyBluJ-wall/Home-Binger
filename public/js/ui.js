@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1789027155999';
-import { createCaseView } from './store3d/caseview.js?v=1789027155999';   // the 3D case in the item modal
-import { state } from './state.js?v=1789027155999';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789027155999';
-import { placeholderDataUrl } from './store3d/textures.js?v=1789027155999';
+import { api } from './api.js?v=1789061225548';
+import { createCaseView } from './store3d/caseview.js?v=1789061225548';   // the 3D case in the item modal
+import { state } from './state.js?v=1789061225548';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789061225548';
+import { placeholderDataUrl } from './store3d/textures.js?v=1789061225548';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -165,7 +165,7 @@ export function initUI(ctx) {
       </div>
       <div class="hint" style="margin:-6px 0 14px">What the screen shows while music, podcasts or radio play — it always wears your theme accent.</div>
 
-      <div class="hint" style="margin:-6px 0 10px">🎵 The dance-floor light controls now live in the <b>DJ menu</b>, right next to the music.</div>
+      <div class="hint" style="margin:-6px 0 10px">🎵 The dance-floor light controls now live in the <b>DJ booth</b> — open the laptop at the booth in the dance hall.</div>
 
       <div class="section-title">My TV idle screen</div>
       <div class="radio-cards">
@@ -1498,7 +1498,11 @@ export function initUI(ctx) {
       const music = (state.items || []).filter(i => MUSIC_TYPES.includes(i.type) && isNotVideoFile(i));
       const body = $('#dj-body');
       body.innerHTML = '';
-      proUi = (window.__VB?.scene?.djPro)?.mount(body, { items: music }) || null;
+      // t108b: the booth panel owns the dance-floor lights now (owner: they
+      // belong with the rig, not the jukebox menu) — hand it the prefs + setter
+      proUi = (window.__VB?.scene?.djPro)?.mount(body, { items: music,
+        dance: state.prefs.dance || {},
+        setDance: (patch) => { state.updatePrefs({ dance: patch }); ctx.applyDancePrefs(state.prefs.dance); } }) || null;
       if (!proUi) body.innerHTML = '<div class="hint">Pro rig unavailable on this device.</div>';
     } else renderDj();
   }
@@ -1537,8 +1541,6 @@ export function initUI(ctx) {
         <button class="btn" data-dj="fadein">Fade in</button>
         <button class="btn" data-dj="fadeout">Fade out</button>
       </div>
-      <div class="dj-cols">
-      <div class="dj-col">
       <div class="dj-section">Playlist <small>${st.queue.length} tracks</small></div>
       <div class="dj-row-btns">
         <button class="btn ${st.shuffle ? 'accent' : ''}" data-dj="shuffle">🔀 Shuffle</button>
@@ -1556,24 +1558,7 @@ export function initUI(ctx) {
         </div>`).join('') : '<div class="hint" style="margin:4px 2px">Empty — add tracks below.</div>'}</div>
       <div class="dj-section">Add music</div>
       <select id="dj-add">${music.slice(0, 120).map(m2 => `<option value="${esc(m2.id)}">${esc(m2.title)}</option>`).join('')}</select>
-      <button class="btn accent" data-dj="add" style="margin-top:6px">＋ Add to playlist</button>
-      </div>
-      <div class="dj-col">
-      <div class="dj-section">💡 Dance floor lights</div>
-      <div class="hint" style="margin:-2px 0 8px">The rig wakes when the dance hall's own music plays and locks to the beat — you shape how the lights MOVE (the music drives brightness). Yours on every device.</div>
-      <div class="dj-ctl"><label>Movement</label><input type="range" id="dance-int" min="0.2" max="3" step="0.1"><b id="dance-int-v"></b></div>
-      <div class="dj-ctl"><label>Speed</label><input type="range" id="dance-spd" min="0.3" max="3" step="0.1"><b id="dance-spd-v"></b></div>
-      <div class="field" style="margin-top:8px"><label>Program</label>
-        <select id="dance-pattern">
-          <option value="auto">Auto — rotate with the music</option>
-          <option value="0">Laser sweep</option><option value="1">Chase</option>
-          <option value="2">Strobe hits</option><option value="3">Build &amp; drop</option>
-          <option value="4">Orbit cones</option><option value="5">Beat jump</option>
-        </select>
-      </div>
-      <div class="hint" style="margin-top:8px">Mirror ball just spins with the music now — no knob needed.</div>
-      </div>
-      </div>`;
+      <button class="btn accent" data-dj="add" style="margin-top:6px">＋ Add to playlist</button>`;
     // wire it up
     // t64: DRAG-AND-DROP reordering (buttons stay too)
     {
@@ -1589,26 +1574,6 @@ export function initUI(ctx) {
           from = -1;
         };
       });
-    }
-    // t104: dance-floor lights — wired INTO the DJ menu now (moved from My Theme)
-    {
-      const D0 = state.prefs.dance || {};
-      const D = { movement: D0.movement ?? D0.intensity ?? 1, speed: D0.speed ?? 1, pattern: D0.pattern ?? 'auto' };
-      const setDance = (patch) => {
-        state.updatePrefs({ dance: patch });
-        ctx.applyDancePrefs(state.prefs.dance);
-      };
-      const wire = (id, key, fmt) => {
-        const el = body.querySelector('#' + id), lab = body.querySelector('#' + id + '-v');
-        if (!el) return;
-        el.value = D[key];
-        if (lab) lab.textContent = fmt(D[key]);
-        el.oninput = () => { if (lab) lab.textContent = fmt(+el.value); setDance({ [key]: +el.value }); };
-      };
-      wire('dance-int', 'movement', v => v + '×');
-      wire('dance-spd', 'speed', v => v + '×');
-      const pat = body.querySelector('#dance-pattern');
-      if (pat) { pat.value = String(D.pattern ?? 'auto'); pat.onchange = () => setDance({ pattern: pat.value }); }
     }
     const jb = ctx.djChannel ? ctx.djChannel() : window.__VB?.scene?.jukeboxAudio;   // t52: active device's channel
     const bind = (id, fn) => { const el2 = body.querySelector('#' + id); if (el2) { el2.oninput = () => fn(parseFloat(el2.value)); el2.onchange = () => renderDj(); } };
