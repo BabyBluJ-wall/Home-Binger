@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1788996243385';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1789027155999';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;
@@ -389,11 +389,10 @@ export function buildDance(theme) {
     const num = (v, dflt, lo, hi) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : dflt);
     const mv = p?.movement !== undefined ? p.movement : (p?.intensity !== undefined ? p.intensity : P.movement);
     P = {
-      movement: num(mv, P.movement, 0.2, 2.5),
-      speed: num(p?.speed, P.speed, 0.3, 2.5),
-      ballSpin: num(p?.ballSpin, P.ballSpin, 0, 3),
+      movement: num(mv, P.movement, 0.2, 3),          // t103: wider top end (3×) — full-festival swings
+      speed: num(p?.speed, P.speed, 0.3, 3),          // t103: wider top end too
       pattern: ['auto', '0', '1', '2', '3', '4', '5'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern
-    };
+    };   // t103: ballSpin removed (owner) — saved prefs with it are simply ignored
     if (P.pattern !== 'auto') pattern = P.pattern | 0;   // t95: a program pick applies IMMEDIATELY — never wait for the next kick
   }
   //    hues rotate with the music, particles fly on the kick, floor shifts color
@@ -454,7 +453,7 @@ export function buildDance(theme) {
 
 
     // MIRROR BALL (t86: faceted + pin spot + glints — the spin is finally VISIBLE)
-    ball.rotation.y += dt * (0.5 + lv.energy * 4.5) * P.ballSpin;
+    ball.rotation.y += dt * (0.35 + lv.energy * 3.4);   // t103: tuned spin — the mirror-ball setting is gone (it just spins)
     ballLight.intensity = 4 + lv.treble * 12;
     pinSpot.intensity = live ? 2.2 + lv.energy * 2.6 : 0.4;
     const glintVis = 0.12 + rigLevel * 0.88;                  // glints live with the rig
@@ -494,18 +493,21 @@ export function buildDance(theme) {
     // 0.2 = tight theatrical nudges, 2.5 = full-festival swings. Brightness
     // (spot/cone/wash/LED) is driven ONLY by the music + program punch.
     const Mc = 0.3 + 0.7 * P.movement;
-    truss.rotation.y += dt * (live ? (0.12 + lv.energy * 0.85) * P.speed : 0.015) * (0.4 + 0.6 * P.movement);   // t95: the rig itself circles the floor with the music
+    // t103 (owner's realism note): the truss NEVER rotates — a real rig is
+    // bolted to the ceiling; the FIXTURES pivot and their beams trace the
+    // circles. The old carousel spin is gone; the orbit program (and the
+    // per-beat poses) carry all of the motion now.
     const beamCol = (i) => col.setHSL((hue + i * 0.13) % 1, 1, 0.55);
     for (let i = 0; i < rig.length; i++) {
       const r = rig[i];
       if (r.spin) { r.spin.rotation.y += dt * (1 + lv.mid * 8) * Mc; continue; }
       let ty, tx = 0, punch = 0.4 + lv.energy * 1.3;
-      if (pattern === 0) { ty = (pose * 0.9 + r.phase + ph * 0.2) * Mc; tx = (0.28 + 0.5 * Math.sin(bg * Math.PI + r.phase * 0.7)) * Mc; }        // sweep — the fan, tilt now swings on the BEAT GRID (t95)
-      else if (pattern === 1) { const on = Math.floor(barBeats % rig.length) === i; ty = on ? pose * 1.1 * Mc : (r.phase + ph * 0.15) * Mc; tx = on ? (0.2 + 0.55 * Math.sin(beats * 1.7 + i)) * Mc : 0.3 * Mc; punch *= on ? 2.8 : 0.35; }  // chase — harder 3D hits
+      if (pattern === 0) { ty = (pose * 1.05 + r.phase + ph * 0.2) * Mc; tx = (0.16 + 0.64 * Math.sin(bg * Math.PI + r.phase * 0.7)) * Mc; }        // sweep — the fan, WIDER beat-grid tilt swings (t103)
+      else if (pattern === 1) { const on = Math.floor(barBeats % rig.length) === i; ty = on ? pose * 1.2 * Mc : (r.phase + ph * 0.15) * Mc; tx = on ? (0.14 + 0.64 * Math.sin(beats * 1.7 + i)) * Mc : 0.24 * Mc; punch *= on ? 3.1 : 0.26; }  // chase — harder hits, darker gaps (t103)
       else if (pattern === 2) { ty = (r.phase + ph * 0.15) * Mc; tx = kick ? (0.3 + ((beats * 7 + i * 3) % 5) * 0.16) * Mc : 0.1 * Mc; punch *= kick ? 3.2 : (lv.bass > 0.3 ? 1.2 : 0.08); }  // strobe — UNTOUCHED (t86 fan contract)
-      else if (pattern === 3) { ty = ((i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15) * Mc; tx = (0.2 + 0.6 * (1 - barBeats * 0.22) + (barBeats === 3 && kick ? 0.5 : 0)) * Mc; if (barBeats === 3 && kick) { punch *= 3.2; } }  // build & drop — tilt climbs the bar, DROPS on the four (t95)
-      else if (pattern === 4) { ty = (bg * Math.PI * 0.5 + i * Math.PI / 2) * Mc * 1.15; tx = (0.3 + 0.42 * Math.sin(bg * Math.PI + i * 1.3)) * Mc; punch *= 1 + kp * 0.9; }  // t95 ORBIT — full 3D cones, quarter-phase apart, locked to the beat grid
-      else { const h1 = ((beats * 2654435761 + i * 40503) >>> 0) % 1000 / 1000, h2 = ((beats * 97 + i * 13 + 7) >>> 0) % 1000 / 1000; ty = (h1 * 2.4 - 1.2) * Mc; tx = (0.08 + h2 * 0.85) * Mc; punch *= 1 + kp * 1.4; }  // t95 BEAT JUMP — a fresh 3D pose on every kick, holds between
+      else if (pattern === 3) { ty = ((i / rig.length) * Math.PI * 2 + pose * 0.3 + ph * 0.15) * Mc; tx = (0.14 + 0.7 * (1 - barBeats * 0.24) + (barBeats === 3 && kick ? 0.55 : 0)) * Mc; if (barBeats === 3 && kick) { punch *= 3.5; } }  // build & drop — steeper climb, HARDER drop on the four (t103)
+      else if (pattern === 4) { ty = (bg * Math.PI * 0.62 + i * Math.PI / 2) * Mc * 1.3; tx = (0.24 + 0.52 * Math.sin(bg * Math.PI + i * 1.3)) * Mc; punch *= 1 + kp * 0.9; }  // ORBIT — THE circle: full 3D cones, wider + faster now the truss is bolted (t103)
+      else { const h1 = ((beats * 2654435761 + i * 40503) >>> 0) % 1000 / 1000, h2 = ((beats * 97 + i * 13 + 7) >>> 0) % 1000 / 1000; ty = (h1 * 2.6 - 1.3) * Mc; tx = (0.1 + h2 * 0.9) * Mc; punch *= 1 + kp * 1.5; }  // BEAT JUMP — a fresh 3D pose on every kick, bigger scatter + punch (t103)
       // t59: EASE to the target, then CAP the travel speed — real moving-head
       // fixtures SWEEP to their next position; they never snap. t93: with
       // movement pushing targets farther, the caps bind more — so the SPEED
@@ -572,5 +574,37 @@ export function buildDance(theme) {
     };
   }
 
-  return { group, occluders, colliders, boothTargets, recordTargets, setRecords, update, info, setPrefs, speakerWorld };
+  // t108: LIVE BOOTH MONITOR — the laptop screen becomes a real CanvasTexture
+  // HUD (titles · VU · BPM · AUTO-DJ/REC badges), repainted by scene.js ~30fps.
+  function paintHud(snap) {
+    const w = 256, h = 160;
+    sg.fillStyle = '#06070d'; sg.fillRect(0, 0, w, h);
+    sg.strokeStyle = '#232a4d'; sg.lineWidth = 1; sg.strokeRect(0.5, 0.5, w - 1, h - 1);
+    sg.textAlign = 'left'; sg.font = '700 13px system-ui';
+    const deck = (y, name, col, d) => {
+      sg.fillStyle = col; sg.fillText(name, 8, y);
+      sg.fillStyle = d?.playing ? '#dfe6ff' : '#8fa0d8';
+      sg.fillText(d?.title ? String(d.title).slice(0, 20) : '—', 26, y, 118);
+      sg.fillStyle = col; sg.textAlign = 'right';
+      sg.fillText(d?.bpm ? Math.round(d.bpm * d.rate) + '' : '—', 190, y);
+      sg.textAlign = 'left';
+    };
+    deck(20, 'A', '#00f0ff', snap?.a); deck(38, 'B', '#ff2a85', snap?.b);
+    // 3-band VU (FFT → screen)
+    const bars = [['B', snap?.lv?.bass, '#ff2a85'], ['M', snap?.lv?.mid, '#00ff66'], ['T', snap?.lv?.treble, '#00f0ff']];
+    bars.forEach(([lab, v, col], k) => {
+      const y = 52 + k * 14;
+      sg.fillStyle = '#8fa0d8'; sg.font = '600 9px system-ui'; sg.fillText(lab, 8, y + 8);
+      sg.fillStyle = '#12141f'; sg.fillRect(20, y, 216, 9);
+      sg.fillStyle = col; sg.fillRect(20, y, Math.min(216, (v || 0) * 216), 9);
+    });
+    // badges
+    sg.font = '700 11px system-ui'; sg.textAlign = 'center';
+    if (snap?.autoDj) { sg.fillStyle = '#00ff66'; sg.fillText('AUTO-DJ', 60, 140); }
+    if (snap?.rec) { sg.fillStyle = '#ff2a85'; sg.fillText('● REC', 128, 140); }
+    if (snap?.mic) { sg.fillStyle = '#ffb800'; sg.fillText('MIC', 190, 140); }
+    sg.fillStyle = '#8fa0d8'; sg.font = '500 9px system-ui'; sg.fillText('click to mix', 128, 154);
+    screenTex.needsUpdate = true;
+  }
+  return { group, occluders, colliders, boothTargets, recordTargets, setRecords, update, info, setPrefs, speakerWorld, paintHud };
 }

@@ -8,11 +8,11 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1788996243385';
-import { api } from './api.js?v=1788996243385';
-import { initUI } from './ui.js?v=1788996243385';
-import { createScene } from './store3d/scene.js?v=1788996243385';
-import { STORE, SUPPORT } from './store3d/config.js?v=1788996243385';
+import { state } from './state.js?v=1789027155999';
+import { api } from './api.js?v=1789027155999';
+import { initUI } from './ui.js?v=1789027155999';
+import { createScene } from './store3d/scene.js?v=1789027155999';
+import { STORE, SUPPORT } from './store3d/config.js?v=1789027155999';
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -24,6 +24,26 @@ import { STORE, SUPPORT } from './store3d/config.js?v=1788996243385';
 
 
 const $ = (sel) => document.querySelector(sel);
+
+// t102: THEME APP-WIDE — every menu follows the whole theme, not just the
+// accent. The wall color becomes the menu surface (--vb-blue family), and
+// ink/muted flip automatically so text stays readable on light walls.
+function themeVars(t) {
+  const r = document.documentElement.style;
+  const acc = t.accent || '#ffd23f';
+  r.setProperty('--vb-accent', acc);
+  r.setProperty('--vb-accent-soft', `color-mix(in srgb, ${acc} 72%, white)`);
+  const wall = String(t.wall || '#12275e').trim();
+  r.setProperty('--vb-blue', wall);
+  r.setProperty('--vb-blue-deep', `color-mix(in srgb, ${wall} 68%, black)`);
+  const hx = /^#?([0-9a-f]{6})$/i.exec(wall);
+  let lum = 0.12;
+  if (hx) { const n = parseInt(hx[1], 16); lum = 0.2126 * ((n >> 16 & 255) / 255) + 0.7152 * ((n >> 8 & 255) / 255) + 0.0722 * ((n & 255) / 255); }
+  const light = lum > 0.5;                     // a light wall → dark text, and vice versa
+  r.setProperty('--vb-ink', light ? '#171c3f' : '#e8edff');
+  r.setProperty('--vb-muted', light ? '#3d4670' : '#93a0c8');
+}
+
 
 async function boot() {
   const status = $('#loading-status');
@@ -150,9 +170,7 @@ async function boot() {
       state.prefs.theme = t;
       // t45: the DOM UI follows the theme too — accent drives every button,
       // border and hover tint via CSS variables (was hardcoded gold/pink)
-      const r = document.documentElement.style;
-      r.setProperty('--vb-accent', t.accent || '#ffd23f');
-      r.setProperty('--vb-accent-soft', `color-mix(in srgb, ${t.accent || '#ffd23f'} 72%, white)`);
+      themeVars(t);                    // t102: menus follow the WHOLE theme
       scene.applyTheme(t);
     },
     currentAccent: () => state.prefs.theme.accent,
@@ -231,9 +249,7 @@ async function boot() {
     reloadTv,
     rebuildStore: async () => {
       // prefs may have changed after login/logout/policies
-      const r = document.documentElement.style;
-      r.setProperty('--vb-accent', state.prefs.theme.accent || '#ffd23f');
-      r.setProperty('--vb-accent-soft', `color-mix(in srgb, ${state.prefs.theme.accent || '#ffd23f'} 72%, white)`);
+      themeVars(state.prefs.theme);    // t102: menus follow the WHOLE theme
       scene.applyTheme(state.prefs.theme);
       scene.applySorting(state.prefs.sorting);
       scene.setDancePrefs?.(state.prefs.dance);   // t86
@@ -259,13 +275,18 @@ async function boot() {
   // t96: NEW-VERSION NOTICE — quietly ask the server if a newer Home Binger
   // is out; if so, a toast with a link. NEVER downloads anything (you click,
   // you decide — the $0 doctrine). Fails silent.
+  let versionNoticeDismissed = false;   // t101: closed means closed — for THIS session (it returns next launch)
   async function checkVersion() {
     try {
+      if (versionNoticeDismissed) return;                     // t101: no re-nagging after a deliberate close
+      if (document.getElementById('toast-version')) return;   // t100: one notice at a time — never stacks
       const r = await fetch('/api/version/latest');
       if (!r.ok) return;
       const v = await r.json();
-      if (v.newer && v.url)
-        ui.toast(`🎉 Home Binger ${v.latest} is out! (you have ${v.current})`, false, { text: 'Get it', url: v.url });
+      if (v.newer && v.url)                                   // t100: sticky — until the ✕ or the link closes it
+        ui.toast(`🎉 Home Binger ${v.latest} is out! (you have ${v.current})`, false,
+          { text: 'Get it', url: v.url },
+          { sticky: true, id: 'toast-version', onDismiss: () => { versionNoticeDismissed = true; } });
     } catch { /* quiet */ }
   }
 
@@ -403,6 +424,7 @@ async function boot() {
   // Handy console handle for debugging/tinkering: window.__VB.scene / .state
   window.__VB = { scene, state, ui, library, mainCtx: ctx, atlases: () => scene.threeScene?._atlases };
   setTimeout(() => ctx.checkVersion?.(), 5000);   // t96: quiet launch check, a beat after the store settles
+  setInterval(() => ctx.checkVersion?.(), 30 * 60 * 1000);   // t101: a release that ships WHILE you browse shows up on its own (the feed check is cached server-side, 10 min)
 
   // first visit → help overlay
   try {

@@ -1,3 +1,86 @@
+## 2026-09-10 — the 1.8.8 wave, part 2: the shelf fix + the FULL-FEATURED DJ booth
+- **Custom shelf placements actually place now.** The bug you hit —
+  pick a way to organize, set a few custom placements, and the custom
+  ones never moved — was a key mismatch: the shelf map saved a
+  section's display key, the shelving engine looked for a different
+  one, and pins for libraries that don't number their sections
+  (Plex, Jellyfin) silently fell through. Keys are unified now, and
+  any pin you saved before the fix still works.
+- **The DJ booth grew up.** It's a real rig now:
+  - **Decks** — 8 hot cues each (keys 1–8), auto-loops from ½ to 32
+    beats, beat jumps, slip mode (scrub or loop while the silent
+    timeline keeps running), platter scrubbing, pitch faders with
+    ±6/±8/±10/±16/WIDE ranges, pitch-bend nudges, and instant
+    doubles.
+  - **Mixer** — channel trims to +12 dB, three-band isolators that
+    KILL at full left (−40 dB), a sound-color knob per deck (center
+    is bypass: left sweeps the filter down into dub delay, right
+    sweeps up), and per-channel crossfader assigns (A / THRU / B)
+    with the sharp-to-smooth curve control.
+  - **Beat FX** — tempo-synced echo (¼ to 4 beats), reverb, flanger,
+    stutter roll, and a vinyl brake, with a depth control and a
+    latching paddle.
+  - **Mic** — live input with a two-band voice EQ; the music ducks
+    automatically when you speak (−12 or −24 dB, fast attack, slow
+    release).
+  - **Recorder** — one click records the clean master to a file
+    (WebM), with a live timer.
+  - **AUTO-DJ** — queue tracks with the Q buttons (or point it at
+    your staging crate); it loads the next track on the other deck,
+    beat-matches, and rides a 16-beat crossfade by itself.
+  - **The browser** — a staging crate, Camelot key and BPM-range
+    filters, and rows that glow green when a track will mix with
+    what's playing. A/B load a deck, Q queues, 🏷️ parks it.
+  - **Waveforms** — real three-band overviews (red bass, green
+    mids, blue highs) computed once per track, scrolling under the
+    playhead.
+  - **The look** — obsidian glass panels, spinning vinyl platters
+    with artwork, a master VU in the top bar, and the booth's
+    laptop screen is now a live monitor (track names, VU, AUTO-DJ /
+    REC / MIC badges).
+- **Honesty notes:** the key-shift (♭/♯ while locked) and headphone
+  PFL cue are the two spec items still pending — both need deeper
+  audio plumbing and are queued rather than half-shipped. Recording
+  lands as WebM (the browser's native).
+
+## 2026-09-10 — the 1.8.8 wave, part 1: theme everywhere, honest sliders, a realer light show
+- **The theme finally reaches EVERYTHING.** The menus, the sidebar, the
+  front door — they used to stay the same dark blue no matter which theme
+  you picked. Now the whole interface follows your wall color (and the
+  text flips to stay readable on light walls). The ceiling and the
+  speakers' accent rings follow the theme too — they were frozen at
+  whatever was live when the store opened.
+- **Sliders remember where you put them.** The pro DJ rig's sliders used
+  to snap back to defaults whenever you closed and reopened the panel —
+  your settings were still active, the knobs just lied about it. Now
+  every slider shows its true position, every time.
+- **A realer light show.** The spotlight rig no longer spins like a
+  carousel — real fixtures are bolted to the truss and their BEAMS sweep
+  the circles. Every program got a sharper signature (wider sweeps, darker
+  gaps between chase hits, a harder drop on the four, bigger orbit cones,
+  wider beat-jump scatter), and the Movement and Speed sliders now reach
+  3×.
+- **The mirror-ball spin setting is gone** — the ball just spins with the
+  music, like it always wanted to.
+- **Light controls moved into the DJ menu**, right next to the music list
+  (50/50: playlist on the left, lights on the right). The Look menu now
+  points there.
+- **Friend sharing speaks in shelves, not titles.** The connection test
+  reports shelf names and counts — never an individual movie name — and
+  the per-friend share list groups your shelves under their source, with
+  All / None quick picks.
+
+## 2026-09-10 — t100+t101: the new-version notice — stays till clicked, arrives mid-session
+- The "a new version is out" note no longer fades away after twelve
+  seconds — it STAYS on screen (link and all) until you click its ✕ or
+  the "Get it" link. Either one closes it; the link still opens the
+  download page in your browser.
+- New versions are noticed WITHOUT restarting the app: it quietly
+  rechecks about every half hour while it's open, so a release that
+  ships while you're browsing shows up on its own. Closing the note
+  keeps it closed for the rest of the session — it simply returns the
+  next time you launch. Rides the next update.
+
 ## 2026-09-09 — 1.8.1: friends' shelves, safer updates
 
 *The fixing release. Everything here landed after 1.8.0 went live — if
@@ -23,6 +106,47 @@ you're on 1.8.0, this is the one to grab.*
   two-store simulation; fixed and locked with a permanent self-check.
 - **The new-version notice understands tags like "Rv1.8".** A release
   tag with a letter prefix no longer hides the update from anyone.
+
+## 2026-09-09 — t99: friends who follow each other — boot stall fixed
+- **Fixed: two stores following each other could open half-empty.** When
+  you and a friend added each other (you follow them, they follow you),
+  the very first shelf build could chase its own tail — your store asked
+  theirs for shelves while theirs was asking yours — and the store sat
+  partly stocked for several seconds before sorting itself out.
+  Friend-facing requests now always answer from the store's own shelves,
+  so the loop can't happen. What friends see is unchanged (and shared
+  items were never re-shareable anyway).
+
+## 2026-09-09 — t98: the update finder searches wider
+- **Fixed: updating could boot fresh if the old and new folders weren't
+  direct neighbors.** "Extract All" gives each version its own folder
+  (like HomeBinger-1.7.0-beta\\HomeBinger-win32-x64), and 1.8.0's adoption
+  only looked one level deep — so some updates started with a blank store.
+  The finder now walks the surrounding folders (same parent, wrapper
+  folders, nearby subfolders of Desktop/Downloads) to find your data, and
+  writes an adopted-from.txt note into the data folder saying where it
+  came from. If this happened to you: your old data is untouched — copy
+  the old folder's "data" folder into the new one (or put the two app
+  folders side by side) and relaunch.
+
+## 2026-09-09 — t97: Home Binger ↔ Home Binger — friends' shelves, in your store
+- **Add a friend's Home Binger.** In Admin → Server, paste their store
+  address + the friend code they give you, hit Test, and their shared
+  shelves appear as new sections in your store — browse and play them like
+  your own. Everyone can toggle each friend's store in My Media.
+- **Share YOUR shelves, friend by friend.** Admin → Server → Friend
+  sharing: invite a friend and the app mints a friend code. Hand them your
+  store address + the code. Tick exactly which of your shelves they see —
+  each friend gets their own list. Delete the friend and their access ends
+  instantly.
+- **Your logins never leave home.** Friends' players stream through YOUR
+  Home Binger — your Plex/Jellyfin tokens stay on your machine, always.
+- **No friend-chains.** Shelves a friend shared into YOUR store can never
+  be shared onward to anyone else — the share list only ever offers your
+  own shelves.
+- Works over your home network today; over any distance with the Tailscale
+  setup from REMOTE-ACCESS.md (nothing is ever opened to the public
+  internet).
 
 ## 2026-09-09 — 1.8.0: safer updates, dance lights that dance, remote access begins
 - **Updates can't lose your profile anymore.** When a new version adopts
@@ -194,6 +318,120 @@ you're on 1.8.0, this is the one to grab.*
 - Docs: README/START-HERE admin references updated to the merged tab.
   Suite: 76 → 80 checks (t82Admin round-trip incl. last-admin guard,
   t83Mobile pause+CSS, t84Invite endpoint shape, t85Jukebox silence).
+## 2026-09-07 — TCC intellectual-property posture (the "© or something" answer)
+- Owner asked for a "copywrite" on TCC. Answer: two tools, both already
+  working. COPYRIGHT covers the content (pitch/plan/code) — automatic,
+  free, owned by BluJ Productions on creation; the ™ marks went on the
+  pitch (first prominent use + footer: The CordCut Co-op™ · TCC™ ·
+  Home Binger™ · © 2026 BluJ Productions). TRADEMARK covers the name:
+  ™ free via common-law use from public launch; federal ® (~$250–350 +
+  use in commerce) deferred until public/commercial. Casual name scan:
+  no existing "CordCut Co-op" brand; "cord cutter" is generic industry
+  vocabulary, so the full phrase is the protectable mark. Formal USPTO
+  knockout search queued for pre-launch. Full posture in TCC-PLAN §5.
+## 2026-09-07 — the public umbrella pitch: TCC first, HB as the storefront
+- New docs/TCC-PITCH.md (HELD — publishes when the gate passes): the
+  founder's pitch voice, restructured for the v2 model. TCC leads as the
+  umbrella (the co-op, the promise, the method); Home Binger introduced
+  as "the co-op's storefront" — the walkable 3D store, with the
+  you-don't-browse-a-wall-of-thumbnails-you-walk-in hook, theater/
+  jukebox/booth, USB-portable join story, and the Plex/Jellyfin
+  plug-in note. Honest updates vs. the original text: cost leads with
+  $0/month (true at v1) instead of $15; the hearth/solar/dues future is
+  clearly marked "we'll build it together — not a launch promise";
+  no-transitive-sharing and approval-based follow expressed in member
+  language ("person-by-person, folder-by-folder"); legal fine print
+  updated to zero-money-flows. Ready to publish as a landing page,
+  announcement post, or future TCC repo README.
+## 2026-09-07 — TCC correction: v1 is federation-only — no dues, no hearth yet
+- Owner pulled the plan back on track: no dedicated server at launch.
+  v1 = pure federation: every member manages their OWN node — own parts,
+  own electricity, own digitizing. No money flows between members; mesh
+  membership is free. The hearth (and the $15/mo that funds parts,
+  power, and digitizing time) is DEFERRED to a growth-stage decision —
+  if the co-op grows into shared infrastructure, it enters then with
+  its own round (dues model + entity/legal review).
+- Docs updated: TCC-E is now a self-serve digitization GUIDE (members
+  digitize their own media; includes backup recommendations), TCC-F
+  parked, traceability table marks every hearth promise as deferred,
+  decision 6 rewritten (the "no free tier" ruling answered a question
+  that doesn't exist at v1 — superseded; reasoning parked in the future
+  hearth decision). Legal note: zero money flow = cleanest possible
+  posture — pure reciprocal sharing among self-sufficient friends.
+## 2026-09-07 — TCC membership decided by legal doctrine; plan renumbered v2
+- Owner set the dues question by legal reasoning, not preference: uniform
+  $15/mo per household, no free tier with content access, household
+  members share a membership, dues flat and infrastructure-only (never
+  usage- or content-scaled; no tiers — tiered content = selling
+  content), founder pays too. Rule of thumb: **the software is free;
+  the co-op is membership.** Rationale: everyone pays + everyone may
+  contribute = no customer class exists — the strongest posture for a
+  private cost-sharing club; a pay/free mix reshapes it into a service.
+  Group stays bounded/invite-only; attorney hour before scaling.
+- Legal map added (§5): CDs clean (no encryption) → DVDs/Blu-rays gray
+  (CSS/AACS anti-circumvention, not copying) → never strip DRM;
+  privacy-by-design (no analytics ever = nothing to leak); entity
+  formation (co-op/nonprofit LLC) parked at growth stage on TCC-F.
+- Plan doc renumbered v3 → v2 at owner's direction (pitch was v1, merged
+  plan is v2 — founder numbering wins).
+## 2026-09-07 — TCC master plan v2: the founder's pitch, merged
+- Owner shared the original TCC pitch (verbatim, archived in
+  docs/TCC-PLAN.md §7) — it describes a jointly-funded CENTRAL library
+  ($15/mo dues → server, storage, power, solar+battery, archival
+  redundancy, digitization of contributed media). Merged with the HB
+  federation design into the two-layer architecture:
+  **Layer 1, the Federation** — every member runs their own HB, $0
+  software, no ports, owner-controlled sharing. **Layer 2, the Hearth** —
+  the co-op's dues-funded always-on node: 24/7 core collection, archival
+  drives, the solar goal; v0 = the owner's planned always-on PC. Two new
+  phases: E (digitization & contribution pipeline: CD→FLAC clean case,
+  DVD→MakeMKV gray zone, naming conventions) and F (the hearth). Full
+  pitch→plan traceability table added — every promise in the pitch now
+  maps to a phase that delivers it.
+- Publish gate formalized: TCC stays private until Phase C (the Follow
+  Link, HB↔HB) works. Public-Docs-Update.zip staged: TCC-free versions
+  of README, START-HERE, CHANGELOG (phones-FAQ era) — verified zero
+  TCC strings in all three.
+## 2026-09-07 — TCC: follow model decided + the connective tissue, explained
+- Owner decided: approval-based follows AND per-follower share lists
+  (each approved follower sees only the folders ticked for THEM — the
+  "private collection" case). Locked additionally: NO TRANSITIVE
+  SHARING — content never hops member-to-member; streams flow only
+  owner → follower-the-owner-approved.
+- docs/TCC-PLAN.md: added the plain-language explainer of the shared
+  virtual LAN (one-way-door problem → outbound-only trick → coordinator
+  as matchmaker not middleman → direct encrypted member-to-member
+  streams → founder-held invite/revoke dashboard → HB binds 0.0.0.0 so
+  zero HB changes needed). Member onboarding is 3 steps.
+## 2026-09-07 — TCC plan v2: hub → federation (owner's model)
+- Owner clarified the member structure: everyone curates from the people
+  THEY select (person-to-person follow links, not one central library).
+  That's a federation of equals, and it's better than the v1 hub design:
+  no single point of failure, bandwidth follows the content owner,
+  "you control your own media" becomes architectural.
+- docs/TCC-PLAN.md rewritten: shared ZeroTier virtual LAN (free, 25
+  devices ≈ 10 members v1; Tailscale's 6-user cap ruled it out for the
+  shared layer) — no port forwarding for any member, nothing exposed
+  publicly, phones included. Owner's own remote access falls out free
+  (phone joins the network). Always-on PC now means "your content is
+  24/7" not "the co-op is 24/7". Phase set unchanged (A LAN+hardening,
+  B multi-library, C Follow Link, D face+previews); follow-approval
+  model added to the open decisions.
+## 2026-09-07 — TCC: The CordCut Co-op — the plan doc
+- Owner's big idea: Home Binger as the face of a co-op media library —
+  remote access from anywhere, multiple remote Plex/Jellyfin libraries
+  owned by different members, and Home-Binger-to-Home-Binger federation
+  where each member publishes their own local files to the shared
+  library and controls their own media.
+- **docs/TCC-PLAN.md** written: why HB fits (multi-source items, proxy
+  trust boundary, per-device profiles, zero-dep portability), four
+  phases (A remote access + hardening · B multi-library · C the Co-op
+  Link — members push over an outbound-only connection, no port
+  forwards on the member side · D TCC face + local-grabber preview
+  images via client-side canvas thumbnails), reality checks (hub
+  uptime, upload-bandwidth math, read-only trust model, $0 intact —
+  Tailscale free tier now 6 users). Awaiting owner decisions: queue
+  slot, member count, hub hardware.
 ## 2026-09-07 — phones & the exe: the FAQ everyone asks
 - New README subsection **"📱 The exe & phones — the questions everyone
   asks"** (right after Step 6) and a matching **PHONES, TABLETS & SMART

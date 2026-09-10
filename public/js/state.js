@@ -4,7 +4,7 @@
 //  Holds what /api/bootstrap gave us plus the current library, and fans out
 //  changes to whoever subscribed (3D scene, settings UI, …).
 // ─────────────────────────────────────────────────────────────────────────────
-import { api } from './api.js?v=1788996243385';
+import { api } from './api.js?v=1789027155999';
 
 export const state = {
   boot: null,       // /api/bootstrap payload (me, prefs, locks, defaults, tv…)

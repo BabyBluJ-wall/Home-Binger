@@ -7,8 +7,17 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1788996243385';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1788996243385';
+import { LAYOUT } from './config.js?v=1789027155999';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1789027155999';
+
+// t102: blend two hex colors (k = share of b) — drives the theme-tinted ceiling
+function mixHex(a, b, k) {
+  const pa = /^#?([0-9a-f]{6})$/i.exec(String(a).trim()), pb = /^#?([0-9a-f]{6})$/i.exec(String(b).trim());
+  if (!pa || !pb) return a;
+  const na = parseInt(pa[1], 16), nb = parseInt(pb[1], 16);
+  const ch = (sh) => Math.round(((na >> sh & 255) * (1 - k)) + ((nb >> sh & 255) * k));
+  return '#' + [16, 8, 0].map(sh => ch(sh).toString(16).padStart(2, '0')).join('');
+}
 
 export function buildRoom(theme) {
   const L = LAYOUT;
@@ -196,6 +205,14 @@ export function buildRoom(theme) {
     logoTex = logoTexture(t.accent);
     logo.material.map = logoTex;
     logo.material.needsUpdate = true;
+    // t102: the ceiling follows the theme too (a light tint of the wall —
+    // was a hardcoded pale blue that ignored every theme)
+    mats.ceiling.map?.dispose();
+    mats.ceiling.map = ceilingTexture(mixHex(t.wall || '#12275e', '#f2f4fa', 0.74));
+    mats.ceiling.needsUpdate = true;
+    // t102: the speakers' accent rings follow the theme (they were frozen
+    // at whatever theme was live when the store was built)
+    for (const rm of satRingMats) { rm.color.set(t.accent); rm.emissive.set(t.accent); rm.emissiveIntensity = 0.5; }
   }
 
   // ── t55: the STORE'S 7.1 — real cabinets on the walls, all aimed at the
@@ -203,6 +220,7 @@ export function buildRoom(theme) {
   const LISTENER = { x: 0, y: 1.6, z: 0 };
   const cabMat = new THREE.MeshStandardMaterial({ color: '#14161d', roughness: 0.55, metalness: 0.2 });
   const ringMat = new THREE.MeshStandardMaterial({ color: theme.accent, emissive: theme.accent, emissiveIntensity: 0.5 });
+  const satRingMats = [];   // t102: collected so applyTheme can retint them
   const SATS = [
     { id: 'C', x: 0, y: 3.98, z: -D + 0.22 },            // above the TV
     { id: 'FL', x: -W + 0.35, y: 3.98, z: -D + 0.85 },   // front corners
@@ -216,6 +234,7 @@ export function buildRoom(theme) {
     const cab = new THREE.Group();
     const box = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.26), cabMat); cab.add(box);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 8, 20), ringMat.clone());
+    satRingMats.push(ring.material);   // t102
     ring.position.set(0, 0.08, 0.135); cab.add(ring);
     const ring2 = ring.clone(); ring2.position.y = -0.12; ring2.scale.setScalar(0.72); cab.add(ring2);
     cab.rotation.order = 'YXZ';

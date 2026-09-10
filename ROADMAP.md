@@ -2,7 +2,7 @@
 
 *From a single video-store room to a full media building. Updated every turn.*
 
-**Current phase: 1.8.1 BUILT FOR TESTING** (updated 2026-09-09) — friends' shelves are in; next up: the built-in remote-access helper + finer sharing controls
+**Current phase: 1.8.1 BUILT FOR TESTING** (updated 2026-09-09) — friends' shelves are in; next up: the built-in remote-access helper (Tailscale on-ramp) + HB↔HB rung 2
 
 ---
 
@@ -128,6 +128,38 @@ Recovery: clone the repo, or rebuild the exe from source
       BabyBluJ-wall/Home-Binger (owner numbering: 1.0 → 1.5 → v1.5.5)
 **GATE:** one full owner walkthrough with zero must-fix findings.
 
+## THE CORDCUT CO-OP (TCC) 📡 *(THE UMBRELLA PROJECT — HB is its face; DLC stays last overall)*
+**v2 (owner's model, finalized 2026-09-07):** a FEDERATION OF EQUALS —
+every member runs their own HB, curates their store from the members they
+follow, publishes only the folders they choose, per follower. **Launch =
+NO dues** — everyone self-manages (own parts, power, digitizing); mesh
+membership is free. The Hearth (dues-funded shared always-on node, $15/mo,
+solar) is DEFERRED to a growth-stage decision. Shared virtual LAN
+— **Tailscale chosen
+2026-09-09** (free: 6 people per circle, unlimited devices each, node
+sharing beyond; re-verified on the live pricing page that morning;
+ZeroTier = by-hand fallback) = no port forwards for anyone,
+nothing public. Doctrine: security, privacy, ownership.
+Phases: **A** co-op LAN + hardening · **B** many remote Plex/Jellyfin ·
+**D** TCC face + grabber previews · **C** the Follow Link (HB↔HB — the
+big one; **PUBLISH GATE: TCC goes public when C works**) · **E** self-
+serve digitization guide · **F** the Hearth (deferred).
+Decisions locked: approval-based follows · per-follower share lists ·
+NO transitive sharing · founder's always-on PC = just his reliable node.
+2026-09-09: owner drafted the public **"Circles" pre-announcement** (HB↔HB
+sharing tease). Reviewed: anywhere-access to your own HB is FREE (not a
+paid perk — flip that line); "6 members" is the Tailscale framing (ZT free
+= 10 devices) — posting it effectively picks TS, so it HOLDS until the
+vendor call; HB never charges (only the VPN's own plan past free).
+Rewrite + notes: /home/user/ANNOUNCEMENT-CIRCLES-DRAFT.md (workspace-only).
+TCC NAME-DROP (2026-09-09 AM): owner — "I think its time" — the circles
+announcement now closes with HB "joining The Cordcut Co-op (TCC) — more
+on that soon!!" Tease only: the Phase C publish gate is unchanged, and
+repo uploads stay TCC-swept (the name is public now, the plan is not).
+Deliverables: **docs/TCC-PLAN.md** (master plan v2 + legal map + IP
+posture) · **docs/TCC-PITCH.md** (public pitch, ©/™ marked, publishes
+when the gate passes).
+
 ## Phase 2 — THE BOOK NOOK 📚
 **Goal:** the reading room. Ebooks + audiobooks, using what exists.
 - [ ] New room off the building (design: cozy, wall bookshelves, reading lamp)
@@ -165,17 +197,41 @@ Recovery: clone the repo, or rebuild the exe from source
       admin wants (the t87 instances treatment).
 *(1.7.0 LIVE + verified 2026-09-09: repo 29/29 files identical, release asset byte-identical.)*
 
-## t94 wave — rides the 1.8.0 release (OPENED 2026-09-09; folded into ONE bigger release by the owner, 2026-09-09)
-- [ ] **In-app new-version notice** — on launch, quietly check GitHub
-      Releases; newer → toast + link to the download. NO auto-download
-      ($0 doctrine; owner-approved 2026-09-09).
-- [ ] **Update-path hardening** — adoption ranks ALL data sources (sibling
+## t94 wave — SHIPPED in the 1.8.0 build (opened 2026-09-09; folded into one bigger release by the owner)
+- [x] **In-app new-version notice** — GET /api/version/latest (10-min
+      cache, quiet-fail, admin kill-switch + feed override in config),
+      toast + link 5 s after boot, external links via shell.openExternal
+      in the exe. Verified in-suite (t96) AND live in the real exe
+      against GitHub. NO auto-download ($0 doctrine).
+      **t100+t101 (2026-09-10, ride the next update): the notice is
+      STICKY — no auto-fade; the ✕ OR the "Get it" link dismisses it;
+      the app rechecks ~every 30 min while running (a release that
+      ships mid-session surfaces on its own); dismissal lasts the
+      session, and the note returns on the next launch.**
+- [x] **Update-path hardening** — adoption ranks ALL data sources (sibling
       folders + %APPDATA%) by db.json mtime, newest wins, and only
-      renames/removes a source after the copy VERIFIES (root cause of the
-      lost-profile bug). Code is in tree (desktop/main.cjs); needs full
-      suite + real-Electron click-through at the 1.7.1 build.
-- [ ] **RELEASE-NOTES-v1.8.0.md** (standing release-notes doctrine; renumbered with the fold-in).
-*(Ships inside the 1.8.0 release — which also carries: ZT-number corrections + docs/RESEARCH-REMOTE-ACCESS.md + docs/REMOTE-ACCESS.md + the Tailscale installer inside the zip.)*
+      renames/removes a source after the copy VERIFIES. CLICK-THROUGH
+      VERIFIED 2026-09-09 in real Electron, 4 scenarios: fresh boot ·
+      sibling adoption + rename · roaming adoption + cleanup · STALE
+      sibling vs FRESHER roaming (the owner's exact bug — roaming won,
+      stale sibling untouched).
+- [x] **t98 follow-up (owner report: "my profile didn't move from 1.7 to
+      1.8")** — root cause: "Extract All" gives each version its own
+      wrapper folder, and the finder only looked one level deep. FIXED:
+      the finder walks up ≤3 ancestors and scans each subtree for
+      Home?Binger* folders with data (same parent, wrappers, even a
+      different subfolder of Desktop/Downloads); system/AppData/temp dirs
+      never scanned; a run FROM the temp dir never adopts; adopted-from.txt
+      provenance note; t98b freshness guard — a source used <10 min ago
+      (a live second copy) still donates data but is never renamed/removed.
+      PROVEN in real Electron, 7 isolated scenarios B/C/E/E2/F/G —
+      including the owner's exact wrapper layout (E) and two-live-copies
+      (G: adopted, NOT renamed). START-HERE + exe pointer wording updated
+      ("anywhere nearby"). Rides the next exe.
+- [x] **RELEASE-NOTES-v1.8.0.md** written (standing release-notes doctrine).
+*(BUILT 2026-09-09: HomeBinger-1.8.0-beta.zip — suite 94/94, exe
+click-through clean, Tailscale installer + REMOTE-ACCESS.md + CREDITS.md
+in the folder; repo pack 75 files TCC-swept ×0. Awaiting owner upload.)*
 
 ## t95 wave — DANCE RIG 3D + BEAT LOCK + personal-settings verification (owner requests 2026-09-09 PM)
 - [x] **Music-synced 3D motion** — the owner: "i really want them to sync to
@@ -197,18 +253,71 @@ Recovery: clone the repo, or rebuild the exe from source
       cards, sidebar tabs).
 *(Suite: 90 → 93 checks; rides the 1.8.0 release.)*
 
-## Remote access & friend-sharing 🌐 *(in flight 2026-09-09)*
-- [x] Tailscale chosen for the guided path (free: 6 people, unlimited
-      devices each) — facts re-verified against the live pricing page.
-- [x] docs/REMOTE-ACCESS.md — the plain-language how-to (also ships in
-      the exe folder) + docs/CREDITS.md Tailscale notice.
-- [x] The official Tailscale installer rides the exe zip (optional,
-      user-run) — reach your store from anywhere; nothing public, ever.
-- [x] Friend-to-friend store sharing (1.8.1): a friend's Home Binger as
-      a source — friend codes, per-friend shelf lists, streams relayed
-      through the host's store. See docs/FRIEND-SHARING.md.
-- [ ] In-app on-ramp (Admin → Server) walks you through the Tailscale
-      setup — next on the bench.
+## Remote-connections wave — TCC COMES ALIVE 🌐 *(OPENED 2026-09-09 — owner: "TCC is now public with the app able to connect to other apps")*
+- [ ] **The wire** — in-app Tailscale on-ramp in Admin → Server (detect the
+      client → guide login → green "reachable remotely" + MagicDNS
+      address) — NEXT after the 1.8.0 tester round. Nothing public, ever;
+      Funnel stays off-doctrine.
+- [x] **docs/REMOTE-ACCESS.md** — written 2026-09-09 (install, login, MagicDNS address, node sharing, quarantine note, speed, triage).
+- [x] **docs/CREDITS.md** — Tailscale section added 2026-09-09 (BSD-3-Clause client + Wintun Prebuilt Binaries License; unmodified official installer).
+- [x] **Bundled installer — INSIDE THE MAIN ZIP** (owner's call, 2026-09-09):
+      the unmodified official Tailscale installer ships as a file in the
+      app folder (~+35-40 MB). Build recipe: fetch the stable installer
+      verbatim at 1.8.0 build time; CREDITS notice + in-app guide point
+      at it and at the official download.
+- [x] **HB↔HB rung 1 — t97 (BUILT 2026-09-09):** "Add a friend's Home
+      Binger" (Admin → Server → Friends' stores: address + code + Test) ·
+      host-side Friend sharing (invite → minted friend code → per-friend
+      share lists of OWN shelves · revoke = delete) · friend-as-a-source
+      adapter (their shelves = new sections, streams THROUGH their store —
+      tokens stay home) · per-user My Media toggles · NO TRANSITIVE SHARING
+      enforced at the wire (friend-sourced items filtered from every
+      outbound catalog + share lists) · token-gated public API
+      (/api/friend/catalog|stream|poster). Verified by a REAL second HB in
+      the suite (t97). docs/FRIEND-SHARING.md written. Ships in **1.8.1** (DECIDED
+      by owner 2026-09-09: the fixing release).
+- [x] **t99 follow-up (found in the Person A / Person B simulation,
+      2026-09-09): mutual follows fetched in a circle** — with A and B
+      following EACH OTHER, cold-cache catalog builds circled (A's build
+      pulled B's catalog while B's pulled A's) → boots stalled at 3/6
+      items until the 8 s timeouts unwound. Friend-facing endpoints
+      (/api/friend/catalog, the stream + poster findItem lookups, admin
+      friend-sections) now serve OWN content only (stores: []) —
+      friend-sourced items were never re-shareable, so nothing friends
+      see changes. Regression-locked in the suite (t99MutualFollows:
+      both stores fully stocked, ~3 ms, no stall) and the full remote
+      simulation runs ALL_OK.
+- [x] **1.8.8 WAVE, PART 1 (2026-09-10, in tree — rides the 1.8.8 exe):**
+      theme app-wide round 2 (menus/sidebar/front-door follow the WALL
+      color, ink/muted auto-flip for light walls, themed ceiling +
+      speaker accent rings — they were frozen at boot) · slider memory
+      (pro-rig sliders restore their true positions across close/reopen)
+      · light-rig realism (truss BOLTED — beams sweep, fixtures don't
+      carousel; all 6 programs sharpened; movement/speed ranges to 3×) ·
+      mirror-ball spin setting removed (ball spins with the music) ·
+      light controls moved INTO the DJ menu (50/50 playlist | lights) ·
+      friend-share lists = groups only (All/None picks, source-grouped;
+      Test toast reports shelf names, never a title). Suite 99/99 ×2.
+- [x] **1.8.8 wave, part 2 (DONE 2026-09-10, suite 101/101 ×2):**
+      t107 shelf fix — custom placements were ignored for sections
+      without IDs (Plex/Jellyfin): the map saved 'auto:'+title keys,
+      the engine pooled raw titles; unified + legacy alias, saved pins
+      keep working · t108 FULL DJ BOOTH (owner spec): 8 cues, loops
+      ½–32, slip, platter scrub, pitch ±6–WIDE + nudges + doubles,
+      trim +12 dB, isolator kill −40, sound-color FX (filter/dub),
+      xf assigns A/THRU/B, beat FX (echo·reverb·flanger·stutter·brake
+      + paddle), mic w/ auto-duck, master recorder (WebM), AUTO-DJ
+      16-beat mix, staging crate + Camelot/BPM filters + harmonic
+      glow, 3-band RGB waveforms (600-col cache), glass obsidian UI,
+      live booth-laptop monitor (CanvasTexture HUD), responsive
+      compact mode <1100px. PENDING SUB-ITEMS: ♭/♯ key shift, PFL
+      headphone cue. Package bumps to 1.8.8 at ship.
+- [ ] **HB↔HB rung 2** — item-level share granularity · "friend store
+      offline" indicator in the UI · follower-side browse polish.
+*(DECIDED: ONE BIGGER RELEASE — t94 hardening + version notice + remote
+connections all ship together as **1.8.0**; no separate 1.7.1. Owner,
+2026-09-09.)*
+
 ## Phase W — WATCH PARTY 🍿 *(owner request 2026-09-08)*
 **ORDER (owner, 2026-09-08): remote connections come FIRST — watch party
 work starts once remote access is done.** Far-away friends can't join a
@@ -259,3 +368,4 @@ t67 sub-band dynamics + booth flex + dance-ring bug ·
 t68 fresh-install grabber fix + zip hygiene (63/63 on clean data) ·
 t86–t89 multi-source + shelf-map fixes + grabber case art + dance-floor lights 2.0 (85/85 ×2)
 t93 store polish → 1.7.0 LIVE (portable uninstall/update doctrine, movement lights, app-wide theme, pure shelf sections, multi-RSS; 90/90 ×2)
+t94–t96 → 1.8.0 BUILT FOR TESTING 2026-09-09 (verified update adoption, new-version notice, dance rig 3D + beat lock, reset-all fix, password-change coverage, Tailscale bundle + remote-access docs; 94/94 + 4-scenario Electron click-through)

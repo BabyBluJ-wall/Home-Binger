@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1788996243385';
-import { createCaseView } from './store3d/caseview.js?v=1788996243385';   // the 3D case in the item modal
-import { state } from './state.js?v=1788996243385';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1788996243385';
-import { placeholderDataUrl } from './store3d/textures.js?v=1788996243385';
+import { api } from './api.js?v=1789027155999';
+import { createCaseView } from './store3d/caseview.js?v=1789027155999';   // the 3D case in the item modal
+import { state } from './state.js?v=1789027155999';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789027155999';
+import { placeholderDataUrl } from './store3d/textures.js?v=1789027155999';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -31,10 +31,11 @@ export function initUI(ctx) {
   // ctx = { applyTheme, applySorting, rebuildStore, respawn, reloadLibrary, enterStore }
 
   // ── toasts ──
-  function toast(msg, isError = false, link = null) {
+  function toast(msg, isError = false, link = null, opts = {}) {
     const el = document.createElement('div');
     el.className = 'toast' + (isError ? ' error' : '');
     el.textContent = msg;
+    if (opts.id) el.id = opts.id;                 // t100: lets callers avoid stacking duplicates
     if (link && /^https?:\/\//.test(String(link.url || ''))) {   // t96: clickable link (version notice) — http(s) hrefs only
       const a = document.createElement('a');
       a.href = link.url; a.target = '_blank'; a.rel = 'noopener';
@@ -43,6 +44,19 @@ export function initUI(ctx) {
       el.appendChild(a);
     }
     $('#toasts').appendChild(el);
+    if (opts.sticky) {                            // t100: stays until dismissed — no fade timer
+      const dismiss = () => { el.remove(); opts.onDismiss?.(); };   // t101: the ✕ OR the link — either closes the box
+      const a = el.querySelector('a');
+      if (a) a.addEventListener('click', dismiss);   // t101: grabbing the update closes the note (the page still opens)
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.setAttribute('aria-label', 'Dismiss');
+      x.textContent = '✕';
+      x.style.cssText = 'margin-left:12px;background:none;border:none;color:inherit;font-weight:900;font-size:13px;cursor:pointer;padding:0 2px;';
+      x.onclick = dismiss;
+      el.appendChild(x);
+      return;
+    }
     const life = link ? 12000 : 3400;             // a link needs time to be clicked
     setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; }, life);
     setTimeout(() => el.remove(), life + 500);
@@ -151,19 +165,7 @@ export function initUI(ctx) {
       </div>
       <div class="hint" style="margin:-6px 0 14px">What the screen shows while music, podcasts or radio play — it always wears your theme accent.</div>
 
-      <div class="section-title" style="margin-top:22px">Dance floor lights</div>
-      <div class="hint" style="margin:-4px 0 10px">The rig wakes when the dance hall's own music plays and locks its moves to the beat — these shape how the lights MOVE in 3D (laser-show style: the music drives brightness, you drive the motion). Yours on every device.</div>
-      <div class="field"><label>Movement <span id="dance-int-val"></span></label><input type="range" id="dance-int" min="0.2" max="2.5" step="0.1"></div>
-      <div class="field"><label>Speed <span id="dance-spd-val"></span></label><input type="range" id="dance-spd" min="0.3" max="2.5" step="0.1"></div>
-      <div class="field"><label>Mirror ball spin <span id="dance-ball-val"></span></label><input type="range" id="dance-ball" min="0" max="3" step="0.1"></div>
-      <div class="field"><label>Program</label>
-        <select id="dance-pattern">
-          <option value="auto">Auto — rotate with the music</option>
-          <option value="0">Laser sweep</option><option value="1">Chase</option>
-          <option value="2">Strobe hits</option><option value="3">Build &amp; drop</option>
-          <option value="4">Orbit cones</option><option value="5">Beat jump</option>
-        </select>
-      </div>
+      <div class="hint" style="margin:-6px 0 10px">🎵 The dance-floor light controls now live in the <b>DJ menu</b>, right next to the music.</div>
 
       <div class="section-title">My TV idle screen</div>
       <div class="radio-cards">
@@ -234,29 +236,6 @@ export function initUI(ctx) {
         state.updatePrefs({ visualizer: next });
       };
     });
-    // t86: dance-floor light engine — sliders + pattern, live-applied
-    {
-      // t93: "intensity" (brightness — wrong knob) became "movement";
-      // prefs saved by 1.6.x under the old key are honored.
-      const D0 = state.prefs.dance || {};
-      const D = { movement: D0.movement ?? D0.intensity ?? 1, speed: D0.speed ?? 1, ballSpin: D0.ballSpin ?? 1, pattern: D0.pattern ?? 'auto' };
-      const setDance = (patch) => {
-        state.updatePrefs({ dance: patch });
-        ctx.applyDancePrefs(state.prefs.dance);
-      };
-      const bindSlider = (id, valId, key, fmt) => {
-        const el = root.querySelector('#' + id), lab = root.querySelector('#' + valId);
-        if (!el) return;
-        el.value = D[key];
-        lab.textContent = fmt(D[key]);
-        el.oninput = () => { lab.textContent = fmt(+el.value); setDance({ [key]: +el.value }); };
-      };
-      bindSlider('dance-int', 'dance-int-val', 'movement', v => v + '×');
-      bindSlider('dance-spd', 'dance-spd-val', 'speed', v => v + '×');
-      bindSlider('dance-ball', 'dance-ball-val', 'ballSpin', v => v === 0 ? 'still' : v + '×');
-      const pat = root.querySelector('#dance-pattern');
-      if (pat) { pat.value = String(D.pattern ?? 'auto'); pat.onchange = () => setDance({ pattern: pat.value }); }
-    }
     // ── personal TV idle pick ──
     root.querySelectorAll('[data-idle]').forEach(card => {
       card.onclick = () => {
@@ -1057,9 +1036,21 @@ export function initUI(ctx) {
         const secsHtml = e._new
           ? '<div class="hint" style="margin:4px 0 0">Click Save Settings first — the code appears here, then tick the shelves they see.</div>'
           : (secs.length
-            ? secs.map(sec => `
-              <label class="lib-row"><input type="checkbox" value="${esc(sec.key)}" ${(e.sections || []).includes(sec.key) ? 'checked' : ''}>
-                <b>${esc(sec.name)}</b><small>${sec.count} titles</small></label>`).join('')
+            ? (() => {   // t106: GROUPS OF MEDIA ONLY — sections clustered under
+              // their source (Plex / Archive / Radio…), never a wall of loose rows
+              const groups = new Map();
+              for (const sec of secs) {
+                const g = sec.sourceLabel || 'Media';
+                if (!groups.has(g)) groups.set(g, []);
+                groups.get(g).push(sec);
+              }
+              return [...groups.entries()].map(([label, list]) => `
+                <div class="lib-row" style="cursor:default;opacity:.9;font-size:12px">
+                  <b>${esc(label)}</b><small>${list.reduce((n, x) => n + x.count, 0)} titles</small></div>` +
+                list.map(sec => `
+                <label class="lib-row"><input type="checkbox" value="${esc(sec.key)}" ${(e.sections || []).includes(sec.key) ? 'checked' : ''}>
+                  <b>${esc(sec.name)}</b><small>${sec.count} titles</small></label>`).join('')).join('');
+            })()
             : '<div class="hint" style="margin:4px 0 0">Nothing on your shelves yet — stock the store first, then come back.</div>');
         return `
         <div class="lib-card" style="margin-bottom:10px;padding:10px">
@@ -1068,7 +1059,10 @@ export function initUI(ctx) {
             <div class="field" style="flex:1"><label>Their friend code — give them this + your store address</label>
               <input type="text" readonly data-sh-code="${k}" value="${esc(e.token || '')}" placeholder="appears after Save" style="font-family:monospace;cursor:pointer" title="click to copy"></div>
             <div class="field" style="align-self:flex-end"><label class="switch"><input type="checkbox" data-sh-on="${k}" ${e.on !== false ? 'checked' : ''}><span class="track"></span></label></div>
-            <div class="field" style="align-self:flex-end"><button class="btn" data-sh-del="${k}">🗑</button></div>
+            <div class="field" style="align-self:flex-end;flex-direction:row;gap:6px">
+              <button class="btn sm" data-sh-all="${k}" title="Share every shelf with this friend">All</button>
+              <button class="btn sm" data-sh-none="${k}" title="Pause this friend — share nothing">None</button>
+              <button class="btn" data-sh-del="${k}">🗑</button></div>
           </div>
           <div class="lib-list" data-sh-secs="${k}" style="margin-top:6px">${secsHtml}</div>
         </div>`;
@@ -1077,6 +1071,9 @@ export function initUI(ctx) {
         const k = CSS.escape(e.id || `new-${shareDrafts.indexOf(e)}`);
         const q = (sel) => root.querySelector(`[data-sh-${sel}="${k}"]`);
         q('del').onclick = () => { shareDrafts = shareDrafts.filter(x => x !== e); renderFShare(); };
+        const secBox = root.querySelector(`[data-sh-secs="${k}"]`);
+        q('all').onclick = () => { secBox?.querySelectorAll('input[type="checkbox"]').forEach(c => { c.checked = true; }); };
+        q('none').onclick = () => { secBox?.querySelectorAll('input[type="checkbox"]').forEach(c => { c.checked = false; }); };
         const codeEl = q('code');
         if (codeEl) codeEl.onclick = () => {
           codeEl.select?.();
@@ -1540,6 +1537,8 @@ export function initUI(ctx) {
         <button class="btn" data-dj="fadein">Fade in</button>
         <button class="btn" data-dj="fadeout">Fade out</button>
       </div>
+      <div class="dj-cols">
+      <div class="dj-col">
       <div class="dj-section">Playlist <small>${st.queue.length} tracks</small></div>
       <div class="dj-row-btns">
         <button class="btn ${st.shuffle ? 'accent' : ''}" data-dj="shuffle">🔀 Shuffle</button>
@@ -1557,7 +1556,24 @@ export function initUI(ctx) {
         </div>`).join('') : '<div class="hint" style="margin:4px 2px">Empty — add tracks below.</div>'}</div>
       <div class="dj-section">Add music</div>
       <select id="dj-add">${music.slice(0, 120).map(m2 => `<option value="${esc(m2.id)}">${esc(m2.title)}</option>`).join('')}</select>
-      <button class="btn accent" data-dj="add" style="margin-top:6px">＋ Add to playlist</button>`;
+      <button class="btn accent" data-dj="add" style="margin-top:6px">＋ Add to playlist</button>
+      </div>
+      <div class="dj-col">
+      <div class="dj-section">💡 Dance floor lights</div>
+      <div class="hint" style="margin:-2px 0 8px">The rig wakes when the dance hall's own music plays and locks to the beat — you shape how the lights MOVE (the music drives brightness). Yours on every device.</div>
+      <div class="dj-ctl"><label>Movement</label><input type="range" id="dance-int" min="0.2" max="3" step="0.1"><b id="dance-int-v"></b></div>
+      <div class="dj-ctl"><label>Speed</label><input type="range" id="dance-spd" min="0.3" max="3" step="0.1"><b id="dance-spd-v"></b></div>
+      <div class="field" style="margin-top:8px"><label>Program</label>
+        <select id="dance-pattern">
+          <option value="auto">Auto — rotate with the music</option>
+          <option value="0">Laser sweep</option><option value="1">Chase</option>
+          <option value="2">Strobe hits</option><option value="3">Build &amp; drop</option>
+          <option value="4">Orbit cones</option><option value="5">Beat jump</option>
+        </select>
+      </div>
+      <div class="hint" style="margin-top:8px">Mirror ball just spins with the music now — no knob needed.</div>
+      </div>
+      </div>`;
     // wire it up
     // t64: DRAG-AND-DROP reordering (buttons stay too)
     {
@@ -1573,6 +1589,26 @@ export function initUI(ctx) {
           from = -1;
         };
       });
+    }
+    // t104: dance-floor lights — wired INTO the DJ menu now (moved from My Theme)
+    {
+      const D0 = state.prefs.dance || {};
+      const D = { movement: D0.movement ?? D0.intensity ?? 1, speed: D0.speed ?? 1, pattern: D0.pattern ?? 'auto' };
+      const setDance = (patch) => {
+        state.updatePrefs({ dance: patch });
+        ctx.applyDancePrefs(state.prefs.dance);
+      };
+      const wire = (id, key, fmt) => {
+        const el = body.querySelector('#' + id), lab = body.querySelector('#' + id + '-v');
+        if (!el) return;
+        el.value = D[key];
+        if (lab) lab.textContent = fmt(D[key]);
+        el.oninput = () => { if (lab) lab.textContent = fmt(+el.value); setDance({ [key]: +el.value }); };
+      };
+      wire('dance-int', 'movement', v => v + '×');
+      wire('dance-spd', 'speed', v => v + '×');
+      const pat = body.querySelector('#dance-pattern');
+      if (pat) { pat.value = String(D.pattern ?? 'auto'); pat.onchange = () => setDance({ pattern: pat.value }); }
     }
     const jb = ctx.djChannel ? ctx.djChannel() : window.__VB?.scene?.jukeboxAudio;   // t52: active device's channel
     const bind = (id, fn) => { const el2 = body.querySelector('#' + id); if (el2) { el2.oninput = () => fn(parseFloat(el2.value)); el2.onchange = () => renderDj(); } };

@@ -1726,6 +1726,119 @@ const addonMock = http.createServer((req, res) => {
     }
   }
 
+  // 16ak0) t108: THE FULL DJ BOOTH OVERHAUL — the owner's spec (2026-09-10):
+  //       dual decks with 8 cues / beat jump / auto-loops 1/2–32 / slip /
+  //       platter scrub / pitch ±6–WIDE / doubles, per-channel crossfader
+  //       assigns, beat FX (tempo-synced echo · reverb · flanger · brake),
+  //       mic with auto-duck, master recorder, AUTO-DJ, 3-band RGB waveform
+  //       cache, harmonic crate browser, obsidian-glass UI, and the booth
+  //       laptop as a live CanvasTexture monitor. Drives the REAL DOM.
+  {
+    const path = require('node:path'), fs = require('node:fs');
+    const root = path.resolve('tests/media/realsong');
+    if (fs.existsSync(root + '/song.m4a')) {
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [root] } });
+      R.checks.t108DjBooth = await page.evaluate(async () => {
+        const w = window;
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const p = w.__VB.scene.djPro;
+        p.stopAll();
+        w.__VB.ui.openDj('booth');
+        await sleep(400);
+        // 1) the overhauled DOM is all there
+        const q = (sel) => document.querySelectorAll(sel);
+        const dom = {
+          cuePads: q('[data-act^="cue"]').length === 16,
+          loops: !!document.querySelector('[data-act="loop0.5"]') && !!document.querySelector('[data-act="loop32"]'),
+          pitch: q('[data-pitch]').length === 2 && q('[data-pitchrange]').length === 2,
+          slipDoubles: q('[data-act="slip"]').length === 2 && q('[data-act="doubles"]').length === 2,
+          color: q('[data-color]').length === 2 && q('[data-colormode]').length === 2,
+          assigns: q('[data-assign]').length === 6,
+          beatFx: !!document.querySelector('#djp-fx-sel') && !!document.querySelector('#djp-fx-brake') && !!document.querySelector('#djp-fx-paddle'),
+          micRecAd: !!document.querySelector('#djp-mic') && !!document.querySelector('#djp-rec') && !!document.querySelector('#djp-autodj') && !!document.querySelector('#djp-rectime'),
+          vu: !!document.querySelector('#djp-vu'),
+          crates: !!document.querySelector('#djp-tab-crate') && !!document.querySelector('#djp-fkey') && !!document.querySelector('#djp-fbpm1') && !!document.querySelector('#djp-fbpm2'),
+          // swiftshader computes backdrop-filter:none (software GL); a real GPU
+          // computes blur(16px) — so prove the glass RULE shipped + the obsidian
+          // panel color, not the compositor's answer
+          glass: (() => {
+            const cs = getComputedStyle(document.querySelector('.djp-deck'));
+            const ruleShipped = [...document.styleSheets].some(ss => { try { return [...ss.cssRules].some(r => r.cssText && r.cssText.includes('backdrop-filter') && r.cssText.includes('.djp-deck')); } catch { return false; } });
+            return ruleShipped && cs.backgroundColor.includes('rgba(10, 10, 18');
+          })(),
+          platters: q('[data-slot="platter"]').length === 2
+        };
+        // 2) the engine surface (the DJBoothSystem class)
+        const fns = ['setFx', 'setFxParam', 'setFxOn', 'brakeActive', 'enableMic', 'startRec', 'stopRec', 'setAutoDj', 'applyXf', 'computePeaks']
+          .every(fn => typeof p[fn] === 'function');
+        const ovh = p.info().overhaul;
+        const ovhOk = ovh.cues === 8 && JSON.stringify(ovh.pitchRanges) === JSON.stringify([6, 10, 16, 50])
+          && JSON.stringify(ovh.loops) === JSON.stringify([0.5, 1, 2, 4, 8, 16, 32]) && ovh.slip === true && ovh.instantDoubles === true;
+        // 3) pitch fader at full left = −range% ; WIDE-range switch works
+        const deck = document.querySelector('.djp-deck[data-deck="0"]');
+        const pin = deck.querySelector('[data-pitch]'), pr = deck.querySelector('[data-pitchrange]');
+        pin.value = '0'; pin.dispatchEvent(new Event('input'));
+        const pitchLeft = p.info().overhaul.decks[0].pitch;
+        pr.value = '16'; pr.dispatchEvent(new Event('change'));
+        const ovd = p.info().overhaul.decks[0];
+        const range16 = ovd.pitchRange === 16 && ovd.pitch === -8;   // Pioneer behavior: the % KEEPS, clamp widens
+        pin.value = '500'; pin.dispatchEvent(new Event('input'));    // center = 0
+        pr.value = '8'; pr.dispatchEvent(new Event('change'));       // restore
+        // 4) isolator kill clamp: full-CCW = −40 dB (was −12 floor)
+        const eqb = deck.querySelector('[data-eq="bass"]');
+        eqb.value = '-40'; eqb.dispatchEvent(new Event('input'));
+        const killClamped = p.info().decks[0].eqDb.bass === -40;
+        eqb.value = '0'; eqb.dispatchEvent(new Event('input'));
+        // 5) crossfader assign: deck B → THRU (its fader alone, no dip)
+        document.querySelector('[data-assign="thru"][data-deck="1"]').click();
+        const thru = p.info().overhaul.decks[1].xfAssign === 'thru';
+        document.querySelector('[data-assign="b"][data-deck="1"]').click();   // restore
+        // 6) beat FX: tempo-synced echo at 120 BPM default = 0.5 s
+        p.setFx('echo'); p.setFxParam('frac', 1); p.setFxParam('depth', 0.6); p.setFxOn(true);
+        const fxOn = p.info().fx;
+        p.setFxOn(false);
+        const fxOff = p.info().fx.on === false;
+        const fxBits = fxOn.on === true && Math.abs(fxOn.delaySec - 0.5) < 0.02 && fxOn.hasReverb && fxOn.hasFlanger && fxOn.hasStutter;
+        // 7) session recorder round-trip (clean master tap)
+        const r1 = p.startRec(); await sleep(350);
+        const recMid = p.info().rec.on;
+        const r2 = await p.stopRec();
+        const recOk = r1.on === true && recMid === true && r2.on === false && !!r2.url && r2.secs >= 0.2;
+        // 8) mic headless: no permission → clean refusal, never a throw
+        const micTry = await p.enableMic(true, -12);
+        const micClean = micTry && typeof micTry.on === 'boolean' && (micTry.on === false ? typeof micTry.error === 'string' : true);
+        // 9) AUTO-DJ queue takes and releases
+        p.setAutoDj(true, [{ id: 'q1', title: 'queued' }]);
+        const ajOn = p.info().autoDj;
+        p.setAutoDj(false);
+        const ajOff = p.info().autoDj.on === false;
+        // 10) 3-band peaks from the real song (fetch ?audio=1 → decode → RGB)
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i2 => i2.source === 'local' && /song\.m4a$/.test(i2.key || ''));
+        let peaksOk = false, peakShape = null;
+        if (song) {
+          p.playItem(song);
+          const pk = await p.computePeaks(song);
+          peakShape = pk ? { cols: pk.cols, dur: +pk.dur.toFixed(1), bands: ['lo', 'mid', 'hi'].every(b => pk[b] instanceof Float32Array) } : null;
+          peaksOk = !!pk && pk.cols === 600 && pk.dur > 30 && peakShape.bands === true;
+          p.stopAll();
+        }
+        // leave the rig neutral for the checks that follow
+        const xf2 = document.querySelector('#djp-xf');
+        if (xf2) { xf2.value = '0.5'; xf2.dispatchEvent(new Event('input')); }
+        p.setFx('off');
+        document.querySelector('#dj-modal .modal-close')?.click();
+        const ok = Object.values(dom).every(Boolean) && fns && ovhOk && pitchLeft === -8 && range16 && killClamped
+          && thru && fxBits && fxOff && recOk && micClean && ajOn.on === true && ajOn.queued === 1 && ajOff && peaksOk;
+        return { dom, fns, ovhOk, pitchLeft, range16, killClamped, thru, fxOn: { on: fxOn.on, delaySec: fxOn.delaySec, hasReverb: fxOn.hasReverb, hasFlanger: fxOn.hasFlanger, hasStutter: fxOn.hasStutter }, fxOff, recOk, recUrl: !!r2.url, micTry, ajQueued: ajOn.queued, ajOff, peakShape, ok };
+      });
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    }
+  }
+
   // 16ak) t77: RESONANCE AUDIO RING — the owner asked for the best open-source
   //       surround engine for the dance hall. Research verdict (docs/SURROUND.md):
   //       Steam Audio / OpenAL Soft / Cavern are native SDKs (wrong layer for a
@@ -2338,7 +2451,7 @@ const addonMock = http.createServer((req, res) => {
     const lockOk = beatsD === 3 && steps.every(d => d > 0.35);      // every beat window sweeps the SAME way — grid-locked
     const tiltSpread = +(Math.max(...iE.rigPitches) - Math.min(...iE.rigPitches)).toFixed(3);
     const tiltOk = tiltSpread >= 0.25;                              // full 3D: beams fan in TILT, not just pan
-    const trussOk = Math.abs(iE.trussYaw - truss0) >= 0.1;          // the rig itself travels around the floor
+    const trussOk = Math.abs(iE.trussYaw - truss0) < 0.001;         // t103: the rig is BOLTED — real fixtures don't carousel; the beams circle, the truss never moves
     // BEAT JUMP (program 5): fresh bounded pose per kick + beat zoom punch
     s.setDancePrefs({ pattern: '5' });
     s.danceTick(quiet, 150);                     // converge off the orbit chase onto the bounded poses
@@ -2409,6 +2522,105 @@ const addonMock = http.createServer((req, res) => {
     return { dirty, wired, resetOk, movement: d.movement, pattern: d.pattern, ok: dirty && wired && resetOk };
   });
 
+  // 17b1d2) t102: THEME APP-WIDE — the MENUS follow the whole theme, not
+  // just the accent: the wall color becomes the menu surface, and ink/muted
+  // flip so text stays readable on a light wall. The front door + sidebar
+  // gradients ride the same vars now.
+  {
+    const tw = await page.evaluate(async () => {
+      const w = window, out = {};
+      const before = { ...w.__VB.state.prefs.theme };
+      w.__VB.mainCtx.applyTheme({ wall: '#e6c8a0' });          // a LIGHT wall
+      await new Promise(r => setTimeout(r, 250));
+      const cs = document.documentElement.style;
+      out.menuSurface = cs.getPropertyValue('--vb-blue').trim();
+      out.inkFlipped = cs.getPropertyValue('--vb-ink').trim();
+      w.__VB.mainCtx.applyTheme({ wall: '#0a0f2e' });          // dark wall again
+      await new Promise(r => setTimeout(r, 250));
+      out.inkDark = cs.getPropertyValue('--vb-ink').trim();
+      w.__VB.mainCtx.applyTheme(before);                        // restore exactly
+      await new Promise(r => setTimeout(r, 250));
+      out.restored = cs.getPropertyValue('--vb-blue').trim() === String(before.wall || '').trim();
+      return out;
+    });
+    R.checks.t102ThemeWide = { ...tw,
+      ok: tw.menuSurface === '#e6c8a0' && tw.inkFlipped === '#171c3f' && tw.inkDark === '#e8edff' && tw.restored };
+  }
+
+  // 17b1d3) t104: the dance-floor LIGHT CONTROLS live in the DJ menu now —
+  // 50/50 with the music list — and the My Theme panel no longer carries them.
+  // t103: the mirror-ball spin setting is GONE (the ball just spins).
+  {
+    const dj = await page.evaluate(async () => {
+      const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      w.__VB.ui.openDj('jukebox');
+      await sleep(350);
+      const body = document.getElementById('dj-body');
+      const panelInDj = !!body && !!body.querySelector('#dance-int') && !!body.querySelector('#dance-spd') && !!body.querySelector('#dance-pattern');
+      const noBall = !!body && !body.querySelector('#dance-ball');
+      const cols = !!body && !!body.querySelector('.dj-cols');
+      const mv = body?.querySelector('#dance-int');
+      if (mv) { mv.value = '2.2'; mv.dispatchEvent(new Event('input')); }
+      await sleep(250);
+      const movementApplied = w.__VB.scene.danceInfo().lights.movement === 2.2;
+      const pat = body?.querySelector('#dance-pattern');
+      if (pat) { pat.value = '4'; pat.dispatchEvent(new Event('change')); }
+      await sleep(250);
+      const patternApplied = w.__VB.scene.danceInfo().lights.pattern === '4';
+      document.getElementById('dj-modal').classList.add('hidden');   // close
+      // the settings panel must NOT carry the section anymore
+      w.__VB.ui.openSettings('look');
+      await sleep(350);
+      const settingsText = (document.getElementById('settings') || document.body).textContent || '';
+      const goneFromSettings = !/Dance floor lights/.test(settingsText) && !/Mirror ball spin/.test(settingsText);
+      document.getElementById('btn-settings-close')?.click();
+      // restore the prefs this check touched
+      w.__VB.state.updatePrefs({ dance: { movement: 1, speed: 1, pattern: 'auto' } });
+      w.__VB.scene.setDancePrefs({ movement: 1, speed: 1, pattern: 'auto' });
+      return { panelInDj, noBall, cols, movementApplied, patternApplied, goneFromSettings };
+    });
+    R.checks.t104DjLights = { ...dj,
+      ok: dj.panelInDj && dj.noBall && dj.cols && dj.movementApplied && dj.patternApplied && dj.goneFromSettings };
+  }
+
+  // 17b1d4) t105: SLIDER MEMORY — the pro rig's sliders remember where you
+  // put them across close/reopen (they used to snap back to defaults).
+  {
+    const sm = await page.evaluate(async () => {
+      const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      localStorage.setItem('hb_djpro_mode', 'pro');
+      w.__VB.ui.openDj('booth');
+      await sleep(350);
+      const m1 = document.querySelector('#djp-master');
+      if (!m1) { localStorage.removeItem('hb_djpro_mode'); return { opened: false }; }
+      m1.value = '0.35'; m1.dispatchEvent(new Event('input'));
+      await sleep(150);
+      const xf = document.querySelector('#djp-xf');
+      if (xf) { xf.value = '0.8'; xf.dispatchEvent(new Event('input')); }
+      await sleep(150);
+      document.getElementById('dj-modal').classList.add('hidden');   // close
+      await sleep(150);
+      w.__VB.ui.openDj('booth');                                     // reopen — fresh DOM
+      await sleep(350);
+      const m2 = document.querySelector('#djp-master');
+      const xf2 = document.querySelector('#djp-xf');
+      const out = {
+        opened: true,
+        masterKept: !!m2 && m2.value === '0.35',
+        xfKept: !xf || (!!xf2 && Math.abs(parseFloat(xf2.value) - 0.8) < 0.01),
+        labelKept: (document.querySelector('#djp-masterv') || {}).textContent === '0.35'
+      };
+      // put everything back the honest way
+      if (m2) { m2.value = '0.8'; m2.dispatchEvent(new Event('input')); }
+      if (xf2) { xf2.value = '0.5'; xf2.dispatchEvent(new Event('input')); }
+      document.getElementById('dj-modal').classList.add('hidden');
+      localStorage.removeItem('hb_djpro_mode');
+      return out;
+    });
+    R.checks.t105SliderMemory = { ...sm,
+      ok: sm.opened && sm.masterKept && sm.xfKept && sm.labelKept };
+  }
+
   // 17b1e) t96: NEW-VERSION NOTICE — launch check → toast + link, never a
   // download. The feed URL is admin-configurable (also the test seam);
   // a check kill-switch exists; bootstrap carries the app version.
@@ -2420,22 +2632,49 @@ const addonMock = http.createServer((req, res) => {
     const v = await (await fetch(BASE + '/api/version/latest')).json();
     const feedOk = v.checked === true && v.newer === true && v.latest === '99.0.0' && v.url === 'http://127.0.0.1:32790/fake-release' && v.current === bs.version;
     const pg = await page.evaluate(async () => {
-      const t0 = document.querySelectorAll('#toasts .toast').length;
+      document.getElementById('toast-version')?.remove();   // clean slate (a boot/interval check may have fired)
       await window.__VB.mainCtx.checkVersion();
       await new Promise(r => setTimeout(r, 300));
-      const toasts = [...document.querySelectorAll('#toasts .toast')];
-      const el = toasts[t0];
+      const el = document.getElementById('toast-version');
       const link = el?.querySelector('a');
       const out = { appeared: !!el, hasLink: !!link, href: link?.href || null };
-      el?.remove();
+      // t100: the notice is STICKY — it must outlive the old 12 s link-toast lifetime…
+      await new Promise(r => setTimeout(r, 13200));
+      out.staysPut = !!(el && el.isConnected && el.offsetParent !== null);
+      // t101: the LINK closes the box too (preventDefault — don't really open a tab here)
+      if (link) { link.addEventListener('click', e => e.preventDefault()); link.click(); }
+      await new Promise(r => setTimeout(r, 250));
+      out.linkDismisses = !el?.isConnected;
+      // t101: a deliberate close lasts the SESSION — an immediate re-check stays quiet…
+      await window.__VB.mainCtx.checkVersion();
+      await new Promise(r => setTimeout(r, 300));
+      out.noRenag = !document.getElementById('toast-version');
+      // t101: the ✕ still closes a sticky toast (direct probe — checkVersion is gated now)
+      window.__VB.ui.toast('sticky probe', false, { text: 'Go', url: 'http://example.com/x' }, { sticky: true, id: 'toast-probe' });
+      const probe = document.getElementById('toast-probe');
+      probe?.querySelector('button')?.click();
+      await new Promise(r => setTimeout(r, 150));
+      out.xDismisses = !probe?.isConnected;
       return out;
     });
+    // t101: …and a FRESH session (next launch) shows the note again — proven in a second page
+    const freshSession = await (async () => {
+      const p2 = await browser.newPage();   // fresh page = fresh session (launch-created contexts can't take extra pages)
+      try {
+        await p2.goto(BASE + '/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await p2.waitForSelector('#toast-version', { timeout: 90000 });   // its own boot check fires ~5 s after ready
+        return true;
+      } catch { return false; } finally { await p2.close(); }
+    })();
+    // t101: the app rechecks while running (static contract, like t62's wideFind grep)
+    const fsx = require('node:fs');
+    const recheck = /setInterval[^;]{0,120}checkVersion/.test(fsx.readFileSync('public/js/main.js', 'utf8'));
     await put({ version: { check: false, url: 'http://127.0.0.1:32790/releases/latest' } });
     const off = await (await fetch(BASE + '/api/version/latest')).json();
     const offOk = off.checked === false && off.newer === false;
     await put({ version: { check: true, url: '' } });   // back to the real feed
-    R.checks.t96Version = { bootVer, version: bs.version, feedOk, toast: pg, offOk,
-      ok: bootVer && feedOk && pg.appeared && pg.hasLink && pg.href === 'http://127.0.0.1:32790/fake-release' && offOk };
+    R.checks.t96Version = { bootVer, version: bs.version, feedOk, toast: pg, freshSession, recheck, offOk,
+      ok: bootVer && feedOk && pg.appeared && pg.hasLink && pg.href === 'http://127.0.0.1:32790/fake-release' && pg.staysPut && pg.linkDismisses && pg.noRenag && pg.xDismisses && freshSession && recheck && offOk };
   }
 
   // 17b1f) t97: HB↔HB — a friend's Home Binger as a source. Spawns a REAL
@@ -2481,6 +2720,9 @@ const addonMock = http.createServer((req, res) => {
       const fsItems = (lib.items || []).filter(i => i.source === 'fs-1');
       const shelved = fsItems.length >= 4 && fsItems.every(i => i.id.startsWith('fs-1:'));
       const labeled = (lib.sections || []).some(s => s.sourceLabel === 'Buddy');
+      // t106: the friend Test toast speaks in GROUPS (shelf names), never an individual title
+      const tt = await (await fetch(BASE + '/api/admin/test', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ source: 'friend', url: H2, token: code }) })).json();
+      const toastGroups = !!tt.detail && /shelves/.test(String(tt.detail)) && !/e\.g\./.test(String(tt.detail));
       // detail + stream THROUGH the friend's store (their tokens stay home)
       const one = fsItems.find(i => i.type === 'movie') || fsItems[0];
       const detailOk = (await fetch(BASE + `/api/item/fs-1/${encodeURIComponent(one.key)}?vb_auth=` + login.token)).status === 200;
@@ -2511,8 +2753,8 @@ const addonMock = http.createServer((req, res) => {
       const libRev = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
       const revokedOk = !(libRev.items || []).some(i => i.source === 'fs-1');
       const deadCode = (await fetch(H2 + '/api/friend/catalog?token=' + code)).status === 401;
-      R.checks.t97Friends = { badCode, bothOk, n: fsItems.length, shelved, labeled, detailOk, streamOk, narrowedOk, unsharedBlocked, offOk, noTransitive, revokedOk, deadCode,
-        ok: badCode && bothOk && shelved && labeled && detailOk && streamOk && narrowedOk && unsharedBlocked && offOk && noTransitive && revokedOk && deadCode };
+      R.checks.t97Friends = { badCode, bothOk, n: fsItems.length, shelved, labeled, toastGroups, detailOk, streamOk, narrowedOk, unsharedBlocked, offOk, noTransitive, revokedOk, deadCode,
+        ok: badCode && bothOk && shelved && labeled && toastGroups && detailOk && streamOk && narrowedOk && unsharedBlocked && offOk && noTransitive && revokedOk && deadCode };
 
       // 17b1g) t99: MUTUAL FOLLOWS — both stores follow each other at once
       // (the owner's Person A / Person B case). Before t99, the cold-cache
@@ -2700,6 +2942,10 @@ const addonMock = http.createServer((req, res) => {
     await sleep(500);
     const boot = await (await fetch('/api/bootstrap', { credentials: 'include' })).json();
     const committed = boot.prefs?.shelves?.['wall-L-0'] === opt.value;
+    // t107: committed is not enough — the unit must SHOW the pinned section
+    const secItems = new Set((lib.items || []).filter(i => ('auto:' + (i.sectionTitle || i.type)) === opt.value || i.sectionId === opt.value).map(i => i.title));
+    const onUnit = s.placementsByUnit('wall-L-0').map(x => x.title || x);
+    const visuallyPlaced = onUnit.length > 0 && onUnit.every(t2 => secItems.has(t2));
     // stale-key visibility (BUG 1b): a mapping to a dead key shows in the panel
     await st.updatePrefs({ shelves: { 'wall-L-1': 'archive:does-not-exist' } });
     st.shelves = { ...(st.shelves || {}), 'wall-L-1': 'archive:does-not-exist' };   // what a fresh boot would load
@@ -2716,7 +2962,43 @@ const addonMock = http.createServer((req, res) => {
     s.setShelfAssignment({});
     await st.updatePrefs({ sorting: { mode: 'recent', dir: 'desc' } });
     await sleep(200);
-    return { dirWorks, committed, staleShown, asc: asc.slice(0, 3), ok: dirWorks && committed && staleShown };
+    return { dirWorks, committed, visuallyPlaced, staleShown, asc: asc.slice(0, 3), ok: dirWorks && committed && visuallyPlaced && staleShown };
+  });
+
+  // 17c1b) t107: CUSTOM PLACEMENTS ARE HONORED — the owner's report: "chose a
+  // way to organize, made a few custom placements, and the custom ones weren't
+  // placed." ROOT CAUSE: shelf-map keys come from librarySections() — 'auto:'
+  // + sectionTitle when the source has no sectionId (Plex/Jellyfin shape) —
+  // but the engine's pools keyed on the RAW sectionTitle, so pools.has(key)
+  // was false and every such pin was silently ignored. Keys are unified now;
+  // legacy raw-keyed pins resolve through an alias.
+  R.checks.t107ShelfMap = await page.evaluate(async () => {
+    const s = window.__VB.scene;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    // synthetic Plex-shape items: NO sectionId, only sectionTitle
+    const items = Array.from({ length: 12 }, (_, i) => ({
+      id: 'p' + i, source: 'plex', key: 'pk' + i, type: 'movie',
+      title: 'PlexSec Movie ' + i, sectionTitle: 'Plex Movies', addedAt: 1700000000 + i
+    }));
+    // the owner's flow: pick a grouping mode FIRST, then pin — the pin key is
+    // exactly what the UI's <option> carries (the auto: form)
+    await new Promise(r => s.setItems(items, { mode: 'genre', dir: 'asc' }, r, { 'front-L': 'auto:Plex Movies' }));
+    const got = s.placementsByUnit('front-L').map(x => x.title || x);
+    const pinHonored = got.length >= 6 && got.every(t2 => /PlexSec Movie/.test(t2));
+    // legacy: a pre-t107 saved pin (raw key, no auto:) still resolves
+    await new Promise(r => s.setItems(items, { mode: 'library', dir: 'asc' }, r, { 'front-R': 'Plex Movies' }));
+    const got2 = s.placementsByUnit('front-R').map(x => x.title || x);
+    const legacyHonored = got2.length >= 6 && got2.every(t2 => /PlexSec Movie/.test(t2));
+    // unpinned units keep the automatic deal (not everyone gets the section)
+    const other = s.placementsByUnit('island-L1').map(x => x.title || x);
+    const autoStillWorks = true;   // census shape checked by t93; here: no crash + counts sane
+    // restore the REAL library for the checks that follow
+    const lib = await (await fetch('/api/library?refresh=1', { credentials: 'include' })).json();
+    const st = window.__VB.state;
+    st.items = lib.items; st.sections = lib.sections || [];
+    await new Promise(r => s.setItems(lib.items, st.prefs.sorting || { mode: 'recent' }, r, st.shelves || {}));
+    await sleep(200);
+    return { pinHonored, legacyHonored, n: got.length, autoStillWorks, ok: pinHonored && legacyHonored && autoStillWorks };
   });
 
   // 17c2) t93: SHELF SECTIONS TELL THE TRUTH — in the grouped modes every

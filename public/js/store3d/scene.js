@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1788996243385';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1788996243385';
-import { buildHall } from './hall.js?v=1788996243385';
-import { buildDance } from './dance.js?v=1788996243385';
-import { buildExterior } from './exterior.js?v=1788996243385';   // the world outside the door
-import { buildSignage } from './signage.js?v=1788996243385';
-import { createDjPro } from './djpro.js?v=1788996243385';
-import { buildTV } from './tv.js?v=1788996243385';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1788996243385';
-import { PosterAtlases } from './atlas.js?v=1788996243385';
-import { createControls } from './controls.js?v=1788996243385';
-import { createJukeAudio } from './jukeaudio.js?v=1788996243385';
+import { LAYOUT, TUNING } from './config.js?v=1789027155999';
+import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1789027155999';
+import { buildHall } from './hall.js?v=1789027155999';
+import { buildDance } from './dance.js?v=1789027155999';
+import { buildExterior } from './exterior.js?v=1789027155999';   // the world outside the door
+import { buildSignage } from './signage.js?v=1789027155999';
+import { createDjPro } from './djpro.js?v=1789027155999';
+import { buildTV } from './tv.js?v=1789027155999';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1789027155999';
+import { PosterAtlases } from './atlas.js?v=1789027155999';
+import { createControls } from './controls.js?v=1789027155999';
+import { createJukeAudio } from './jukeaudio.js?v=1789027155999';
 
 export function createScene(container, theme) {
   // ── renderer ──
@@ -63,6 +63,7 @@ export function createScene(container, theme) {
   const tv = buildTV(theme);
   scene.add(tv.group);
   const djPro = createDjPro();                         // t64: the booth's dual-deck pro rig
+  let hudTick = 0;                                     // t108: booth-monitor repaint throttle
   djPro.setSurround(dance.speakerWorld);               // feeds the dance-hall ring, gated to the wing
 
   // the theater wing + the jukebox (music's new home in the main store)
@@ -318,6 +319,12 @@ export function createScene(container, theme) {
     jukebox.update?.(dt);
     jukeAudio.update(camera);
     djPro.update(camera);   // t64: pro rig — wing gate, listener, loops, BPM
+    if ((hudTick = (hudTick + 1) & 1) === 0) {         // t108: booth laptop = live monitor (~30fps)
+      try { const inf = djPro.info();
+        dance.paintHud?.({ a: inf.decks?.[0], b: inf.decks?.[1], lv: proLv,
+          autoDj: !!inf.autoDj?.on, rec: !!inf.rec?.on, mic: !!inf.mic?.on });
+      } catch {}
+    }
     pickHover(performance.now());
     atlases.flush();                       // upload any poster tiles that arrived
     // WATCH MODE: when the player walks/zooms up close to the TV, the ON DECK

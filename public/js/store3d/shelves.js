@@ -17,8 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
 import { RoundedBoxGeometry } from '/vendor/RoundedBoxGeometry.js';   // three.js addon, vendored
-import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1788996243385';
-import { shelfTexture, hashString } from './textures.js?v=1788996243385';
+import { LAYOUT, TUNING, AUDIO_TYPES } from './config.js?v=1789027155999';
+import { shelfTexture, hashString } from './textures.js?v=1789027155999';
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  PART 1 — where the shelves are
@@ -302,7 +302,22 @@ export function assignItems(faces, items, sorting, assignment, unitPages) {
   const placements = [];
   const unitItems = new Map();
 
-  const secKey = (it) => it.sectionId || it.sectionTitle || it.type;
+  // t107 FIX (owner: "custom placements weren't placed"): the shelf-map UI
+  // saves the keys librarySections() mints — sectionId when the source has
+  // one, else 'auto:' + (sectionTitle || type). The POOLS here keyed on the
+  // raw sectionTitle instead, so a pinned Plex/Jellyfin section (no
+  // sectionId) saved 'auto:Movies' and pools.has('auto:Movies') was FALSE —
+  // the pin was silently ignored and the unit kept the automatic mix.
+  // Pools now use the SAME key the UI saves; legacy raw-keyed pins resolve
+  // through aliasKey so nobody's saved map breaks.
+  const secKey = (it) => it.sectionId || ('auto:' + (it.sectionTitle || it.type));
+  const aliasKey = (k, pools) => {
+    if (pools.has(k)) return k;
+    const kk = String(k);
+    if (kk.startsWith('auto:') && pools.has(kk.slice(5))) return kk.slice(5);   // pre-t107 saved pin
+    if (pools.has('auto:' + kk)) return 'auto:' + kk;
+    return null;
+  };
   const pools = new Map();                 // sectionKey → items (in shelf order)
   const sectionNames = new Map();
   // t88 BUG 1 FIX: pools are built from the WHOLE catalogue, not the capped
@@ -321,7 +336,7 @@ export function assignItems(faces, items, sorting, assignment, unitPages) {
     const dir = sorting.dir === 'asc' ? 1 : -1;
     for (const list of pools.values()) list.sort((a, b) => dir * byTitle(a, b));
   }
-  const assignedAway = new Set(Object.values(assignment || {}).filter(k => pools.has(k)));
+  const assignedAway = new Set(Object.values(assignment || {}).map(k => aliasKey(k, pools)).filter(Boolean));
   const general = capped.filter(it => !assignedAway.has(secKey(it)));
   // WINDOWED PAGING: a unit shows a WINDOW into its pool (page × unit-slots).
   // Default pages AUTO-STAGGER — consecutive units on the same category keep
@@ -379,8 +394,8 @@ export function assignItems(faces, items, sorting, assignment, unitPages) {
   const unitsSeen = new Map();             // poolKey → units already stocked from it
   const unitCounter = new Map();           // slot index within the current unit
   const unitPaging = {};                   // unit → { page, pages, total, pool } (for the HUD)
-  const effKey = (unit) => {                              // admin map wins · t93 auto category next
-    if (assignment?.[unit] && pools.has(assignment[unit])) return assignment[unit];
+  const effKey = (unit) => {                              // admin map wins · t93 auto category next · t107 key alias
+    if (assignment?.[unit]) { const k = aliasKey(assignment[unit], pools); if (k) return k; }
     return autoCats.get(unit) || null;
   };
   const bumpUnitsSeen = (unit) => {
