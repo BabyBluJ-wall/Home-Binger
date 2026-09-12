@@ -10,7 +10,7 @@
 //  • Collision: the player is a circle vs. every shelf AABB + the room walls.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1789061225548';
+import { LAYOUT, TUNING } from './config.js?v=1789174562813';
 
 const SPAWN = { x: 0, z: LAYOUT.room.l / 2 + 1.55 };   // t52: in the FRONT HALLWAY, just outside
                                                         // the store door — facing in (-z), as if you

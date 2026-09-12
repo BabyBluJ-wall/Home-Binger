@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1789061225548';
-import { createCaseView } from './store3d/caseview.js?v=1789061225548';   // the 3D case in the item modal
-import { state } from './state.js?v=1789061225548';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789061225548';
-import { placeholderDataUrl } from './store3d/textures.js?v=1789061225548';
+import { api } from './api.js?v=1789174562813';
+import { createCaseView } from './store3d/caseview.js?v=1789174562813';   // the 3D case in the item modal
+import { state } from './state.js?v=1789174562813';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789174562813';
+import { placeholderDataUrl } from './store3d/textures.js?v=1789174562813';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -524,7 +524,7 @@ export function initUI(ctx) {
       };
       box.innerHTML = `
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <code style="flex:1;min-width:170px;padding:8px 10px;border:1px solid var(--vb-line,#2a3354);border-radius:8px;background:rgba(10,12,30,.55);font-size:13px">${esc(primary)}</code>
+          <code style="flex:1;min-width:170px;padding:8px 10px;border:1px solid var(--vb-line,#2a3354);border-radius:8px;background:var(--vb-panel,rgba(10,12,30,.55));font-size:13px">${esc(primary)}</code>
           <button class="btn accent" id="btn-copy-lan">📋 Copy address</button>
         </div>
         ${urls.length > 1 ? `<div class="hint" style="margin-top:6px">Other networks: ${urls.slice(1).map(esc).join(' · ')}</div>` : ''}
@@ -1281,7 +1281,7 @@ export function initUI(ctx) {
         inp.value = opts.value || '';
         if (opts.password) inp.placeholder = 'New password…';
         inp.maxLength = opts.password ? 64 : 32;
-        inp.style.cssText = 'flex:1;min-width:0;padding:6px 10px;border-radius:6px;border:1px solid var(--vb-line,#2a3354);background:rgba(10,12,30,.55);color:var(--vb-ink,#eef1ff)';
+        inp.style.cssText = 'flex:1;min-width:0;padding:6px 10px;border-radius:6px;border:1px solid var(--vb-line,#2a3354);background:var(--vb-panel,rgba(10,12,30,.55));color:var(--vb-ink,#eef1ff)';
         const save = document.createElement('button'); save.className = 'btn small'; save.textContent = 'Save';
         const cancel = document.createElement('button'); cancel.className = 'btn small'; cancel.textContent = 'Cancel';
         editor.append(inp, save, cancel);
@@ -1556,9 +1556,10 @@ export function initUI(ctx) {
           <button class="btn sm" data-dj="playat" data-i="${i}">▶</button>
           <button class="btn sm" data-dj="rm" data-i="${i}">✕</button>
         </div>`).join('') : '<div class="hint" style="margin:4px 2px">Empty — add tracks below.</div>'}</div>
-      <div class="dj-section">Add music</div>
-      <select id="dj-add">${music.slice(0, 120).map(m2 => `<option value="${esc(m2.id)}">${esc(m2.title)}</option>`).join('')}</select>
-      <button class="btn accent" data-dj="add" style="margin-top:6px">＋ Add to playlist</button>`;
+      <div class="dj-section">Add music <small id="dj-q-count"></small></div>
+      <input id="dj-q" type="text" placeholder="Search all music — albums, stations, podcasts…" autocomplete="off"
+        style="width:100%;padding:7px 9px;border:1px solid var(--vb-line,#2a3354);border-radius:8px;background:var(--vb-panel,rgba(10,12,30,.55));color:var(--vb-ink,#eef1ff);font:inherit;margin-bottom:6px">
+      <div id="dj-list" style="max-height:190px;overflow-y:auto;border:1px solid var(--vb-line,#2a3354);border-radius:8px;padding:4px"></div>`;
     // wire it up
     // t64: DRAG-AND-DROP reordering (buttons stay too)
     {
@@ -1602,17 +1603,56 @@ export function initUI(ctx) {
         else if (a === 'down') ctx.djMove(i, 1);
         else if (a === 'playat') ctx.djPlayAt(i);
         else if (a === 'rm') ctx.djRemove(i);
-        else if (a === 'add') {
-          const sel = body.querySelector('#dj-add');
-          const it = (state.items || []).find(x => x.id === sel.value);
-          if (it) { ctx.djAdd(it); toast(`＋ “${it.title}” queued`); }
-        }
         renderDj();
       };
     });
+    // t121: THE JUKEBOX LISTS *ALL* THE MUSIC — the old "Add music" was a
+    // <select> capped at the first 120 items, so anything later in the
+    // library (podcasts especially — owner: "Wont show up in jukebox") could
+    // never be queued from the jukebox. Same treatment as the booth list
+    // (t113): live search + chunked scroll-loading. Click a row to queue it.
+    {
+      const qEl = body.querySelector('#dj-q'), listEl = body.querySelector('#dj-list'), cntEl = body.querySelector('#dj-q-count');
+      if (qEl && listEl) {
+        const norm = (s) => String(s || '').toLowerCase();
+        const CH = 150; let shown = 0, hits = music;
+        const draw = () => {
+          listEl.insertAdjacentHTML('beforeend', hits.slice(shown, shown + CH).map(m2 => `
+            <div class="dj-qrow" data-add="${esc(m2.id)}" style="cursor:pointer" title="${esc(m2.sectionTitle || m2.type)}">
+              <span class="q-n">＋</span><span class="q-t">${esc(m2.title)}</span>
+              <small style="margin-left:auto;color:var(--vb-muted);font-size:10.5px;white-space:nowrap">${esc(m2.sectionTitle || m2.type)}</small>
+            </div>`).join(''));
+          shown = Math.min(shown + CH, hits.length);
+        };
+        const refresh = () => {
+          const q = norm(qEl.value).trim();
+          hits = q ? music.filter(m2 => norm(m2.title).includes(q) || norm(m2.sectionTitle).includes(q) || norm(m2.type).includes(q)) : music;
+          shown = 0; listEl.innerHTML = ''; draw();
+          if (cntEl) cntEl.textContent = `${hits.length} of ${music.length}`;
+        };
+        listEl.onscroll = () => { if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 48 && shown < hits.length) draw(); };
+        listEl.onclick = (e) => {
+          const row = e.target.closest('[data-add]'); if (!row) return;
+          const it = (state.items || []).find(x => x.id === row.dataset.add);
+          if (it) { ctx.djAdd(it); toast(`＋ “${it.title}” queued`); }
+        };
+        qEl.oninput = refresh;
+        refresh();
+      }
+    }
   }
-  $('#dj-close').onclick = () => $('#dj-modal').classList.add('hidden');
-  $('#dj-modal').addEventListener('click', e => { if (e.target.id === 'dj-modal') $('#dj-modal').classList.add('hidden'); });
+  // t121: closing the DJ menu DISMOUNTS the pro rig. The old close only HID
+  // the modal — the booth's window-keydown handler stayed registered with the
+  // .djp DOM still mounted, so after using the booth once, walking with WASD
+  // in the dance hall fired booth shortcuts (owner: "Music goes back a beat
+  // pressing s" — S = SYNC yanked the live deck onto the other deck's grid).
+  // Unmount removes the listener AND the DOM, so the keys die with the panel.
+  function closeDj() {
+    $('#dj-modal').classList.add('hidden');
+    if (proUi) { try { proUi.unmount(); } catch {} proUi = null; }
+  }
+  $('#dj-close').onclick = closeDj;
+  $('#dj-modal').addEventListener('click', e => { if (e.target.id === 'dj-modal') closeDj(); });
 
   // ═══════════════ FRONT ENTRANCE ═══════════════
   $('#btn-leave-store')?.addEventListener('click', () => {

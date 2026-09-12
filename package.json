@@ -1,6 +1,6 @@
 {
   "name": "home-binger",
-  "version": "1.8.9",
+  "version": "1.9.0",
   "description": "Self-hosted 3D walkable video store (Home Binger) stocked from Plex or Jellyfin. Zero npm dependencies. Free for non-commercial use (CC BY-NC-SA 4.0).",
   "type": "module",
   "main": "server/server.js",

@@ -274,7 +274,7 @@ const addonMock = http.createServer((req, res) => {
   }
 
   // ── browser phase (guest device) ──
-  const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--js-flags=--max-old-space-size=640'] });   // t79: heap cap — renderer OOM-kills under sandbox memory pressure
+  const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--js-flags=--max-old-space-size=520', '--renderer-process-limit=2', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });   // t79 heap cap (t118: 640→520 + process cap — sandbox RAM is tighter this cycle) · t118: fake mic device so the booth mic path is testable headless
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   await page.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
   const errors = [];
@@ -921,7 +921,7 @@ const addonMock = http.createServer((req, res) => {
   R.checks.t51Dance = await page.evaluate(async () => {
     const s = window.__VB.scene, ctx = window.__VB.mainCtx;
     const di = s.danceInfo();
-    const rigOk = di.speakers === 10 && di.subs === 2 && di.ledBars >= 12 && di.patterns === 13;  // t95: 6 programs → t109: 13 (6 poses + 7 shapes)
+    const rigOk = di.speakers === 10 && di.subs === 2 && di.ledBars >= 12 && di.patterns === 19;  // t95: 6 → t109: 13 → t115: 19 (+ festival six)
     // MUSIC CONTAINMENT — each zone audible only in its own wing
     const jb = s.jukeboxAudio;
     jb.setZone('dance');
@@ -1760,12 +1760,14 @@ const addonMock = http.createServer((req, res) => {
           vu: !!document.querySelector('#djp-vu'),
           crates: !!document.querySelector('#djp-tab-crate') && !!document.querySelector('#djp-fkey') && !!document.querySelector('#djp-fbpm1') && !!document.querySelector('#djp-fbpm2'),
           // swiftshader computes backdrop-filter:none (software GL); a real GPU
-          // computes blur(16px) — so prove the glass RULE shipped + the obsidian
-          // panel color, not the compositor's answer
+          // computes blur(16px) — so prove the glass RULE shipped + a themed
+          // TRANSLUCENT panel (t119: the surface derives from the theme wall
+          // now, not the old hardcoded rgba(10,10,18,.88))
           glass: (() => {
             const cs = getComputedStyle(document.querySelector('.djp-deck'));
             const ruleShipped = [...document.styleSheets].some(ss => { try { return [...ss.cssRules].some(r => r.cssText && r.cssText.includes('backdrop-filter') && r.cssText.includes('.djp-deck')); } catch { return false; } });
-            return ruleShipped && cs.backgroundColor.includes('rgba(10, 10, 18');
+            const alpha = (() => { const m = cs.backgroundColor.match(/([\d.]+)\s*\)$/); return m ? parseFloat(m[1]) : 1; })();
+            return ruleShipped && alpha > 0.5 && alpha < 1 && !cs.backgroundColor.includes('rgb(10, 10, 18');
           })(),
           platters: q('[data-slot="platter"]').length === 2
         };
@@ -2438,7 +2440,7 @@ const addonMock = http.createServer((req, res) => {
     const quiet = { bass: 0.04, mid: 0.03, treble: 0.03, energy: 0.03, live: true };
     s.danceFakeLevels(SILENT);
     s.danceTick(SILENT, 60);                    // drain the bass history — kicks become deterministic
-    const programsOk = s.danceInfo().patterns === 13;   // t109: 6 pose programs + 7 continuous shapes
+    const programsOk = s.danceInfo().patterns === 19;   // t109: 6 poses + 7 shapes · t115: + 6 festival programs
     // ORBIT (program 4): 3 beats, each = 1 loud tick (kick) + 6 quiet ticks (0.35 s > refractory)
     s.setDancePrefs({ pattern: '4', movement: 1, speed: 1, ballSpin: 1 });
     s.danceTick(SILENT, 20);
@@ -2492,7 +2494,7 @@ const addonMock = http.createServer((req, res) => {
       const quiet = { bass: 0.04, mid: 0.03, treble: 0.03, energy: 0.03, live: true };
       s.danceFakeLevels(SILENT);
       s.danceTick(SILENT, 60);                    // drain bass history — deterministic kicks
-      const programsOk = s.danceInfo().patterns === 13;
+      const programsOk = s.danceInfo().patterns === 19;   // t115: 19 programs
       const drive = (wins) => {                   // one beat per window: kick + 6 quiet ticks
         const Y = [], P4 = [];
         for (let k = 0; k < wins; k++) {
@@ -2551,11 +2553,11 @@ const addonMock = http.createServer((req, res) => {
       s.danceTick(LV, 1); s.danceTick(quiet, 1);
       const eyesB = xBeam().y;
       const burstOk = eyesB > eyesA + 0.1;
-      // 7) AUTO rotation over 13 programs
+      // 7) AUTO rotation over 19 programs — t115: every 32 BEATS (8 bars), per the festival spec
       s.setDancePrefs({ pattern: 'auto' });
-      s.danceTick(SILENT, 60);                     // drain, then 4 kicks = 1 rotation
+      s.danceTick(SILENT, 60);                     // drain, then 32 kicks = 1 rotation
       const p0 = s.danceInfo().program;
-      for (let k = 0; k < 4; k++) { s.danceTick(LV, 1); s.danceTick(quiet, 6); }
+      for (let k = 0; k < 33; k++) { s.danceTick(LV, 1); s.danceTick(quiet, 6); }
       const rotateOk = s.danceInfo().program !== p0;
       // 8) the BOOTH strip carries the new knobs (real DOM)
       window.__VB.ui.openDj('booth');
@@ -2573,8 +2575,1195 @@ const addonMock = http.createServer((req, res) => {
       s.danceFakeLevels(null);
       return { programsOk, continuous, tiltOrbits, bounded, yawSpreadCircle, sweepSmall: range(f1.P4), sweepBig: range(f2.P4), sweepOk, fanMin, fanMax,
         snakeTight, snakeWide, spreadOk, kickDelta, settleDelta, flareOk, fanOk, eyesA, eyesB, burstOk, rotateOk,
-        selN, hasKnobs, uiApplied, ok: programsOk && continuous && tiltOrbits && bounded && sweepOk && spreadOk && flareOk && fanOk && burstOk && rotateOk && selN === 14 && hasKnobs && uiApplied };
+        selN, hasKnobs, uiApplied, ok: programsOk && continuous && tiltOrbits && bounded && sweepOk && spreadOk && flareOk && fanOk && burstOk && rotateOk && selN === 20 && hasKnobs && uiApplied };   // t115: auto + 19 programs
     });
+  }
+
+  // 17b1b3) t111: AUTO-DJ, RELIABLE + THE QUEUE ON THE LAPTOP — owner
+  //         (2026-09-10): "Auto dj is amazing. Can we have it show up next
+  //         songs on the laptop when the menu is closed? … The auto dj also
+  //         stops from time to time." Root causes fixed: the from-deck was
+  //         never paused after a fade (the load gate then locked forever),
+  //         firing required finished BPM detection, and the whole engine ran
+  //         inside the render loop (which stops when the tab is hidden — mix
+  //         died on window switch). Now: 400 ms interval + audio-clock
+  //         scheduled crossfade + old deck paused at fade end + emergency
+  //         no-dead-air path. The HUD (the 3D laptop) shows the queue via
+  //         info().autoDj.next/remaining.
+  {
+    const path = require('node:path'), fs = require('node:fs');
+    const root = path.resolve('tests/media/realsong');
+    if (fs.existsSync(root + '/song.m4a')) {
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [root] } });
+      R.checks.t111AutoDj = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i2 => i2.source === 'local' && /song\.m4a$/.test(i2.key || ''));
+        if (!song) return { ok: false, missing: true };
+        const p = w.__VB.scene.djPro;
+        p.stopAll();
+        w.__VB.ui.openDj('booth');                       // gesture parity with t75 + exercises the panel live
+        await sleep(400);
+        p.playItem(song);                                // deck A plays the real song
+        await sleep(1500);                               // analysis window
+        const i0 = p.info();
+        const dur = i0.decks[0].dur;
+        if (!dur) return { ok: false, noDur: true, bpm: i0.decks[0].bpm };
+        const beat = 60 / (i0.decks[0].bpm || 120);      // works with OR without detected BPM (the t111 fix)
+        const q = [{ ...song, id: song.id + '-x2' }, { ...song, id: song.id + '-x3' }];
+        p.setAutoDj(true, q);
+        // seek deck A into the lead window (remaining ≈ 8 beats < lead runway)
+        p.seek(Math.max(0, dur - beat * 8));
+        // t112: fire now waits for a beat-grid line (phrase alignment) — poll for it
+        let mid = null;
+        for (let k = 0; k < 40 && !mid; k++) { await sleep(250); const i2 = p.info(); if (i2.decks[1].loaded && i2.decks[1].playing && i2.autoDj.transitioning) mid = i2; }
+        const fired = !!mid;
+        // wait out the scheduled fade (16 beats for a blend) + margin — poll
+        let fin = null;
+        for (let k = 0; k < 90 && !fin; k++) { await sleep(300); const i3 = p.info(); if (!i3.autoDj.transitioning) fin = i3; }
+        fin = fin || p.info();
+        const oldPaused = fin.decks[0].playing === false;   // THE fix: the from-deck pauses at fade end
+        const noDeadAir = fin.decks[1].playing === true;    // the new deck carries the room
+        const stillOn = fin.autoDj.on === true;
+        const queueVisible = Array.isArray(fin.autoDj.next) && fin.autoDj.next.length >= 1 && fin.autoDj.remaining >= 1 && typeof fin.autoDj.pos === 'number';
+        // dead-air recovery: kill the audible deck hard — AUTO-DJ must bring music back by itself
+        p.decksRef()[1].el.pause();
+        await sleep(2000);
+        const rec = p.info();
+        const recovered = rec.decks.some(d => d.playing);
+        // stop means STOP: stopAll() while AUTO-DJ is on must switch it off (no zombie resurrection)
+        p.stopAll();
+        await sleep(1200);
+        const post = p.info();
+        const cleanStop = !post.decks.some(d => d.playing) && post.autoDj.on === false;
+        document.querySelector('#dj-modal .modal-close')?.click();
+        p.setAutoDj(false);
+        return { fired, oldPaused, noDeadAir, stillOn, queueVisible, next: fin.autoDj.next.slice(0, 2), remaining: fin.autoDj.remaining, pos: fin.autoDj.pos, recovered, cleanStop,
+          ok: fired && oldPaused && noDeadAir && stillOn && queueVisible && recovered && cleanStop };
+      });
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    }
+  }
+
+  // 17b1b4) t112: THE PERSONAL DJ — owner (2026-09-10): "I want a smoother
+  //         auto dj… basically my own personal dj." The pro recipe, scripted
+  //         (research: docs/RESEARCH-AUTODJ.md): phrase-aligned starts on the
+  //         beat grid, silence-trimmed countdowns, and the right transition
+  //         per pair — blend + BASS SWAP for tempo/key matches, filter fade
+  //         for clashes, echo out for jumps — plus a drift guard that keeps
+  //         long blends phase-locked.
+  {
+    const path = require('node:path'), fs = require('node:fs');
+    const root = path.resolve('tests/media/realsong');
+    if (fs.existsSync(root + '/song.m4a')) {
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [root] } });
+      R.checks.t112PersonalDj = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i2 => i2.source === 'local' && /song\.m4a$/.test(i2.key || ''));
+        if (!song) return { ok: false, missing: true };
+        const p = w.__VB.scene.djPro;
+        // 1) THE MIX BRAIN — the pro's decision framework, pure + headless
+        const pick = p.pure.pickMixStyle;
+        const brain = {
+          blend: pick({ bpm: 124, key: { camelot: '8A' } }, { bpm: 125, key: { camelot: '8B' } }) === 'blend',      // close tempo, compatible key
+          blendNoKey: pick({ bpm: 124, key: null }, { bpm: 124.5, key: { camelot: '5B' } }) === 'blend',             // unknown key → trust the tempo
+          filterKeyClash: pick({ bpm: 124, key: { camelot: '8A' } }, { bpm: 125, key: { camelot: '3B' } }) === 'filter',  // key clash → the filter bridge
+          filterTempoGap: pick({ bpm: 124, key: { camelot: '8A' } }, { bpm: 130, key: { camelot: '8A' } }) === 'filter',  // 4.8% apart → filter, not a stretch blend
+          echoJump: pick({ bpm: 100, key: { camelot: '8A' } }, { bpm: 140, key: { camelot: '8A' } }) === 'echo'      // genre/tempo jump → echo out
+        };
+        const camelot = p.pure.camelotOk('8A', '8B') === true && p.pure.camelotOk('8A', '9A') === true
+          && p.pure.camelotOk('8A', '3B') === false && p.pure.camelotOk(null, '3B') === true;
+        // 2) LIVE — the same song twice: same tempo, same key → a BLEND with the bass swap
+        p.stopAll();
+        w.__VB.ui.openDj('booth');
+        await sleep(400);
+        p.playItem(song);
+        await sleep(1500);
+        const i0 = p.info();
+        const dur = i0.decks[0].dur;
+        if (!dur) return { ok: false, noDur: true };
+        const beat = 60 / (i0.decks[0].bpm || 120);
+        p.setAutoDj(true, [{ ...song, id: song.id + '-x2' }]);
+        p.seek(Math.max(0, dur - beat * 10));
+        // catch the moment it fires → phrase alignment measurable at fire time
+        let fireInfo = null;
+        for (let k = 0; k < 60 && !fireInfo; k++) {
+          await sleep(150);
+          const inf = p.info();
+          if (inf.autoDj.transitioning) {
+            const d0 = p.decksRef()[0];                                  // from-deck = deck 0 in this scenario
+            const spb = 60 / ((d0.bpm || 120) * d0.rate);
+            const phase = ((d0.el.currentTime - (d0.grid0 || 0)) / spb) % 8;
+            fireInfo = { inf, phase8: +phase.toFixed(2), bass1: inf.decks[1].eqDb.bass };
+          }
+        }
+        const styleBlend = fireInfo?.inf.autoDj.style === 'blend';
+        const fade16 = fireInfo?.inf.autoDj.liveFadeBeats === 16;
+        const onGrid = fireInfo ? (fireInfo.phase8 < 1.2 || fireInfo.phase8 > 6.8) : false;   // fired on (or a hair off) a bar line — poll slop allowed (t119: 0.9→1.2; a loaded box can lag the media-clock read ~150-250ms past the fire)
+        const bassCutAtFire = fireInfo ? fireInfo.bass1 <= -20 : false;                       // the incoming layers in with its bass CUT
+        // ride out the whole fade, then confirm the swap + clean handback
+        let fin = null;
+        for (let k = 0; k < 120 && !fin; k++) { await sleep(300); const i4 = p.info(); if (!i4.autoDj.transitioning) fin = i4; }
+        fin = fin || p.info();
+        const swapped = fin.autoDj.swapped === true;                                          // the 60% low-end swap ran
+        const bassRestored = fin.decks[0].eqDb.bass > -1 && fin.decks[1].eqDb.bass > -1;      // both decks left CLEAN
+        const noDeadAir = fin.decks[1].playing === true;
+        // 3) THE WALKAWAY — stop mid-blend (before the swap): knobs must come
+        //    back clean on BOTH decks. t111's dead-air drill caught the leak.
+        p.playItem(song); await sleep(1200);
+        const i5 = p.info();
+        const d5 = i5.decks.findIndex(d => d.playing);
+        p.setAutoDj(true, [{ ...song, id: song.id + '-x3' }]);
+        p.seek(Math.max(0, i5.decks[d5].dur - beat * 10));
+        let f3 = null;
+        for (let k = 0; k < 60 && !f3; k++) { await sleep(150); const i6 = p.info(); if (i6.autoDj.transitioning) f3 = i6; }
+        p.stopAll();                                          // walk away mid-blend
+        await sleep(250);
+        const post = p.info();
+        const walkawayClean = !!f3 && post.decks.every(d => d.eqDb.bass > -1) && post.autoDj.on === false;
+        document.querySelector('#dj-modal .modal-close')?.click();
+        p.stopAll(); p.setAutoDj(false);
+        return { brain, camelot, styleBlend, fade16, phase8: fireInfo?.phase8, onGrid, bassCutAtFire, bass1: fireInfo?.bass1, swapped, bassRestored, noDeadAir, walkawayClean,
+          ok: Object.values(brain).every(Boolean) && camelot && styleBlend && fade16 && onGrid && bassCutAtFire && swapped && bassRestored && noDeadAir && walkawayClean };
+      });
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    }
+  }
+
+  // 17b1b5) t113: SCROLL-LOADING LIBRARY + LIVE QUEUE COUNT — owner
+  //         (2026-09-10): "for the music list i want it to load while it
+  //         scrolls. Someone may not remember all the songs they have." and
+  //         "the que was also buggy when trying to have it show when the
+  //         panel is closed. it would only show that 1 is in cue."
+  //         Root causes: the list hard-capped at 250 rows (t111), and Q-adds
+  //         while AUTO-DJ ran landed in the STAGING list while the engine
+  //         played a snapshot copy — the laptop count never moved.
+  {
+    const fs = require('node:fs'), path = require('node:path');
+    const realsong = path.resolve('tests/media/realsong');
+    if (fs.existsSync(realsong + '/song.m4a')) {
+      // 230 tiny placeholder tracks in /tmp (the lister only stats files —
+      // content is never read, and nothing ships in the zips)
+      const scrollDir = '/tmp/hb-scrollsongs';
+      if (!fs.existsSync(scrollDir + '/ss-001.mp3')) {
+        fs.mkdirSync(scrollDir, { recursive: true });
+        const buf = Buffer.alloc(1200, 0);
+        for (let k = 1; k <= 230; k++) fs.writeFileSync(path.join(scrollDir, 'ss-' + String(k).padStart(3, '0') + '.mp3'), buf);
+      }
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [realsong, scrollDir] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      // restock the LIVE page through the app's own reload path — no page
+      // reload, so later blocks keep their state
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+      R.checks.t113ScrollQueue = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i => i.source === 'local' && /song\.m4a$/.test(i.key || ''));
+        // what the booth list should total (mirror ui.js's music filter)
+        const expected = lib.items.filter(i => ['album', 'radio', 'episode'].includes(i.type) && !/\.(mp4|m4v|webm|mkv|mov|avi)$/i.test(i.key || '')).length;
+        const p = w.__VB.scene.djPro;
+        p.stopAll(); p.setAutoDj(false, []);              // clean slate (t112's leftovers)
+        w.__VB.ui.openDj('booth');
+        await sleep(500);
+        const listEl = document.querySelector('#djp-list');
+        const rowCount = () => listEl.querySelectorAll('.djp-rowitem[data-i]').length;
+        // ── PART A: the list loads while it scrolls ──
+        const initialRows = rowCount();                    // one chunk first
+        const noteAtStart = !!document.querySelector('#djp-more');
+        listEl.scrollTop = listEl.scrollHeight;            // jump to the bottom → the loader fires
+        let loadedAllRows = 0;
+        for (let k = 0; k < 40; k++) { await sleep(100); loadedAllRows = rowCount(); if (loadedAllRows >= expected && !document.querySelector('#djp-more')) break; }
+        const loadedAll = loadedAllRows === expected && !document.querySelector('#djp-more');
+        // search narrows; clearing starts a fresh chunk (the limit resets)
+        const searchEl = document.querySelector('#djp-search');
+        searchEl.value = 'zzz-nothing-matches-this';
+        searchEl.dispatchEvent(new Event('input'));
+        await sleep(150);
+        const zeroRows = rowCount() === 0;
+        searchEl.value = '';
+        searchEl.dispatchEvent(new Event('input'));
+        await sleep(200);
+        const backToChunk = rowCount() === Math.min(150, expected) && (expected <= 150 || !!document.querySelector('#djp-more'));
+        // ── PART B: the queue count is LIVE (owner: "only 1 in cue") ──
+        if (!song) return { ok: false, missing: true, expected };
+        p.playItem(song);                                  // real audio on deck A — keeps the emergency path quiet
+        await sleep(1500);
+        const i0 = p.info();
+        if (!i0.decks[0].dur) return { ok: false, noDur: true, expected };
+        const qbtn = (n) => [...listEl.querySelectorAll('[data-queue]')][n];
+        qbtn(0)?.click(); qbtn(1)?.click(); qbtn(2)?.click();          // queue 3 BEFORE starting
+        await sleep(200);
+        const stagedOnly = p.info().autoDj.queued === 0;               // staging ≠ the engine's queue yet
+        document.querySelector('#djp-autodj').click();                 // AUTO-DJ ON — via the real button
+        await sleep(800);
+        const on3 = p.info().autoDj;
+        const started3 = on3.on === true && on3.queued === 3 && on3.remaining === 3;
+        qbtn(3)?.click();                                               // +1 WHILE RUNNING — the exact owner bug
+        await sleep(250);
+        const on4 = p.info().autoDj;
+        const liveAppend = on4.queued === 4 && on4.remaining === 4;    // was stuck at 3 before the fix
+        document.querySelector('#djp-autodj').click();                 // OFF …
+        await sleep(300);
+        document.querySelector('#djp-autodj').click();                 // … ON again — the night's list survives
+        await sleep(800);
+        const rs = p.info().autoDj;
+        const restartKept = rs.on === true && rs.queued === 4;
+        p.stopAll(); p.setAutoDj(false, []);
+        document.querySelector('#dj-modal .modal-close')?.click();
+        return { expected, initialRows, noteAtStart, loadedAll, loadedAllRows, zeroRows, backToChunk, stagedOnly, started3, liveAppend, restartKept,
+          ok: expected > 200 && initialRows === 150 && noteAtStart && loadedAll && zeroRows && backToChunk && stagedOnly && started3 && liveAppend && restartKept };
+      });
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });   // leave the page clean for later blocks
+    }
+  }
+
+  // 17b1b6) t114: THE DJ MIX — real beatmatching + INSTANT song info + the
+  //         3-band laptop meters + bass-driven lights. Owner (2026-09-10):
+  //         "it still just cuts from one song to another… I want the music to
+  //         beat match and fade, mix, or even remix… levels… high mid and low…
+  //         lights… move to deeper bass and livelier music." Root cause of the
+  //         cuts: BPM detection was LIVE-CLOCK ONLY — a freshly loaded deck
+  //         always had bpm 0 at transition time, so nothing ever synced.
+  {
+    const fs = require('node:fs'), path = require('node:path');
+    const realsong = path.resolve('tests/media/realsong');
+    if (fs.existsSync(realsong + '/song.m4a')) {
+      // craft a TAGGED mp3 (ID3v2.3: TBPM 124 + TKEY "8B") — the tag pipeline e2e
+      const tdir = '/tmp/hb-t114';
+      fs.rmSync(tdir, { recursive: true, force: true });
+      fs.mkdirSync(tdir, { recursive: true });
+      {
+        const frame = (id, text) => { const body = Buffer.concat([Buffer.from([0]), Buffer.from(text, 'latin1'), Buffer.from([0])]); const h = Buffer.alloc(10); h.write(id, 0, 'latin1'); h.writeUInt32BE(body.length, 4); return Buffer.concat([h, body]); };
+        const frames = Buffer.concat([frame('TBPM', '124'), frame('TKEY', '8B')]);
+        const hdr = Buffer.alloc(10); hdr.write('ID3', 0, 'latin1'); hdr[3] = 3; const sz = frames.length + 10;
+        hdr[6] = (sz >> 21) & 0x7f; hdr[7] = (sz >> 14) & 0x7f; hdr[8] = (sz >> 7) & 0x7f; hdr[9] = sz & 0x7f;
+        fs.writeFileSync(path.join(tdir, 't114-tagged-124.mp3'), Buffer.concat([hdr, frames, Buffer.alloc(2000, 0xff)]));
+      }
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [realsong, tdir] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+      // server side: the tag rode the library API out
+      const libCheck = await (await fetch(BASE + '/api/library', { headers: authH })).json();
+      const taggedApi = libCheck.items.find(i => /t114-tagged-124/.test(i.key || ''));
+      R.checks.t114DjMix = await page.evaluate(async (taggedOk) => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i => i.source === 'local' && /song\.m4a$/.test(i.key || ''));
+        const tagged = lib.items.find(i => /t114-tagged-124/.test(i.key || ''));
+        const p = w.__VB.scene.djPro, s = w.__VB.scene;
+        const out = { taggedApi: taggedOk, song: !!song, tagged: !!tagged };
+        // 1) THE MAPPINGS — key tags every tool writes, → Camelot
+        const kt = p.pure.keyTagToCamelot;
+        out.tagMap = kt('8A') === '8A' && kt('F# minor') === '11A' && kt('Gb maj') === '2B' && kt('Am') === '8A'
+          && kt('C') === '8B' && kt('Bbm') === '3A' && kt('f# min') === '11A' && kt('nonsense') === null;
+        // 2) unknown tempo on either side → the SAFE blend, never the echo cut
+        out.unknownSafe = p.pure.pickMixStyle({ bpm: 124, key: { camelot: '8A' } }, { bpm: 0, key: null }) === 'blend';
+        // 3) INSTANT INFO — a tagged file's tempo/key exist on the deck the
+        //    moment it loads (no playing, no analysis wait)
+        if (tagged) {
+          const dk = p.decksRef()[1]; dk.load(tagged);
+          const d1 = p.info().decks[1];
+          out.instant = d1.bpm === 124 && d1.key === '8B';
+        }
+        // 4) THE DJ MIX — the same real song twice: offline analysis (bpm+key+
+        //    grid) has deck A's number before we even start, the transition
+        //    FIRES SYNCED (16-beat blend, incoming tempo known at fire)
+        if (song) {
+          p.stopAll(); p.setAutoDj(false, []);
+          w.__VB.ui.openDj('booth'); await sleep(400);
+          p.playItem(song);
+          let bpm0 = 0, key0 = null;
+          for (let k = 0; k < 100 && !bpm0; k++) { await sleep(100); const d = p.info().decks[0]; if (d.bpm > 0) { bpm0 = d.bpm; key0 = d.key; } }
+          out.offlineInfo = bpm0 > 60 && bpm0 < 200 && !!key0;
+          const i0 = p.info(), dur = i0.decks[0].dur;
+          if (dur && bpm0) {
+            const beat = 60 / bpm0;
+            p.setAutoDj(true, [{ ...song, id: song.id + '-x2' }]);
+            p.seek(Math.max(0, dur - beat * 10));
+            let fire = null;
+            for (let k = 0; k < 80 && !fire; k++) { await sleep(150); const i2 = p.info(); if (i2.autoDj.transitioning) fire = i2; }
+            out.fired = !!fire;
+            if (fire) {
+              out.style = fire.autoDj.style;
+              out.syncedBlend = fire.autoDj.style === 'blend' && fire.autoDj.liveFadeBeats === 16;   // beatmatched, full-length
+              out.bpmAtFire = fire.decks[1].bpm > 0;                                               // the fix, live: tempo KNOWN at fire
+              out.rateMatched = Math.abs(fire.decks[1].rate - 1) < 0.5;                            // sync engaged (same song ≈ 1.0)
+            }
+            let fin = null;
+            for (let k = 0; k < 120 && !fin; k++) { await sleep(300); const i3 = p.info(); if (!i3.autoDj.transitioning) fin = i3; }
+            fin = fin || p.info();
+            out.noDeadAir = fin.decks[1].playing === true;
+            out.cleanHandback = fin.decks[0].eqDb.bass > -1 && fin.decks[1].eqDb.bass > -1;
+            // walkaway (stop mid-blend) still leaves every deck clean
+            p.playItem(song); await sleep(1200);
+            const i4 = p.info();
+            const d4 = i4.decks.findIndex(d => d.playing);
+            p.setAutoDj(true, [{ ...song, id: song.id + '-x3' }]);
+            p.seek(Math.max(0, i4.decks[d4].dur - beat * 10));
+            let f3 = null;
+            for (let k = 0; k < 60 && !f3; k++) { await sleep(150); const i5 = p.info(); if (i5.autoDj.transitioning) f3 = i5; }
+            p.stopAll(); await sleep(300);
+            const post = p.info();
+            out.walkawayClean = !!f3 && post.decks.every(d => d.eqDb.bass > -1 && !d.loop.active) && post.autoDj.on === false;
+          }
+          // 5) the 3-band meters ride info() while music plays
+          p.playItem(song); await sleep(1500);
+          const bands = p.info().bands;
+          out.bands = !!bands && [bands.lo, bands.mid, bands.hi].every(v => typeof v === 'number' && v >= 0);
+          p.stopAll(); p.setAutoDj(false, []);
+          // 6) LIGHTS — deep sustained bass with kick rises: the OLD detector
+          //    (bass must clear its own rolling average ×1.3) fired ZERO beats
+          //    on this pattern; the onset-flux detector rides it. Flowy music
+          //    (sparse soft kicks) must still work.
+          const zero = { bass: 0, mid: 0, treble: 0, energy: 0, live: false };
+          s.danceFakeLevels(null);
+          s.danceTick(zero, 60);
+          const bed = { bass: 0.65, mid: 0.4, treble: 0.3, energy: 0.6, live: true };
+          const kick = { bass: 0.85, mid: 0.6, treble: 0.5, energy: 0.8, live: true };
+          const g0 = s.danceInfo().beatGrid;
+          for (let c = 0; c < 6; c++) { s.danceTick(kick, 1); s.danceTick(bed, 7); }   // 0.4 s/beat ≈ 150 BPM over a LOUD bed
+          out.deepBeats = +(s.danceInfo().beatGrid - g0).toFixed(1);
+          const soft = { bass: 0.15, mid: 0.2, treble: 0.15, energy: 0.18, live: true };
+          const hit = { bass: 0.5, mid: 0.4, treble: 0.35, energy: 0.45, live: true };
+          s.danceTick(zero, 60);
+          const g1 = s.danceInfo().beatGrid;
+          for (let c = 0; c < 4; c++) { s.danceTick(hit, 1); s.danceTick(soft, 15); }  // 0.8 s/beat ≈ 75 BPM, sparse
+          out.flowyBeats = +(s.danceInfo().beatGrid - g1).toFixed(1);
+          s.danceTick(zero, 40);
+          document.querySelector('#dj-modal .modal-close')?.click();
+        }
+        out.ok = !!(out.taggedApi && out.tagMap && out.unknownSafe && out.instant && out.offlineInfo
+          && out.fired && out.syncedBlend && out.bpmAtFire && out.rateMatched && out.noDeadAir
+          && out.cleanHandback && out.walkawayClean && out.bands && out.deepBeats >= 4 && out.deepBeats <= 9 && out.flowyBeats >= 2);
+        return out;
+      }, taggedApi && taggedApi.bpm === 124 && taggedApi.keyTag === '8B');
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+    }
+  }
+
+  // 17b1b7) t115: FINITE QUEUE + THE FESTIVAL LIGHTS — owner (2026-09-11):
+  //         "the que auto repeats. Lights are still a bit off." + the
+  //         4-fixture festival-engine spec (6 signature patterns, floor-
+  //         impact spots, drop detection). THE LIGHTS ROOT CAUSE: under the
+  //         default 'XYZ' Euler order, pan (rotation.y) had NO effect on a
+  //         down-pointing cone — every beam tipped toward the same world
+  //         direction and only tilt ever showed. 'YXZ' fixes it.
+  {
+    const fs = require('node:fs'), path = require('node:path');
+    const realsong = path.resolve('tests/media/realsong');
+    if (fs.existsSync(realsong + '/song.m4a')) {
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [realsong] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+      R.checks.t115FiniteFestival = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i => i.source === 'local' && /song\.m4a$/.test(i.key || ''));
+        const p = w.__VB.scene.djPro, s = w.__VB.scene;
+        const out = { song: !!song };
+        // ── PART A: THE QUEUE IS FINITE (no auto-repeat) ──
+        if (song) {
+          p.stopAll(); p.setAutoDj(false, []);
+          w.__VB.ui.openDj('booth'); await sleep(400);
+          p.playItem(song); await sleep(1500);
+          let bpm0 = 0;
+          for (let k = 0; k < 100 && !bpm0; k++) { await sleep(100); if (p.info().decks[0].bpm > 0) bpm0 = p.info().decks[0].bpm; }
+          const i0 = p.info(), dur = i0.decks[0].dur, beat = 60 / (bpm0 || 120);
+          p.setAutoDj(true, [{ ...song, id: song.id + '-only' }]);       // ONE song in the queue
+          p.seek(Math.max(0, dur - beat * 10));
+          let fire = null;
+          for (let k = 0; k < 80 && !fire; k++) { await sleep(150); const i2 = p.info(); if (i2.autoDj.transitioning) fire = i2; }
+          let fin = null;
+          for (let k = 0; k < 120 && !fin; k++) { await sleep(300); const i3 = p.info(); if (!i3.autoDj.transitioning) fin = i3; }
+          fin = fin || p.info();
+          const handbackOk = fin.decks[1].playing === true && fin.autoDj.on === true;   // last song carries the room, engine still on
+          // now run the LAST song out: seek deck B near its end → the engine
+          // must switch ITSELF off (no wrap, no replay) and say so
+          p.decksRef()[1].el.currentTime = Math.max(0, fin.decks[1].dur - beat * 6);
+          // the engine switches itself off when the countdown finds the queue
+          // empty — and the LAST song plays out to its natural end (no wrap,
+          // no replay, no dead-air restart)
+          let done = null;
+          for (let k = 0; k < 120 && !done; k++) { await sleep(300); const i4 = p.info(); if (!i4.autoDj.on && !i4.autoDj.transitioning && !i4.decks.some(d => d.playing)) done = i4; }
+          done = done || p.info();
+          const finiteOk = done.autoDj.on === false && done.autoDj.remaining === 0 && !done.decks.some(d => d.playing);
+          p.stopAll(); p.setAutoDj(false, []);
+          out.queue = { handbackOk, finiteOk, remaining: done.autoDj.remaining };
+        }
+        // ── PART B: THE EULER FIX — pan must actually steer the beams ──
+        const zero = { bass: 0, mid: 0, treble: 0, energy: 0, live: false };
+        s.danceFakeLevels(null);
+        s.danceTick(zero, 60);
+        // four DISTINCT pan targets → four distinct beam azimuths (under the
+        // old 'XYZ' order all azimuths collapsed to the same world direction)
+        s.setDancePrefs({ pattern: '18' });                     // DROP EXPLODE: one head per corner
+        const LV = { bass: 0.7, mid: 0.5, treble: 0.4, energy: 0.7, live: true };
+        for (let k = 0; k < 6; k++) { s.danceTick(LV, 1); s.danceTick({ ...LV, bass: 0.45 }, 7); }
+        const di = s.danceInfo();
+        const azSpread = Math.max(...di.beamAz) - Math.min(...di.beamAz);
+        const hitsFromCenter = di.beamHits.map(h => +Math.hypot(h[0] - di.boothX * 0 - (h[2] !== undefined ? 0 : 0), 0));  // (center computed below)
+        const eulerOk = azSpread > 1.8;                          // beams point at genuinely different corners
+        // ── PART C: THE FESTIVAL PATTERNS ──
+        const drift = async (n) => { const a = []; for (let k = 0; k < n; k++) { s.danceTick(LV, 1); s.danceTick({ ...LV, bass: 0.45 }, 7); a.push(s.danceInfo()); } return a; };
+        // SCISSOR: mirrored pans oscillate; tilt crosses the center line
+        s.setDancePrefs({ pattern: '13' });
+        s.danceTick(zero, 40);
+        const sc = await drift(8);
+        const scYawRange = Math.max(...sc.flatMap(d => d.rigYaw)) - Math.min(...sc.flatMap(d => d.rigYaw));
+        const scTiltCrossesCtr = sc.some(d => d.rigPitches.some(t => t < 0.42)) && sc.some(d => d.rigPitches.some(t => t > 0.5));
+        // VORTEX: all four landings stay within the orbit radius of center
+        s.setDancePrefs({ pattern: '14' });
+        s.danceTick(zero, 40);
+        const vx = await drift(10);
+        const allHits = vx.flatMap(d => d.beamHits);                                                  // the chase sweeps the whole circle in time →
+        const ctr = allHits.reduce((a2, h) => [a2[0] + h[0] / allHits.length, a2[1] + h[1] / allHits.length], [0, 0]);   // the time-mean IS the orbit center
+        const vortexR = Math.max(...allHits.map(h => Math.hypot(h[0] - ctr[0], h[1] - ctr[1])));
+        const vortexMoves = Math.max(...vx.flatMap(d => d.beamHits.map(h => h[0]))) - Math.min(...vx.flatMap(d => d.beamHits.map(h => h[0])));
+        const vxElong = Math.max(...vx.flatMap(d => d.spotScales.map(([maj, min2]) => maj / min2)));   // t116: tilted beams stretch into ELLIPSES
+        // GROUND SWEEP: steep beams (low elevation) sweeping front-to-back
+        s.setDancePrefs({ pattern: '17' });
+        s.danceTick(zero, 40);
+        const gs = await drift(12);
+        const gsSteep = gs.every(d => d.beamEl.every(e => e < 0.8));        // steep for a 4.27 m ceiling over a 2.6 m head ring — clearly shallower than every other program
+        const gsZrange = Math.max(...gs.flatMap(d => d.beamHits.map(h => h[1]))) - Math.min(...gs.flatMap(d => d.beamHits.map(h => h[1])));
+        // t116: the pools take the beam's shape — steep beams land as CIRCLES
+        const gsCircular = gs.every(d => d.spotScales.every(([maj, min2]) => maj > 0 && min2 / maj > 0.6));
+        // DROP DETECTOR: an energy spike in AUTO mode blips the explode
+        s.setDancePrefs({ pattern: 'auto' });
+        s.danceTick(zero, 60);
+        const soft = { bass: 0.2, mid: 0.2, treble: 0.15, energy: 0.25, live: true };
+        for (let k = 0; k < 10; k++) s.danceTick(soft, 1);      // a quiet bed (low flux average)
+        const spike = { bass: 0.95, mid: 0.7, treble: 0.6, energy: 0.85, live: true };
+        s.danceTick(spike, 1);
+        const dropFired = s.danceInfo().dropBlip === true;
+        s.danceTick(zero, 40);
+        // floor spots exist + track beams + match the cone's shape
+        const spotsOk = s.danceInfo().floorSpots === 4;
+        const shapeCircle = s.danceInfo().spotShape === 'circle';
+        // restore
+        s.setDancePrefs({ pattern: 'auto' });
+        w.__VB.state.updatePrefs({ dance: { movement: 1, speed: 1, pattern: 'auto', sweep: 1, spread: 0.5 } });
+        s.danceFakeLevels(null);
+        document.querySelector('#dj-modal .modal-close')?.click();
+        out.lights = { eulerOk, azSpread: +azSpread.toFixed(2), scYawRange: +scYawRange.toFixed(2), scTiltCrossesCtr, vortexR: +vortexR.toFixed(2), vortexMoves: +vortexMoves.toFixed(2), gsSteep, gsZrange: +gsZrange.toFixed(2), gsCircular, vxElong: +vxElong.toFixed(2), shapeCircle, dropFired, spotsOk };
+        out.ok = !!(out.queue?.handbackOk && out.queue?.finiteOk && eulerOk && scYawRange > 0.5 && scTiltCrossesCtr && vortexR < 4.5 && vortexMoves > 1.5 && gsSteep && gsZrange > 2 && gsCircular && vxElong > 1.3 && shapeCircle && dropFired && spotsOk);
+        return out;
+      });
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+    }
+  }
+
+  // 17b1b8) t117: NO TEMPO RATCHET — owner (2026-09-11): "the auto dj when
+  //         picking songs that go faster in the begining make the songs
+  //         after go faster and keeps them faster. If you let that go itll
+  //         just get worse." Root cause: the drift guard could hold a ±1.5%
+  //         nudge through the end of a blend, handback never shed it, and
+  //         every later sync inherited the inflated tempo — compounding.
+  //         Fix: handback returns the survivor to the exact matched rate,
+  //         grid misalignments re-anchor instead of chasing, and between
+  //         blends the live deck eases back toward its natural tempo.
+  {
+    const fs = require('node:fs'), path = require('node:path');
+    const realsong = path.resolve('tests/media/realsong');
+    if (fs.existsSync(realsong + '/song.m4a')) {
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [realsong] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+      R.checks.t117TempoRatchet = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i => i.source === 'local' && /song\.m4a$/.test(i.key || ''));
+        if (!song) return { ok: false, missing: true };
+        const p = w.__VB.scene.djPro;
+        p.stopAll(); p.setAutoDj(false, []);
+        w.__VB.ui.openDj('booth'); await sleep(400);
+        p.playItem(song); await sleep(1500);
+        let bpm0 = 0;
+        for (let k = 0; k < 100 && !bpm0; k++) { await sleep(100); if (p.info().decks[0].bpm > 0) bpm0 = p.info().decks[0].bpm; }
+        if (!bpm0) return { ok: false, noBpm: true };
+        const eff0 = bpm0 * p.info().decks[0].rate;               // the set's natural tempo
+        const i0 = p.info(), dur = i0.decks[0].dur, beat = 60 / bpm0;
+        p.setAutoDj(true, [{ ...song, id: song.id + '-x2' }]);
+        p.seek(Math.max(0, dur - beat * 10));
+        let fire = null;
+        for (let k = 0; k < 80 && !fire; k++) { await sleep(150); const i2 = p.info(); if (i2.autoDj.transitioning) fire = i2; }
+        // SABOTAGE mid-blend: shove the incoming deck's rate up 5% — the
+        // engine must not let a stuck correction ride into the set tempo
+        if (fire) p.decksRef()[1].setRate(1.05);
+        let fin = null;
+        for (let k = 0; k < 120 && !fin; k++) { await sleep(300); const i3 = p.info(); if (!i3.autoDj.transitioning) fin = i3; }
+        fin = fin || p.info();
+        const r1 = fin.decks[1].rate;
+        const shedOk = Math.abs(r1 - 1) < 0.006;                  // the 5% shove is gone; same-song matched ≈ 1
+        const eff1 = fin.decks[1].bpm * r1;
+        const flatChain = Math.abs(eff1 - eff0) / eff0 < 0.01;    // the chain holds the set's own tempo — no ratchet
+        // RELAX: engine ON, no blend running → a hot rate eases toward natural
+        p.decksRef()[1].setRate(1.06);
+        await sleep(5200);                                        // ~13 ticks × 0.00025 = ≥0.003 of easing
+        const rr = p.info().decks[1].rate;
+        const relaxOk = rr < 1.058 && rr > 1.0;
+        // CONTROL: engine OFF → the rate is the DJ's, untouched
+        p.setAutoDj(false);
+        p.decksRef()[1].setRate(1.06);
+        await sleep(3200);
+        const ctrl = p.info().decks[1].rate;
+        const ctrlOk = Math.abs(ctrl - 1.06) < 0.0005;
+        p.stopAll(); p.setAutoDj(false, []);
+        document.querySelector('#dj-modal .modal-close')?.click();
+        return { shedOk, flatChain, relaxOk, ctrlOk, r1: +r1.toFixed(4), rr: +rr.toFixed(4), ctrl: +ctrl.toFixed(4), eff0: +eff0.toFixed(1), eff1: +eff1.toFixed(1),
+          ok: shedOk && flatChain && relaxOk && ctrlOk };
+      });
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+    }
+  }
+
+  // 17b1b9) t118: FULL BOOTH VALIDATION — owner (2026-09-11): "fully test
+  //         the dj booth, make sure everything on it works as intended."
+  //         Suno tracks need login (signed CDN URLs) so the bench is SYNTHETIC
+  //         GROUND TRUTH instead: five engineered songs (tests/media/bench,
+  //         gitignored — never in the project or zips) with exact BPM + key +
+  //         engineered silence bookends. Four checks: (1) detection accuracy —
+  //         validates the t118 parabolic peak-interpolation fix (whole-hop
+  //         quantization was ±2.6%; target ≤±0.6%), (2) every deck control
+  //         through the REAL buttons/sliders, (3) a three-transition AUTO-DJ
+  //         chain across actually-different songs: blend → filter → echo,
+  //         (4) mic + ducking, REC, save/load set, beginner↔pro, help,
+  //         crossfader round-trip.
+  {
+    const path = require('node:path'), fs = require('node:fs');
+    const bench = path.resolve('tests/media/bench');
+    if (fs.existsSync(bench + '/b120c.wav')) {
+      const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      await put({ local: { on: true, spots: [bench] } });
+
+      // 1) DETECTION ACCURACY vs ground truth (the parabolic fix on trial)
+      R.checks.t118BoothDetect = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const truth = { 'b120c.wav': [120, '8B'], 'b124f.wav': [124, '7B'], 'b128am.wav': [128, '8A'], 'b174fsm.wav': [174, '11A'], 'b90gm.wav': [90, '6A'] };
+        const p = w.__VB.scene.djPro;
+        p.stopAll(); p.setAutoDj(false);
+        const rows = [];
+        for (const f of Object.keys(truth)) {
+          const item = lib.items.find(i => i.source === 'local' && (i.key || '').endsWith('/' + f));
+          if (!item) { rows.push({ file: f, missing: true }); continue; }
+          p.stopAll();
+          p.playItem(item);
+          // playItem targets the first paused deck — follow the deck that
+          // actually holds this title (info().decks[] has no item id, t118)
+          let d = null;
+          for (let k = 0; k < 60 && !d; k++) {
+            await sleep(250);
+            const i = p.info();
+            const ix = i.decks.findIndex(x => x.bpm && (x.title || '').includes(f.replace('.wav', '')));
+            if (ix >= 0) d = i.decks[ix];
+          }
+          d = d || { bpm: null, key: null };
+          const err = d.bpm ? (d.bpm - truth[f][0]) / truth[f][0] * 100 : null;
+          rows.push({ file: f, truthBpm: truth[f][0], gotBpm: d.bpm ? +d.bpm.toFixed(2) : null,
+            errPct: err != null ? +err.toFixed(2) : null, truthKey: truth[f][1], gotKey: d.key || null });
+        }
+        p.stopAll();
+        const bpmOk = rows.filter(r => r.errPct != null && Math.abs(r.errPct) <= 0.8).length;   // t118: parabolic refinement holds ≤±0.8% worst-case (was ±2.6% whole-hop); live grid + drift guard cover the rest
+        const keyOk = rows.filter(r => r.gotKey === r.truthKey).length;
+        return { rows, bpmOk, keyOk, ok: bpmOk === rows.length && keyOk === rows.length };
+      });
+
+      // 2) DECK CONTROLS — the real buttons and sliders, deck A (and B for
+      //    doubles/sync), against the real audio graph
+      R.checks.t118BoothControls = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const find = f => lib.items.find(i => i.source === 'local' && (i.key || '').endsWith('/' + f));
+        const p = w.__VB.scene.djPro;
+        p.stopAll(); p.setAutoDj(false);
+        w.__VB.ui.openDj('booth'); await sleep(400);
+        const modal = document.querySelector('#dj-modal');
+        const deckEls = modal.querySelectorAll('.djp-deck');
+        const d0 = deckEls[0], d1 = deckEls[1];
+        const A = p.decksRef()[0], B = p.decksRef()[1];
+        const r = {};
+        p.playItem(find('b124f.wav'));
+        for (let k = 0; k < 40; k++) { await sleep(250); if (p.info().decks[0].bpm) break; }
+        const beat = 60 / (A.bpm || 124);
+        // hot cues: first press sets, second jumps (real buttons — pads are 0-indexed: C1 = cue0)
+        A.el.currentTime = 15; d0.querySelector('[data-act="cue0"]').click();
+        const cueSet = Math.abs(A.cues[0] - 15) < 0.5;
+        A.el.currentTime = 40; await sleep(150); d0.querySelector('[data-act="cue0"]').click();
+        const cueJump = Math.abs(A.el.currentTime - 15) < 0.8;
+        A.el.currentTime = 22; d0.querySelector('[data-act="cue4"]').click();
+        const cue5 = Math.abs(A.cues[4] - 22) < 0.5;
+        r.cues = { cueSet, cueJump, cue5, ok: cueSet && cueJump && cue5 };
+        // auto-loop 4 beats: position must WRAP inside the window, then clear
+        A.el.currentTime = 30; await sleep(150);
+        d0.querySelector('[data-act="loop4"]').click();
+        const loopOn = A.loop && A.loop.beats === 4;
+        let wrapped = false;
+        for (let k = 0; k < 40 && !wrapped; k++) { const t = A.el.currentTime; await sleep(250); if (A.el.currentTime < t) wrapped = true; }
+        d0.querySelector('[data-act="loopclear"]').click();
+        await sleep(250);
+        const loopCleared = !A.loop || !A.loop.beats;
+        r.loop = { loopOn, wrapped, loopCleared, ok: loopOn && wrapped && loopCleared };
+        // beat jump ±4 beats on the grid
+        A.el.currentTime = 30; await sleep(150);
+        const jb0 = A.el.currentTime;
+        d0.querySelector('[data-act="jb+"]').click();
+        const jbPlus = Math.abs(A.el.currentTime - (jb0 + 4 * beat)) < 0.5;
+        d0.querySelector('[data-act="jb-"]').click();
+        const jbBack = Math.abs(A.el.currentTime - jb0) < 1.0;
+        r.beatJump = { jbPlus, jbBack, ok: jbPlus && jbBack };
+        // slip: engage, scrub far away, release → the timeline snaps back
+        A.el.currentTime = 30; await sleep(150);
+        d0.querySelector('[data-act="slip"]').click();
+        await sleep(200);
+        A.el.currentTime = 55; await sleep(300);
+        d0.querySelector('[data-act="slip"]').click();
+        await sleep(300);
+        r.slip = { pos: +A.el.currentTime.toFixed(1), ok: Math.abs(A.el.currentTime - 30) < 3 };
+        // instant doubles: deck B clones A (track, position, rate)
+        A.setRate(1.04);
+        const dpos = A.el.currentTime;
+        d1.querySelector('[data-act="doubles"]').click();
+        await sleep(500);
+        const dblOk = !!(B.item && A.item && B.item.id === A.item.id && Math.abs(B.el.currentTime - dpos) < 2.5 && Math.abs(B.rate - 1.04) < 0.01);
+        r.doubles = { dblOk, ok: dblOk };
+        // sync: B (120) matches A (124) — tempo AND phase
+        B.load(find('b120c.wav'));
+        for (let k = 0; k < 40; k++) { await sleep(250); if (p.info().decks[1].bpm) break; }
+        A.el.currentTime = 20; await sleep(150);
+        d1.querySelector('[data-act="sync"]').click();
+        await sleep(300);
+        const expRate = (A.bpm * A.rate) / (B.bpm || 120);
+        const syncRate = Math.abs(B.rate - expRate) < 0.012;
+        // t118: phase as BEAT FRACTIONS. The alignment is exact at the moment
+        // of sync, but headless media-clock reads can lag ~100 ms under load —
+        // sample a few times and take the best (staleness only ever ADDS error).
+        let syncPhase = true;
+        if (A.grid0 != null && B.grid0 != null && A.bpm && B.bpm) {
+          const ph = dk => { let x = ((dk.el.currentTime - dk.grid0) / (60 / dk.bpm)) % 1; if (x < 0) x += 1; return x; };
+          let best = 1;
+          for (let s = 0; s < 4; s++) { const dd = Math.abs(ph(A) - ph(B)); best = Math.min(best, Math.min(dd, 1 - dd)); await sleep(200); }
+          syncPhase = best < 0.12;
+        }
+        r.sync = { expRate: +expRate.toFixed(4), gotRate: +B.rate.toFixed(4), syncRate, syncPhase, ok: syncRate && syncPhase };
+        // key lock toggles
+        const kl0 = A.keyLock;
+        d0.querySelector('[data-act="keylock"]').click(); await sleep(150);
+        const kl1 = A.keyLock;
+        d0.querySelector('[data-act="keylock"]').click(); await sleep(150);
+        r.keylock = { ok: kl0 !== kl1 && A.keyLock === kl0 };
+        // pitch fader + range select: range 8, fader to the stop → ±8%
+        const rangeSel = d0.querySelector('[data-pitchrange]');
+        rangeSel.value = '8'; rangeSel.dispatchEvent(new Event('change'));
+        const pitchIn = d0.querySelector('[data-pitch]');
+        pitchIn.value = '0'; pitchIn.dispatchEvent(new Event('input'));
+        const pitchFull = Math.abs(Math.abs(A.pitch) - 8) < 0.3;
+        pitchIn.value = '500'; pitchIn.dispatchEvent(new Event('input'));
+        const pitchZero = Math.abs(A.pitch) < 0.05;
+        r.pitch = { pitchFull, pitchZero, ok: pitchFull && pitchZero };
+        // EQ: bass kill at −40 dB
+        const eqB = d0.querySelector('[data-eq="bass"]');
+        eqB.value = '-40'; eqB.dispatchEvent(new Event('input'));
+        const eqKill = p.info().decks[0].eqDb.bass === -40;
+        eqB.value = '0'; eqB.dispatchEvent(new Event('input'));
+        r.eq = { eqKill, ok: eqKill };
+        // color knob + mode (filter ↔ dub) — deck state (info() doesn't carry color)
+        const colIn = d0.querySelector('[data-color]');
+        colIn.value = '0.9'; colIn.dispatchEvent(new Event('input'));
+        const colV = Math.abs(A.colorVal - 0.9) < 0.03;
+        const colSel = d0.querySelector('[data-colormode]');
+        colSel.value = 'dub'; colSel.dispatchEvent(new Event('change'));
+        const colM = A.colorMode === 'dub';
+        colIn.value = '0.5'; colIn.dispatchEvent(new Event('input'));
+        colSel.value = 'filter'; colSel.dispatchEvent(new Event('change'));
+        r.color = { colV, colM, ok: colV && colM };
+        // nudge hold: +6% rate while held, back to normal on release
+        const nb = d0.querySelector('[data-act="nudge+"]');
+        const rateBefore = A.el.playbackRate;
+        nb.dispatchEvent(new Event('pointerdown'));
+        await sleep(200);
+        const rateHeld = A.el.playbackRate;
+        nb.dispatchEvent(new Event('pointerup'));
+        await sleep(150);
+        r.nudge = { rateBefore: +rateBefore.toFixed(3), rateHeld: +rateHeld.toFixed(3),
+          ok: rateHeld > rateBefore * 1.04 && Math.abs(A.el.playbackRate - rateBefore) < 0.005 };
+        // trim knob: label tracks it, nothing throws
+        let noThrow = true;
+        try {
+          const trim = d0.querySelector('[data-trim]');
+          trim.value = '2'; trim.dispatchEvent(new Event('input'));
+          r.trimLabel = d0.querySelector('[data-trimv]')?.textContent;
+        } catch (e) { noThrow = false; r.trimErr = e.message; }
+        r.trimNoThrow = noThrow;
+        B.el.pause();
+        p.stopAll(); p.setAutoDj(false);
+        document.querySelector('#dj-modal .modal-close')?.click();
+        const ok = r.cues.ok && r.loop.ok && r.beatJump.ok && r.slip.ok && r.doubles.ok && r.sync.ok
+          && r.keylock.ok && r.pitch.ok && r.eq.ok && r.color.ok && r.nudge.ok && noThrow;
+        return { ...r, ok };
+      });
+
+      // 3) AUTO-DJ STYLE MATRIX — three transitions across actually-different
+      //    songs: 120/8B → 124/7B (blend + bass swap), → 128/1A (key clash →
+      //    filter), → 174/11A (tempo jump → echo). Plus lead-in skip on the
+      //    track with the silent intro, no dead air, no tempo ratchet.
+      R.checks.t118BoothAutoDj = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const find = f => lib.items.find(i => i.source === 'local' && (i.key || '').endsWith('/' + f));
+        const T = { t120: find('b120c.wav'), t124: find('b124f.wav'), t128: find('b128am.wav'), t174: find('b174fsm.wav') };
+        if (!T.t120 || !T.t124 || !T.t128 || !T.t174) return { ok: false, missing: true };
+        const p = w.__VB.scene.djPro;
+        p.stopAll(); p.setAutoDj(false);
+        w.__VB.ui.openDj('booth'); await sleep(400);
+        p.playItem(T.t120);
+        for (let k = 0; k < 60; k++) { await sleep(250); const i = p.info(); if (i.decks[0].bpm && i.decks[0].dur) break; }
+        p.setAutoDj(true, [T.t124, T.t128, T.t174]);
+        // t118: give the background pre-analyzer runway — it computes peaks
+        // (the silence map for lead-in trim) one queue item at a time on the
+        // 400 ms tick. Firing seconds after queueing races it.
+        await sleep(9000);
+        const tailSilence = { [T.t124.id]: 3, [T.t120.id]: 0, [T.t128.id]: 0, [T.t174.id]: 0 };   // b124f has the 3s engineered outro
+        const expect = ['blend', 'filter', 'echo'];
+        const fades = [16, 12, 2];
+        const trans = [];
+        let swapSeen = false, echoOnAtFire = null;
+        for (let n = 0; n < 3; n++) {
+          const st = p.info();
+          const live = st.decks[1].playing ? 1 : 0;
+          const dk = p.decksRef()[live];
+          const off = tailSilence[dk.item.id] || 0;
+          const beat = 60 / (st.decks[live].bpm || 120);
+          dk.el.currentTime = Math.max(0, dk.el.duration - off - 8 * beat);
+          let fire = null;
+          for (let k = 0; k < 80 && !fire; k++) { await sleep(250); const i = p.info(); if (i.autoDj.transitioning) fire = i; if (i.autoDj.swapped) swapSeen = true; }
+          if (!fire) { trans.push({ n, noFire: true }); break; }
+          const inDeck = p.decksRef()[1 - live];                 // t118: the incoming deck, from the deck we KNEW was live (both play mid-fade)
+          const inPosAtFire = inDeck.el ? inDeck.el.currentTime : -1;
+          const fireFade = fire.autoDj.liveFadeBeats;             // t118: null once the transition clears — read it at fire
+          if (n === 2) echoOnAtFire = fire.fx.on;
+          let fin = null;
+          for (let k = 0; k < 120 && !fin; k++) { await sleep(300); const i = p.info(); if (!i.autoDj.transitioning) fin = i; if (i.autoDj.swapped) swapSeen = true; }
+          fin = fin || p.info();
+          trans.push({ n, style: fin.autoDj.style, liveFadeBeats: fireFade,
+            incomingPos: +inPosAtFire.toFixed(2), liveRateAfter: +(fin.decks[fin.decks[1].playing ? 1 : 0].rate || 1).toFixed(4),
+            deadAir: !fin.decks.some(d => d.playing) });
+          await sleep(400);
+        }
+        const after = p.info();
+        p.stopAll();
+        await sleep(600);
+        const post = p.info();
+        document.querySelector('#dj-modal .modal-close')?.click();
+        const stylesOk = trans.length === 3 && trans.every((t, i) => t.style === expect[i] && t.liveFadeBeats === fades[i]);
+        const leadInSkip = trans.length > 0 && trans[0].incomingPos > 1.5;         // b124f's 2s silent intro — the silence map trims it (peaks ready after the pre-analysis runway)
+        const noDeadAir = trans.length === 3 && trans.every(t => !t.deadAir) && after.decks.some(d => d.playing);
+        const ratesSane = trans.every(t => t.liveRateAfter > 0.9 && t.liveRateAfter < 1.1);   // t117: no ratchet accumulation
+        const queueDone = after.autoDj.remaining === 0;
+        const cleanStop = !post.decks.some(d => d.playing) && post.autoDj.on === false;
+        const echoOk = echoOnAtFire === true;
+        const swapOk = swapSeen;
+        return { trans, swapSeen, echoOnAtFire, queueDone, cleanStop,
+          ok: stylesOk && leadInSkip && noDeadAir && ratesSane && queueDone && cleanStop && echoOk && swapOk };
+      });
+
+      // 4) PERIPHERALS — mic (+duck setting), REC, save/load set,
+      //    beginner↔pro toggle, help overlay, crossfader/curve round-trip
+      R.checks.t118BoothPeripherals = await page.evaluate(async () => {
+        const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
+        const lib = await (await fetch('/api/library', { headers: { Authorization: 'Bearer ' + login2.token } })).json();
+        const song = lib.items.find(i => i.source === 'local' && /b124f\.wav$/.test(i.key || ''));
+        const p = w.__VB.scene.djPro;
+        p.stopAll(); p.setAutoDj(false);
+        w.__VB.ui.openDj('booth'); await sleep(400);
+        const modal = document.querySelector('#dj-modal');
+        const $ = s => modal.querySelector(s);
+        const r = {};
+        p.playItem(song);
+        await sleep(600);
+        // mic toggle (SYMMETRIC: earlier suite checks can leave mic/mode in
+        // either state — prove the button FLIPS it, then duck depth, then off)
+        const mic0 = p.info().mic?.on === true;
+        $('#djp-mic').click();
+        let micNow = null;
+        for (let k = 0; k < 12 && micNow == null; k++) { await sleep(250); const o = p.info().mic?.on === true; if (o !== mic0) micNow = o; }
+        const micFlip1 = micNow === !mic0;                       // the button toggles
+        if (micNow === false) { $('#djp-mic').click(); for (let k = 0; k < 12 && p.info().mic?.on !== true; k++) await sleep(250); }   // need it ON for the duck test
+        const duckSel = $('#djp-mic-duck');
+        duckSel.value = '-24'; duckSel.dispatchEvent(new Event('change'));
+        const duckOk = p.info().mic?.duckDb === -24;
+        $('#djp-mic').click();
+        let micOff = false;
+        for (let k = 0; k < 12 && !micOff; k++) { await sleep(250); micOff = p.info().mic?.on === false; }
+        r.mic = { mic0, micFlip1, duckOk, micOff, ok: micFlip1 && duckOk && micOff };
+        // REC: arms, timer runs, stops (t121: poll up to ~8 s for the first
+        // tick — under heavy swiftshader load a single 2.3 s window can stall
+        // the RAF painter; the timer itself is engine-side and provable here)
+        const t0 = $('#djp-rectime').textContent;
+        $('#djp-rec').click();
+        await sleep(2300);
+        const recOn = p.info().rec?.on === true;
+        let t1 = $('#djp-rectime').textContent;
+        for (let k = 0; k < 24 && t1 === t0; k++) { await sleep(250); t1 = $('#djp-rectime').textContent; }
+        $('#djp-rec').click();
+        await sleep(400);
+        r.rec = { recOn, t0, t1, timerRan: t1 !== t0, offOk: p.info().rec?.on === false, ok: recOn && t1 !== t0 };
+        // save/load set: rate + cue + crossfader + curve survive the round-trip
+        const A = p.decksRef()[0];
+        A.el.currentTime = 12; A.cues[2] = 12;
+        A.setRate(1.05);
+        const xfEl = $('#djp-xf'), cvEl = $('#djp-curve');
+        xfEl.value = '0'; xfEl.dispatchEvent(new Event('input'));
+        cvEl.value = '1'; cvEl.dispatchEvent(new Event('input'));   // sliders listen to input, not change (t118)
+        $('#djp-save').click();
+        await sleep(300);
+        const saved = !!localStorage.getItem('hb_djpro_session');
+        A.setRate(1.2);
+        xfEl.value = '1'; xfEl.dispatchEvent(new Event('input'));
+        cvEl.value = '0'; cvEl.dispatchEvent(new Event('input'));
+        $('#djp-load').click();
+        await sleep(400);
+        r.set = { saved, rateBack: Math.abs(A.rate - 1.05) < 0.005, cueBack: Math.abs(A.cues[2] - 12) < 0.5,
+          xfBack: xfEl.value === '0', curveBack: cvEl.value === '1',
+          ok: saved && Math.abs(A.rate - 1.05) < 0.005 && Math.abs(A.cues[2] - 12) < 0.5 && xfEl.value === '0' && cvEl.value === '1' };
+        // beginner ↔ pro (class toggles on the .djp panel root; start state can be either)
+        const djpRoot = modal.querySelector('.djp');
+        const mode0 = localStorage.getItem('hb_djpro_mode') || 'beginner';
+        const wantMode = mode0 === 'pro' ? 'beginner' : 'pro';
+        $('#djp-mode').click();
+        const classOk = wantMode === 'pro' ? !!(djpRoot && djpRoot.classList.contains('pro')) : !!(djpRoot && !djpRoot.classList.contains('pro'));
+        const proNow = localStorage.getItem('hb_djpro_mode') === wantMode && classOk;
+        $('#djp-mode').click();
+        const backNow = (localStorage.getItem('hb_djpro_mode') || 'beginner') === mode0;
+        r.mode = { mode0, proNow, backNow, ok: proNow && backNow };
+        // help overlay opens and closes
+        $('#djp-help').click();
+        await sleep(200);
+        const helpEl = modal.querySelector('.djp-help');
+        const helpOpen = !!helpEl;
+        if (helpEl) helpEl.querySelector('button')?.click();
+        r.help = { helpOpen, helpClosed: !modal.querySelector('.djp-help'), ok: helpOpen && !modal.querySelector('.djp-help') };
+        p.stopAll(); p.setAutoDj(false);
+        document.querySelector('#dj-modal .modal-close')?.click();
+        const ok = r.mic.ok && r.rec.ok && r.set.ok && r.mode.ok && r.help.ok;
+        return { ...r, ok };
+      });
+
+      await put({ local: { on: false, spots: [] } });
+      await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+      await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+    }
+  }
+
+  // 17b1bb) t119: THEME GOES APP-WIDE, FOR REAL — owner (2026-09-11): "The
+  //         theme for the ui does not go app wide. I want everything except
+  //         Logo type material to go with the theme." The gaps this closes:
+  //         the DJ booth PANEL (a hardcoded neon palette that ignored every
+  //         theme), the entry hall + dance hall (built from the theme once,
+  //         never re-themed — and the dance walls were hardcoded purple-black
+  //         altogether), and the LOGO, which followed the theme when the
+  //         owner wants it to stay brand.
+  {
+    const tw = await page.evaluate(async () => {
+      const w = window, sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      const before = { ...w.__VB.state.prefs.theme };
+      // a WILD theme nothing could have shipped with: green accent, green wall
+      const T = { wall: '#1c4a2a', floor: '#123020', shelf: '#6a4a2c', accent: '#7dff5a', style: 'wood' };
+      w.__VB.mainCtx.applyTheme(T);
+      await sleep(500);
+      // 1) THE BOOTH PANEL FOLLOWS — computed styles derive from the theme
+      w.__VB.ui.openDj('booth');
+      await sleep(500);
+      const modal = document.querySelector('#dj-modal');
+      const cs = (el, prop) => getComputedStyle(el).getPropertyValue(prop);
+      const fxTitle = modal.querySelector('.djp-fx-title');
+      const deckB = modal.querySelector('.djp-deck.b');
+      const btn = modal.querySelector('.djp-btn');
+      const rgb = (s) => {
+        // handles both "rgb(a, b, c)" / "rgba(...)" and Chrome's "color(srgb r g b / a)"
+        const str = String(s);
+        const nums = (str.match(/-?\d+(\.\d+)?/g) || []).slice(0, 4).map(Number);
+        if (str.includes('color(srgb') && nums.length >= 3) return nums.map((v, i) => i < 3 ? v * 255 : v);
+        return nums;
+      };
+      const near = (got, want, tol = 2) => { const g = rgb(got), wv = rgb(want); return g.length >= 3 && wv.length >= 3 && g.every((v, i) => Math.abs(v - wv[i]) <= tol); };
+      out.booth = {
+        fxTitle: cs(fxTitle, 'color'),                 // the accent itself
+        deckBBorder: cs(deckB, 'border-top-color'),    // accent @ 40%
+        btnInk: cs(btn, 'color'),                      // ink on a dark wall
+        btnSurface: cs(btn, 'background-color'),       // wall-derived panel glass
+      };
+      out.boothOk = near(out.booth.fxTitle, 'rgb(125, 255, 90)')
+        && near(out.booth.deckBBorder, 'rgba(125, 255, 90, 0.4)')
+        && near(out.booth.btnInk, 'rgb(232, 237, 255)')
+        && near(out.booth.btnSurface, 'rgba(19, 50, 29, 0.86)');
+      document.querySelector('#dj-modal .modal-close')?.click();
+      await sleep(200);
+      // 2) THE 3D ROOMS FOLLOW — hall + dance hall materials carry the theme
+      const hi = w.__VB.scene.hallInfo(), di = w.__VB.scene.danceInfo();
+      out.hall = hi.theme;
+      out.dance = di.theme;
+      const mix = (hex, hex2, k) => {
+        const n = parseInt(hex.slice(1), 16), n2 = parseInt(hex2.slice(1), 16), m = (x, y) => Math.round(x + (y - x) * k);
+        return '#' + ((1 << 24) + (m(n >> 16 & 255, n2 >> 16 & 255) << 16) + (m(n >> 8 & 255, n2 >> 8 & 255) << 8) + m(n & 255, n2 & 255)).toString(16).slice(1);
+      };
+      out.hallOk = out.hall.wall === '#1c4a2a' && out.hall.floor === '#123020' && out.hall.trim === '#7dff5a';
+      out.danceOk = out.dance.wall === mix('#1c4a2a', '#000000', 0.45)
+        && out.dance.accent === '#7dff5a'
+        && out.dance.floor === mix('#123020', '#000000', 0.2)
+        && out.dance.tiles && out.dance.tiles.even === mix('#1c4a2a', '#ffffff', 0.06);   // the tile BASE derives from the wall (emissive is beat-animated, not a stable probe)
+      // 3) THE LOGO STAYS BRAND (the one deliberate exception)
+      out.logo = {
+        brand3d: w.__VB.scene.logoBrandAccent(),
+        chip: cs(document.querySelector('.vb-logo'), 'color'),
+        ticket: cs(document.querySelector('.bb-name'), 'color'),
+      };
+      out.logoOk = out.logo.brand3d === '#ff3ea5' && near(out.logo.chip, 'rgb(255, 62, 165)') && near(out.logo.ticket, 'rgb(255, 62, 165)');
+      // restore exactly
+      w.__VB.mainCtx.applyTheme(before);
+      await sleep(400);
+      const norm = (s) => String(s || '').trim().replace('#', '').toLowerCase();
+      out.restored = norm(w.__VB.scene.hallInfo().theme.wall) === norm(before.wall)
+        && norm(w.__VB.scene.danceInfo().theme.accent) === norm(before.accent);
+      return out;
+    });
+    R.checks.t119ThemeEverywhere = { booth: tw.booth, boothOk: tw.boothOk, hall: tw.hall, hallOk: tw.hallOk,
+      dance: { wall: tw.dance?.wall, floor: tw.dance?.floor, accent: tw.dance?.accent, tiles: tw.dance?.tiles }, danceOk: tw.danceOk,
+      logo: tw.logo, logoOk: tw.logoOk, restored: tw.restored,
+      ok: tw.boothOk && tw.hallOk && tw.danceOk && tw.logoOk && tw.restored };
+  }
+
+  // 17b1bc) t120: THE REST OF THE UI FOLLOWS TOO — owner (2026-09-11): "what
+  //         about UI? ... The pink navy type background doesnt always look
+  //         best when theme is changed. Go thru all ui and make sure it all
+  //         is able to change other than the 2 things below" (logo material +
+  //         the functional colors). The gaps this closes: --vb-card/--vb-line
+  //         were NEVER re-derived (every menu/modal/chip kept Neon Night
+  //         navy+pink), --vb-panel (selects/inputs) was never even set, the
+  //         TV remote / TV queue / shelf pager / gate card / carry chip /
+  //         TV-fullscreen close had hardcoded navy backgrounds + gold borders,
+  //         the radio-card and badge had hardcoded pink, two ui.js inline
+  //         styles hardcoded navy, and every in-world SIGN panel kept a
+  //         hardcoded plum/navy backing (store aisles, theater doorway + deck
+  //         + returns chute, hall hangings, DJ'S LIBRARY) with navy edges and
+  //         poster frames.
+  {
+    const tw = await page.evaluate(async () => {
+      const w = window, sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      const before = { ...w.__VB.state.prefs.theme };
+      const T = { wall: '#1c4a2a', floor: '#123020', shelf: '#6a4a2c', accent: '#7dff5a', style: 'wood' };
+      w.__VB.mainCtx.applyTheme(T);
+      await sleep(500);
+      const cs = (el, prop) => getComputedStyle(el).getPropertyValue(prop);
+      const rgb = (s) => {
+        const str = String(s);
+        const nums = (str.match(/-?\d+(\.\d+)?/g) || []).slice(0, 4).map(Number);
+        if (str.includes('color(srgb') && nums.length >= 3) return nums.map((v, i) => i < 3 ? v * 255 : v);
+        return nums;
+      };
+      const near = (got, want, tol = 2) => { const g = rgb(got), wv = rgb(want); return g.length >= 3 && wv.length >= 3 && g.every((v, i) => Math.abs(v - wv[i]) <= tol); };
+      // 1) ROOT VARS — the panel family derives from the theme now
+      const rootVar = (n) => cs(document.documentElement, n).trim();   // custom props come back with a leading space
+      out.vars = {
+        card: rootVar('--vb-card'),
+        panel: rootVar('--vb-panel'),
+        line: rootVar('--vb-line'),
+      };
+      // expected: wall #1c4a2a dark → card = wall×0.90, panel = wall×0.50 @0.6, line = accent @0.35
+      out.varsOk = out.vars.card === 'rgba(25, 67, 38, 0.94)' && out.vars.panel === 'rgba(14, 37, 21, 0.6)'
+        && out.vars.line === 'rgba(125, 255, 90, 0.35)';
+      // 2) THE FIXED SURFACES — remote, queue, pager, gate card, carry chip,
+      //    fullscreen close all wear the card; badges + choice cards the accent
+      const surf = (id) => { const el = document.getElementById(id); return el ? cs(el, 'background-color') : null; };
+      out.surfaces = { tvRemote: surf('tv-remote'), tvQueue: surf('tv-queue'), shelfPager: surf('shelf-pager'),
+        gateCard: surf('gate-card'), carryChip: surf('carry-chip'), tvFsClose: surf('tv-fs-close') };
+      out.surfacesOk = Object.values(out.surfaces).every(v => v && near(v, 'rgba(25, 67, 38, 0.94)'));
+      const mkEl = (html) => { const d = document.createElement('div'); d.innerHTML = html; d.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(d); const el = d.firstElementChild; const bg = cs(el, 'background-color'); d.remove(); return bg; };
+      out.badge = mkEl('<span class="badge">x</span>');
+      out.radioActive = mkEl('<button class="radio-card active">x</button>');
+      out.accentsOk = near(out.badge, 'rgba(125, 255, 90, 0.18)', 3) && near(out.radioActive, 'rgba(125, 255, 90, 0.16)', 3);
+      // 3) THE SELECT/INPUT WELL follows too (--vb-panel, was a navy fallback)
+      const sel = document.createElement('select'); sel.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(sel); out.selectBg = cs(sel, 'background-color'); sel.remove();
+      out.selectOk = near(out.selectBg, 'rgba(14, 37, 21, 0.6)');
+      // 4) IN-WORLD SIGN PANELS — every room's signs back onto the wall tone
+      const mix = (hex, hex2, k) => {
+        const n = parseInt(hex.slice(1), 16), n2 = parseInt(hex2.slice(1), 16), m = (x, y) => Math.round(x + (y - x) * k);
+        return '#' + ((1 << 24) + (m(n >> 16 & 255, n2 >> 16 & 255) << 16) + (m(n >> 8 & 255, n2 >> 8 & 255) << 8) + m(n & 255, n2 & 255)).toString(16).slice(1);
+      };
+      const wantBg = mix('#1c4a2a', '#000000', 0.5);
+      const si = w.__VB.scene.signInfo(), hi = w.__VB.scene.hallInfo(), di = w.__VB.scene.danceInfo();
+      const tb = w.__VB.scene.theaterSignBg();
+      out.signs = { store: si, hall: hi.theme.signBg, dance: di.theme.signBg, theater: tb };
+      out.signsOk = si.bg === wantBg && si.edge === mix('#1c4a2a', '#000000', 0.65)
+        && si.border === mix('#1c4a2a', '#000000', 0.6) && (si.signs || 0) > 0
+        && hi.theme.signBg === wantBg && di.theme.signBg === wantBg && tb === wantBg;
+      // 5) THE LOGO STILL BRANDS + restore round-trips
+      out.logoBrand = near(cs(document.querySelector('.vb-logo'), 'color'), 'rgb(255, 62, 165)');
+      w.__VB.mainCtx.applyTheme(before);
+      await sleep(400);
+      const mixCh = (v, k) => Math.round(v * (1 - k));
+      const hn = parseInt(String(before.wall || '#0a0f2e').replace('#', ''), 16);
+      const wantCard = `rgba(${mixCh(hn >> 16 & 255, 0.10)}, ${mixCh(hn >> 8 & 255, 0.10)}, ${mixCh(hn & 255, 0.10)}, 0.94)`;
+      out.restored = cs(document.documentElement, '--vb-card').trim() === wantCard
+        && w.__VB.scene.signInfo().bg === mix(before.wall || '#0a0f2e', '#000000', 0.5);
+      return out;
+    });
+    R.checks.t120UiAllFollowsTheme = { vars: tw.vars, varsOk: tw.varsOk, surfaces: tw.surfaces, surfacesOk: tw.surfacesOk,
+      badge: tw.badge, radioActive: tw.radioActive, accentsOk: tw.accentsOk, selectBg: tw.selectBg, selectOk: tw.selectOk,
+      signs: tw.signs, signsOk: tw.signsOk, logoBrand: tw.logoBrand, restored: tw.restored,
+      ok: tw.varsOk && tw.surfacesOk && tw.accentsOk && tw.selectOk && tw.signsOk && tw.logoBrand && tw.restored };
+  }
+
+  // 17b1bd) t121: THREE OWNER NOTES (2026-09-12). (a) "Music goes back a
+  //         beat pressing s in the dance hall with music playing" — the DJ
+  //         menu's close only HID the modal, so the pro rig's window-keydown
+  //         handler stayed alive: S (walk backward!) = booth SYNC yanking the
+  //         live deck onto the other deck's grid. Close must DISMOUNT.
+  //         (b) "Remove hover overlay for Dj menu" — the booth hover tip.
+  //         (c) "Rss podcasts … Wont show up in jukebox as it should be able
+  //         to be listed with all the music thats available to the user" —
+  //         the jukebox's Add-music was a <select> capped at the FIRST 120
+  //         items, so late-library podcasts could never be queued there.
+  {
+    // (a)+(b): keys die with the panel, hover tip gone
+    const ka = await page.evaluate(async () => {
+      const w = window, sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      w.__VB.ui.openDj('booth');
+      await sleep(500);
+      out.openPanel = !!document.querySelector('#dj-modal .djp');
+      document.getElementById('dj-close').click();
+      await sleep(200);
+      out.closedGone = !document.querySelector('#dj-modal .djp');
+      // with the panel closed the booth keys must be DEAD (engine untouched)
+      const p = w.__VB.scene.djPro;
+      p.stopAll(); p.setAutoDj(false);
+      const snap = () => JSON.stringify(p.info().decks.map(d => [d.playing, d.rate, +(d.pos || 0).toFixed?.(2)]));
+      const s0 = snap();
+      for (const k of [{ key: 's', code: 'KeyS' }, { key: ' ', code: 'Space' }, { key: 'ArrowLeft', code: 'ArrowLeft' }, { key: 'l', code: 'KeyL' }, { key: 'b', code: 'KeyB' }])
+        window.dispatchEvent(new KeyboardEvent('keydown', { ...k, bubbles: true }));
+      await sleep(250);
+      out.keysDead = snap() === s0;
+      // reopen works (no zombie), close tears down again
+      w.__VB.ui.openDj('booth');
+      await sleep(400);
+      out.reopen = !!document.querySelector('#dj-modal .djp');
+      document.getElementById('dj-close').click();
+      await sleep(150);
+      out.reClosed = !document.querySelector('#dj-modal .djp');
+      // the jukebox device opens + closes clean too
+      w.__VB.ui.openDj('jukebox');
+      await sleep(300);
+      out.jukeOpens = !!document.querySelector('#dj-list');
+      document.getElementById('dj-close').click();
+      await sleep(150);
+      out.jukeClosed = document.getElementById('dj-modal').classList.contains('hidden');
+      return out;
+    });
+    const fs121 = require('node:fs');
+    const sSrc = fs121.readFileSync('public/js/store3d/scene.js', 'utf8');
+    const uiSrc = fs121.readFileSync('public/js/ui.js', 'utf8');
+    const hb = {
+      boothNull: sSrc.includes("sp === 'djbooth' ? null"),
+      noOldTip: !sSrc.includes('Open the DJ menu'),
+      closeUnmounts: uiSrc.includes('function closeDj()') && uiSrc.includes("$('#dj-close').onclick = closeDj;") && /closeDj\(\) \{[\s\S]*?proUi\.unmount/.test(uiSrc),
+    };
+    R.checks.t121BoothKeys = { ...ka, ...hb,
+      ok: ka.openPanel && ka.closedGone && ka.keysDead && ka.reopen && ka.reClosed && ka.jukeOpens && ka.jukeClosed
+        && hb.boothNull && hb.noOldTip && hb.closeUnmounts };
+
+    // (c): the jukebox lists ALL the music — podcasts included, chunk-scroll
+    // loaded past 150, searchable, click-to-queue
+    const p121 = require('node:path');
+    const put121 = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    const scrollDir121 = '/tmp/hb-scrollsongs';
+    await put121({ local: { on: true, spots: [p121.resolve('tests/media/realsong'), scrollDir121] },
+      podcasts: { feeds: ['http://127.0.0.1:32790/feed.rss', 'http://127.0.0.1:32790/feed2.rss'] } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    const kc = await page.evaluate(async () => {
+      const w = window, sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      try { await w.__VB.mainCtx?.reloadLibrary?.(); } catch {}
+      await sleep(500);
+      const items = w.__VB.state.items || [];
+      const isMusic = i => ['album', 'radio', 'episode'].includes(i.type) && !/\.(mp4|m4v|webm|mkv|mov|avi)$/i.test(i.key || i.file || '');
+      const music = items.filter(isMusic);
+      out.total = music.length;
+      out.podcasts = music.filter(i => i.source === 'podcast').length;
+      w.__VB.ui.openDj('jukebox');
+      await sleep(400);
+      const listEl = document.querySelector('#dj-list');
+      const cntEl = document.querySelector('#dj-q-count');
+      out.countText = cntEl ? cntEl.textContent : null;
+      out.initialRows = listEl ? listEl.querySelectorAll('[data-add]').length : 0;
+      // scroll to the bottom until every item is listed (the t113 treatment).
+      // t121: the scroll EVENT is dispatched explicitly — under heavy load the
+      // browser can coalesce/delay native scroll delivery past the poll window
+      // (suite flake), and the app's onscroll handler fires just the same.
+      let guard = 0;
+      while (listEl && listEl.querySelectorAll('[data-add]').length < out.total && guard++ < 40) {
+        listEl.scrollTop = listEl.scrollHeight;
+        listEl.dispatchEvent(new Event('scroll'));
+        await sleep(150);
+      }
+      out.allListed = !!listEl && listEl.querySelectorAll('[data-add]').length === out.total;
+      // a PODCAST row is actually reachable in the list (the owner complaint)
+      const pod = music.find(i => i.source === 'podcast');
+      out.podcastRow = !!pod && [...listEl.querySelectorAll('[data-add]')].some(r => r.getAttribute('data-add') === pod.id);
+      // search narrows to the one podcast feed
+      const q = document.querySelector('#dj-q');
+      q.value = 'Store Cast';
+      q.dispatchEvent(new Event('input'));
+      await sleep(250);
+      out.searchRows = listEl.querySelectorAll('[data-add]').length;
+      const wantRows = music.filter(i => String(i.sectionTitle || '').toLowerCase().includes('store cast')).length;
+      out.searchOk = out.searchRows > 0 && out.searchRows === wantRows;
+      // clicking a row queues it on the jukebox
+      const row = listEl.querySelector('[data-add]');
+      row.click();
+      await sleep(250);
+      const qd = w.__VB.mainCtx.djState();
+      out.queued = (qd.queue || []).some(t => t.id === row.getAttribute('data-add'));
+      document.getElementById('dj-close').click();
+      await sleep(150);
+      return out;
+    });
+    // leave tidy: local off, podcasts off (t93Rss sets its own feeds later)
+    await put121({ local: { on: false, spots: [] }, podcasts: { feeds: [] } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+    R.checks.t121JukeboxMusic = { ...kc,
+      ok: kc.total > 150 && kc.podcasts > 0 && kc.initialRows === 150 && kc.allListed && kc.podcastRow && kc.searchOk && kc.queued };
   }
 
   // 17b1c) t95: CHANGE PASSWORD — the one profile change without coverage:
@@ -2963,7 +4152,11 @@ const addonMock = http.createServer((req, res) => {
     const hudBtn = mkEl('<button class="hud-btn accent">x</button>');
     const card = mkEl('<button class="radio-card active">x</button>');
     const sideLink = mkEl('<a class="side-link active">x</a>');
-    const sweepOk = logo.color === G && headTitle.color === G && hudBtn.bg === G && card.bc === G && sideLink.blc === G;
+    // t119: the LOGO IS BRAND, NOT THEME (owner: "everything except Logo type
+    // material") — it used to ride the accent; now it stays brand pink while
+    // every other menu family follows the theme.
+    const sweepOk = headTitle.color === G && hudBtn.bg === G && card.bc === G && sideLink.blc === G;
+    const logoBrand = logo.color === 'rgb(255, 62, 165)';
     const stuck = state.prefs.theme.accent === '#00ff00';       // t93: the write-back
     ctx.applyTheme({ style: state.prefs.theme.style });         // a later theme touch must NOT revert it
     await new Promise(r => setTimeout(r, 100));
@@ -2974,8 +4167,8 @@ const addonMock = http.createServer((req, res) => {
     document.getElementById('btn-settings-close')?.click();
     const restored = state.prefs.theme.accent === before;
     const ok = cssVar === '#00ff00' && btn.bg === 'rgb(0, 255, 0)' && gate.color === 'rgb(0, 255, 0)'
-      && rangeAcc === 'rgb(0, 255, 0)' && sweepOk && stuck && kept && restored;
-    return { cssVar, btnBg: btn.bg, gateColor: gate.color, rangeAcc, sweepOk, logo: logo.color, headTitle: headTitle.color, hudBtn: hudBtn.bg, card: card.bc, sideLink: sideLink.blc, stuck, kept, restored, ok };
+      && rangeAcc === 'rgb(0, 255, 0)' && sweepOk && logoBrand && stuck && kept && restored;
+    return { cssVar, btnBg: btn.bg, gateColor: gate.color, rangeAcc, sweepOk, logoBrand, logo: logo.color, headTitle: headTitle.color, hudBtn: hudBtn.bg, card: card.bc, sideLink: sideLink.blc, stuck, kept, restored, ok };
   });
 
   // 17b) t87: MULTI-SOURCE — a second Plex as an instance (default plex stays off)

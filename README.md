@@ -1,18 +1,10 @@
-# 📼 Home Binger
+# 📼 Home Binger™
 
 <p align="center">
   <img src="docs/og-home-binger.png" alt="Home Binger — a walkable 3D video store with VHS and DVD shelves, real cover art, jukebox, and theater doors" width="960">
 </p>
 
-**Your virtual video store** — a self-hosted, walkable 3D video store with a
-movie theater and a neon dance hall, stocked from your own Plex, Jellyfin, or
-any folder on your server. Free for anyone to use and modify, **not for
-sale**: licensed [CC BY-NC-SA 4.0](LICENSE) (use it, change it, share it —
-just don't make money off it, keep the credit, and share your changes under
-the same license). Made with 💙 by **BluJ Productions** — owner-directed,
-owner-designed, and ear-tested by BluJ; engineered with AI assistance by
-[Arena.ai](https://arena.ai)'s Agent Mode (full story in
-[`docs/CREDITS.md`](docs/CREDITS.md)).
+**The 3D Storefront for The CordCut Co-op™ (TCC™)** — a self-hosted, walkable 3D video store with a movie theater and a neon dance hall, stocked from your own Plex, Jellyfin, or any folder on your server. Free for anyone to use and modify, **not for sale**: licensed under [CC BY-NC-SA 4.0](LICENSE). Made with 💙 by **BluJ Productions** — owner-directed, owner-designed, and ear-tested by BluJ; engineered with AI assistance by [Arena.ai](https://arena.ai)'s Agent Mode (full story in [`docs/CREDITS.md`](docs/CREDITS.md)).
 
 ## 🏬 What's inside the building
 
@@ -520,27 +512,30 @@ with the page. See `docs/EDITING.md` for a guided tour.
 - Still: this is a hobby app exposing your media catalogue. Keep it behind
   HTTPS, change the admin password, and don't port-forward the raw port.
 
-## ⚖️ License & credits
+## ⚖️ License & Trademarks
 
-**Home Binger is free for personal, non-commercial use** — full terms in
-[LICENSE](LICENSE) (Creative Commons BY-NC-SA 4.0):
+### Code & Assets License (CC BY-NC-SA 4.0)
+Home Binger is free software for personal, non-commercial use — full legal terms in [LICENSE](LICENSE) (Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International):
 
-- ✅ run it at home for family & friends, change anything you like, share copies
-- ❌ no selling it, selling access to it, or building a paid service on it
-- 🔁 share your remixes, transforms, and builds under the **same license**
-  (CC BY-NC-SA 4.0 or compatible) — no adding extra restrictions
-- 📛 keep the BluJ Productions / Home Binger credit if you share it
+- ✅ **Run it freely** at home for family & friends, customize anything you like, and share copies.
+- ❌ **No commercial use:** No selling the software, charging for access, or bundling into paid services.
+- 🔁 **Share-Alike:** Share your builds, modifications, and transforms under the **same license** (CC BY-NC-SA 4.0).
+- 📛 **Attribution:** Retain original credits to BluJ Productions and Home Binger.
 
-**Bundled open-source components** (full inventory with licenses in
-[`docs/CREDITS.md`](docs/CREDITS.md)):
-
+**Bundled open-source components** (full inventory with licenses in [`docs/CREDITS.md`](docs/CREDITS.md)):
 - [three.js](https://threejs.org) — 3D rendering (MIT)
-- [Resonance Audio](https://resonance-audio.github.io) (Google) — Ambisonic
-  room rendering (Apache-2.0)
-- [Electron](https://www.electronjs.org) — the Windows desktop build (MIT)
-- [Node.js](https://nodejs.org) — the server runtime (MIT)
+- [Resonance Audio](https://resonance-audio.github.io) (Google) — Ambisonic spatial room rendering (Apache-2.0)
+- [Electron](https://www.electronjs.org) — Windows desktop runtime (MIT)
+- [Node.js](https://nodejs.org) — Server backend (MIT)
 
 Like this and other projects? The door in the store copies the support link. 💛
+
+### 🛡️ Trademark Notice & Policy
+**Home Binger™**, **The CordCut Co-op™**, **TCC™**, the project logos, and **BluJ Productions** are trademarks owned by BluJ Productions.
+
+- **Scope:** The open-source license applies to the software code and assets; it does **not** grant permission to use our project names, logos, or trademarks for third-party products or forks.
+- **Forks & Distributions:** You are free to fork and build upon this code for non-commercial purposes under CC BY-NC-SA 4.0, but public forks and distributions must be **rebranded** under your own unique name and logo. You may not use *Home Binger™* or *The CordCut Co-op™* in a way that implies official endorsement, sponsorship, or affiliation.
+- See [`TRADEMARKS.md`](TRADEMARKS.md) for full trademark usage guidelines.
 
 ---
 
@@ -561,3 +556,9 @@ Like this and other projects? The door in the store copies the support link. �
 | Exe started but which port? | It takes 8181, or the next free one if something's already there — other devices should try `http://<pc-ip>:8181` first |
 
 Enjoy the store. **Be kind, rewind.** ⏪
+
+---
+
+**The CordCut Co-op™ · TCC™ · Home Binger™**  
+© 2026 BluJ Productions. All rights reserved.  
+*Software licensed under CC BY-NC-SA 4.0. Brand names and logos are trademarks of BluJ Productions.*

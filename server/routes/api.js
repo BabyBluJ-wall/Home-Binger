@@ -291,6 +291,7 @@ export async function handleApi(req, res, pathname) {
         items: items.map(i => ({
           id: i.id, source: i.source, key: i.key, type: i.type, title: i.title,
           year: i.year, rating: i.rating, addedAt: i.addedAt, genres: i.genres,
+          bpm: i.bpm || null, keyTag: i.keyTag || null,            // t114: the file's own tags — instant tempo/key for the booth
           sectionId: i.sectionId || null,          // Shelf Map key (e.g. 'archive:staff-picks')
           sectionTitle: i.sectionTitle || null     // real library name (By Library sort)
           // NOTE: no 'thumb' — posters are fetched via /img/<source>/<key>

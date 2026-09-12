@@ -327,8 +327,391 @@ in the folder; repo pack 75 files TCC-swept ×0. Awaiting owner upload.)*
       when the music rests — t59 stillness contract held), kick flare
       (kp-coupled tilt push), sweep + spread knobs in the booth strip,
       shortest-path pan (no unwinds), Auto rotates all 13. Research:
-      docs/RESEARCH-DANCE-LIGHTS.md wave-2 section. Ships as the NEXT
-      version (1.8.8 zips already delivered; pkg bump at ship).
+      docs/RESEARCH-DANCE-LIGHTS.md wave-2 section. **SHIPPED + LIVE 2026-09-10:
+      release v1.8.9 verified on GitHub (plain v-tag, not prerelease,
+      asset 107,529,290 B exact match, notes pasted, repo source = 1.8.9
+      with the wave + booth lights + shelf fix confirmed in-tree);
+      suite 102/102 ×2; gofile backup gofile.io/d/eq5cBkTW.**
+- [x] **t110 TRADEMARK DOCS (2026-09-10, owner directive via task note):
+      README** — title `Home Binger™`, intro now "The 3D Storefront for
+      The CordCut Co-op™ (TCC™)", License section → "License & Trademarks"
+      (code license vs brand protection), footer legal block. **New
+      TRADEMARKS.md** — permitted uses (compatibility statements, links,
+      reviews) vs prohibited (forks must rebrand, no false endorsement,
+      no commercial, no domains/handles), Discord + GitHub contacts.
+      build-desktop.mjs bundles TRADEMARKS.md in future exes. Links
+      verified; all README sections intact. **DOCTRINE CHANGE: public
+      files are NO LONGER TCC-free — TCC is announced and now openly
+      branded; do not strip ™/TCC references from public files.**
+      ANNOUNCEMENT-CIRCLES-DRAFT.md deleted (TCC announced). Source zip
+      for upload: HomeBinger-1.8.9-trademarks-source.zip.
+- [x] **t111 AUTO-DJ RELIABILITY + LAPTOP QUEUE + BOOTH PERF (owner
+      2026-09-10: "Auto dj is amazing. Can we have it show up next songs
+      on the laptop when the menu is closed? … The auto dj also stops
+      from time to time … I need the dj booth tested and optimized") —
+      DONE 2026-09-10, suite 103/103 ×2.** Fixes: from-deck PAUSED at
+      fade end (was never paused → both decks "playing" → the load gate
+      locked = the stall), no BPM gate (default-tempo beats), engine on
+      a 400ms setInterval (the render loop stops when the tab is hidden
+      — the mix no longer does), crossfade scheduled on the AUDIO CLOCK
+      (linearRamp, zero-pop, survives page throttling), emergency
+      no-dead-air path (nothing audible + queue → next starts), stopAll
+      switches AUTO-DJ off. HUD: info().autoDj.{next,remaining,pos} →
+      paintHud queue block (N LEFT + next 3 + bass strip) replacing the
+      VU while the mix runs; ~20fps repaint. Perf: renderList capped at
+      250 rows (+ "N more" note), peaks cache LRU-capped at 40, mic
+      analyser buffer reused (no per-frame allocation), getLevels 8ms
+      cache (one FFT read/frame), drawWaves idles while the modal is
+      closed. Test t111AutoDj: trigger-without-BPM, from-deck-pauses,
+      no dead air, queue data, hard-kill recovery, clean stop.
+      **Ships with the trademark docs (t110). SHIPPED 2026-09-10 as 1.9.0:
+      pkg 1.9.0, suite 103/103 ×2 (version verified), exe + source zips +
+      release notes built (TRADEMARKS.md rides in the exe), gofile backup
+      gofile.io/d/vP6yftL3 — waiting on the owner's GitHub upload
+      (tag v1.9.0, not pre-release).**
+- [x] **t112 THE PERSONAL DJ — PRO AUTO-DJ TRANSITIONS (owner
+      2026-09-10: "I want a smoother auto dj… mix and fade the songs…
+      research how the best songs are played on the dj booth and how
+      they are mixed… my own personal dj when i dont want to dj
+      myself") — DONE 2026-09-10, suite 104/104 ×2.** Research in
+      docs/RESEARCH-AUTODJ.md (pro transition guides + Mixxx AutoDJ
+      internals — Mixxx admits it ignores volume/frequency/rhythm; our
+      booth already has BPM/key/EQ/color-filter/echo/waveforms to
+      script, so we do what it can't). Engine (djpro.js only):
+      pickMixStyle per pair — Δbpm ≤4% + camelotOk → 16-beat BLEND
+      with the BASS SWAP (incoming layers in at −24 dB bass, low end
+      swaps at 60% of the fade — one bassline at a time); ≤8% or key
+      clash → 12-beat FILTER fade (incoming opens from behind a
+      high-pass, outgoing thins out); else 2-beat ECHO out.
+      PHRASE ALIGNMENT: fires on 32-beat phrase lines, else 8-beat bar
+      lines, never mid-bar when avoidable. Countdown silence-trimmed
+      (audibleExtent waveform map — outro silence doesn't get mix
+      time); incoming silent lead-ins (>0.3 s) skipped. DRIFT GUARD:
+      phase error >0.06 beats → rate nudged ±1.5%, key lock on, pitch
+      steady. Clean handback at fade end (knobs back, filters neutral,
+      echo off) + WALKAWAY TIDY on mid-blend off-switch — the bug
+      t111's dead-air drill exposed (stopAll mid-fade left the
+      incoming deck's bass cut; filter style also leaked colorWet +
+      a stuck echo). info().autoDj += style/swapped/liveFadeBeats;
+      HUD shows the live style. Test t112PersonalDj: mix-brain table
+      (5 pair types) + camelot rules + live blend (on-grid fire,
+      bass cut at fire, swap, restore, no dead air) + walkaway clean.
+      **Folds into 1.9.0 — no extra version bump; zips + release
+      notes rebuilt (see DELIVERY.md).**
+- [x] **t113 SCROLL-LOADING LIBRARY LIST + LIVE QUEUE COUNT (owner
+      2026-09-10, testing the 1.9.0 build: "for the music list i want it
+      to load while it scrolls. Someone may not remember all the songs
+      they have." + "the que was also buggy when trying to have it show
+      when the panel is closed. it would only show that 1 is in cue.") —
+      DONE 2026-09-10, suite 105/105 ×2.** LIST: first LIST_CHUNK (150)
+      rows render, +150 per scroll near the bottom (≤8 chunks per event),
+      hard DOM ceiling LIST_CEIL 3000 then "keep typing to narrow";
+      search/filter/tab switches reset to the top chunk; footer note
+      "… N more — scroll to load". Replaces t111's flat 250-row cap.
+      QUEUE ROOT CAUSE: the Q button pushed to the STAGING list while the
+      engine played a snapshot copy taken at toggle time — adds while
+      running never reached the live queue, so the laptop count never
+      moved (with one song staged it read "1 LEFT" forever). FIX: Q while
+      AUTO-DJ runs appends to the live engine queue (dedup by ID, not
+      object identity) and mirrors to staging so off/on restarts keep the
+      night's list; crate-starts mirror into staging too; OFF no longer
+      clobbers the engine queue (resume where you left off);
+      refresh(newItems) remaps queued items by id onto fresh objects and
+      drops ghosts. BUG THE TEST CAUGHT (mine): the toggle's staging
+      mirror aliased its source — `autoQueue.length = 0` wiped the array
+      being copied, so starting from Q-staged songs began with an EMPTY
+      queue; fixed by copying before the wipe. Test t113ScrollQueue: 230
+      placeholder tracks through a /tmp local spot + the app's own
+      reloadLibrary restock (no page reload — later blocks keep state);
+      scroll loads all rows, search resets to one chunk, Q×3 + toggle →
+      "3 LEFT", +1 while running → 4 (the owner's exact bug), off/on
+      keeps 4. **Folds into 1.9.0 (owner hadn't uploaded yet — v1.8.9
+      still live); zips + release notes rebuilt (see DELIVERY.md).**
+- [x] **t114 THE DJ MIX — REAL BEATMATCHING + INSTANT SONG INFO + 3-BAND
+      LAPTOP METERS + BASS-DRIVEN LIGHTS (owner 2026-09-10: "it still just
+      cuts from one song to another… I want the music to beat match and
+      fade, mix, or even remix… levels… high mid and low… lights… move to
+      deeper bass and livelier music… are there any open source dj mix
+      programs we can use?") — DONE 2026-09-10, suite 106/106 ×2.**
+      ROOT CAUSE OF THE CUTS: BPM detection was LIVE-CLOCK ONLY (a deck
+      needed ~8 PLAYED beats before its tempo existed) → the incoming deck
+      at transition time ALWAYS had bpm 0 → syncTo never ran, drift guard
+      never ran, phrase alignment ran on a garbage grid. Every transition
+      was an unsynced overlap — "it just cuts". THE FIX — instant info
+      pipeline: (1) FILE TAGS read server-side (server/lib/tagmeta.js —
+      ID3v2.2 TBP/TKE · v2.3/2.4 TBPM/TKEY · Vorbis BPM/INITIALKEY · MP4
+      'tmpo' + iTunes freeform initialkey, moov at head OR tail; bounded
+      reads, never the whole file) ride the library API (route whitelist
+      += bpm/keyTag) — DAW exports carry BPM by default and the owner
+      makes music; (2) OFFLINE ANALYSIS in computePeaks (same decode as
+      the peaks): onset-flux envelope → octave-aware autocorrelation
+      tempo (folded 70–180) → first-strong-onset grid0 → chroma key via
+      compact radix-2 FFT (the aubio/librosa recipe, ours in
+      dependency-free JS — GPL libs can't ship in HB; research table in
+      docs/RESEARCH-AUTODJ.md); (3) PRE-ANALYSIS: autoDjTick analyzes the
+      next 3 queue items in the background; (4) dk.load prefills
+      bpm/key/grid from cache → tags, live detector still refines.
+      ENGINE: loadNext gains `synced` (both tempos known) → syncTo +
+      16-beat blend when synced, radio-safe 10-beat crossfade when not;
+      drift guard only runs with REAL grids (gridReady — live beat or
+      offline anchor); blend gains the SWEEP-OUT (outgoing colorHPF
+      20→400 Hz from 70% — handback neutralizes); echo gains the BEAT
+      ROLL (1-beat loop on the outgoing's final beat, released at
+      handback + walkaway). info() += bands {lo,mid,hi}. HUD: AUTO-DJ
+      view replaces the bass strip with LOW/MID/HIGH columns down the
+      right edge (owner's ask). LIGHTS (dance.js): onset-flux kick (the
+      kick must be a RISE: flux vs the track's own flux average +
+      softened level test) — the old "clear your own rolling average
+      ×1.3" was mathematically unreachable over a loud sub-bass bed (the
+      owner's slow/flowy bias); tempo-adaptive refractory (0.16–0.3 s,
+      62% of last interval); deeper kicks travel further (pose jump +=
+      flux×5, movement never brightness — t93 doctrine holds); beat
+      punch decay scales with detected BPM. Tests t114DjMix: tag e2e
+      (crafted ID3 mp3 → API bpm 124/keyTag 8B → deck bpm 124 + key
+      "8B" at load, no playing, no wait), keyTagToCamelot table (8A ·
+      F# minor→11A · Gb maj→2B · Am→8A · C→8B · Bbm→3A), unknown-tempo
+      → blend (never echo), offline bpm+key before the mix, live
+      transition: SYNCED 16-beat blend with tempo known at fire + rate
+      matched + no dead air + clean handback + walkaway clean, HUD
+      bands, lights: deep-bass pattern (0.65 bed / 0.85 kicks @150 BPM)
+      fires 6.9 beats (old detector: 0) + flowy pattern still fires.
+      **Folds into 1.9.0 (still not uploaded — v1.8.9 live).**
+- [x] **t115 FINITE QUEUE + THE FESTIVAL LIGHTS (owner 2026-09-11: "the
+      que auto repeats. Lights are still a bit off." + the 4-fixture
+      festival-engine spec: 6 signature patterns, floor-impact spots,
+      drop detection) — DONE 2026-09-11, suite 107/107 ×2.** QUEUE:
+      loadNext treats the set as FINITE — when idx reaches the queue end
+      the engine switches itself off (toast "set complete"), the last
+      song plays out, no wrap/replay; info().pos/remaining/next are
+      finite math; a PASSED queue always resets idx (resume = pass
+      nothing); pre-analysis never re-analyzes wrapped ghosts. LIGHTS
+      ROOT CAUSE ("still a bit off"): under the DEFAULT 'XYZ' Euler
+      order, rotation.y (PAN) had NO effect on a down-pointing cone —
+      verified in Node (beam azimuth pinned at π for any pan). Every
+      beam tipped toward the same world direction; only tilt showed.
+      FIX: pivot.rotation.order = 'YXZ' (pan outermost — the real
+      moving-head convention) — every existing pattern now draws what it
+      claimed to. THE FESTIVAL SIX (programs 13-18, all through the
+      aimTyTx converging-pan/tilt solver): SCISSOR CROSS (mirrored pans
+      ±sin(sg), tilt crossing ctrTilt twice a bar), VORTEX CYCLONE (all
+      four chase an orbiting floor point, spread = chase spacing, 1
+      orbit/bar — fast enough to feel, slow enough for the ease caps),
+      DIAGONAL X (pairs 0+3 / 1+2 slice the two diagonals 90° apart),
+      SINE WAVE CHASE (i·π/2 phase offsets), GROUND SWEEP (parallel
+      steep searchlights, targets kept inside the head ring — 4.27 m
+      ceiling geometry), DROP EXPLODE (corner snaps + 3× orbit + WHITE
+      beams + strobing impact pools). DROP DETECTOR: energy-spike
+      (kick && flux > max(0.06, fAvg·2.2) && (energy > 0.65 || bass >
+      0.9)) seizes the rig for 2.2 s in AUTO mode only (locked looks
+      win). FLOOR-IMPACT SPOTS: 4 additive pools tracked from the live
+      pan/tilt (the same math inverted), sub-bass pulsed. AUTO-ROTATE:
+      every 32 beats (8 bars) over 19 programs; pattern select +
+      setPrefs whitelist extended. Canonical+shortest-path pan (wrap
+      current, ease toward nearest-equivalent target — bounded
+      telemetry, no long-way sweeps; scanner exempt from the kick-flare
+      tilt). MEMORY: computePeaks now decodes MONO 22 kHz (a quarter of
+      the decoder memory — the suite OOM'd decoding every queue clone
+      at full fidelity on the 2 GB box). Tests t115FiniteFestival:
+      finite queue (1-song queue → transition → handback → last song
+      plays out → engine off, remaining 0, nothing playing), Euler
+      proof (az spread 4.71 across corners), scissor (mirrored yaw
+      range + tilt crosses center), vortex (landings within 3.5 of the
+      orbit center), ground sweep (steep + front-to-back), drop blip
+      fires on a spike, 4 floor spots. t109/t59/t51 assertions updated
+      (19 programs, 32-beat rotation, select 20 options).
+      **Folds into 1.9.0 (still not uploaded).**
+- [x] **t116 THE POOLS TAKE THE BEAM'S SHAPE (owner 2026-09-11: "floor-
+      impact pools that track where each beam lands should match the
+      shape of the light. The light is a cone so it shows in a circle")
+      — DONE 2026-09-11, suite 107/107 ×2.** The impact pools were flat
+      SQUARES (PlaneGeometry 2.6×2.6) — a decal, not light. Now: unit
+      CircleGeometry (28 seg) + a shared soft radial-gradient CanvasTexture
+      (additive, center-hot → transparent edge), scaled per frame from the
+      REAL cone geometry: minor = axial-distance-to-floor × tan(half-angle)
+      (CONE_TAN = 0.95/6.2) × the lens zoom (r.z — pools punch open on
+      kicks with the beams); major = minor / cos(tilt) clamped 3.5×,
+      aligned to the beam's horizontal direction (rotation.y =
+      atan2(−dz, dx)); grazing beams smear long like real light. Size
+      clamps (minor ≤ 2.2, major ≤ 4.0) keep the room readable; opacity
+      softens as the pool spreads (/√elong). info() += spotShape
+      ('circle' — a geometry-type assertion, so a square can't sneak back)
+      + spotScales [semi-major, semi-minor] per head. Tests (in
+      t115FiniteFestival): steep program (ground sweep) → all four pools
+      near-circular (minor/major > 0.6); tilted program (vortex) → pools
+      elongate (max major/minor = 1.83); spotShape === 'circle'.
+      **Folds into 1.9.0 (still not uploaded).**
+- [x] **t117 NO TEMPO RATCHET (owner 2026-09-11: "the auto dj when
+      picking songs that go faster in the begining make the songs after
+      go faster and keeps them faster. If you let that go itll just get
+      worse") — DONE 2026-09-11, suite 108/108 ×2.** ROOT CAUSE: the
+      drift guard could hold a ±1.5% rate nudge through the end of a
+      blend, handback never shed it, and every later syncTo inherited
+      the inflated EFFECTIVE tempo — so a fast early song (or any held
+      correction) ratcheted the whole set, compounding over the night.
+      FIX (3 parts, djpro.js): (1) THE TEMPO SHED — the transition
+      carries its `matched` rate and handback resets the surviving deck
+      to it exactly; transient corrections never enter the set tempo.
+      (2) DRIFT GUARD HYGIENE — nudges capped at ±0.8%, and a big
+      offset (≥0.35 beat) is treated as a GRID misalignment: the grid
+      re-anchors (grid0 += e·spb) instead of bending tempo (the old
+      chase could hold a nudge forever). (3) TEMPO RELAX — between
+      blends the live deck eases back toward its NATURAL tempo at
+      ≤0.06%/s (key lock keeps pitch; beatmatching happens AT each
+      blend so nothing is lost; only runs while AUTO-DJ is on and no
+      fade is in flight — with the engine off the DJ's rate is
+      untouched). Test t117TempoRatchet: mid-blend sabotage (+5% on the
+      incoming deck) is shed at handback (post-fade rate 1.0015), the
+      chain holds the set's own tempo flat (129.4 → 129.4 BPM
+      effective), a forced 1.06× rate relaxes while the engine runs
+      (1.0567 after ~5 s), and the control (engine off) leaves a
+      manual 1.06× untouched.
+      **Folds into 1.9.0 (still not uploaded).**
+- [x] **t118 FULL BOOTH VALIDATION (owner 2026-09-11: "fully test the
+      dj booth make sure everything on it works as intended. If you
+      need songs try using the ones i have on suno. Just DO NOT include
+      them in the project") — DONE 2026-09-11, suite 112/112 ×2.**
+      TEST MATERIAL: the owner's Suno songs can't be downloaded without
+      a login (signed CDN URLs — cdn1.suno.ai returns MissingKey), so
+      the bench is SYNTHETIC GROUND TRUTH instead: five engineered
+      tracks (tests/media/bench, git-ignored — never in the project or
+      zips) with exact BPM (90/120/124/128/174), known camelot keys,
+      harmonically-realistic spectra (kick click layer, pad partials),
+      and engineered silence bookends. BATTERY (4 checks in v35.cjs):
+      (1) DETECTION ACCURACY — all 5 BPM within ±0.8% (worst −0.61%)
+      and all 5 keys exact; (2) DECK CONTROLS through the real DOM —
+      cues set/jump (cue0-indexed pads), auto-loop 4 wraps and clears,
+      beat jump ±4, slip snaps back, instant doubles clones track+pos+
+      rate, SYNC matches rate AND phase, keylock, pitch fader ±8% with
+      range select, EQ bass kill at −40 dB, color knob+mode, nudge hold
+      +6%, trim — all green; (3) AUTO-DJ STYLE MATRIX — 120/8B →
+      124/7B = blend 16 beats + bass swap + 2 s silent intro trimmed to
+      1.78 s, → 128/8A = filter 12 beats (key clash), → 174/11A =
+      echo 2 beats with fx engaged at fire, no dead air, no ratchet,
+      finite queue ends clean; (4) PERIPHERALS — mic toggle + duck −24,
+      REC arms/runs/stops, save/load set round-trips rate+cue+fader+
+      curve, beginner↔pro, help overlay. FIVE REAL BUGS FOUND+FIXED
+      (djpro.js): (a) offline BPM whole-hop quantization (±2.6%!) →
+      parabolic peak interpolation (≤±0.8%); (b) syncTo phase mixed
+      track-positions with wall beat lengths → up to 0.1-beat flam at
+      rate ≠ 1 → now beat-fraction aligned (exact); (c) loadSession
+      restored rate before pitch, so the fader re-derivation clobbered
+      synced/auto-DJ rates on every set reload → rate restores LAST;
+      (d) pickMixStyle checked key clash before the tempo jump, so a
+      34% genre jump with clash got filter+SYNCED (a 174 track dragged
+      to 0.70×) → jumps >8% always echo out at their own tempo;
+      (e) audibleExtent required el.duration (NaN right after load) so
+      the lead-in silence trim never ran → falls back to the peaks'
+      decode duration. **Folds into 1.9.0 (still not uploaded).**
+- [x] **t119 THEME APP-WIDE, FOR REAL (owner 2026-09-11: "The theme for
+      the ui does not go app wide. I want everything except Logo type
+      material to go with the theme") — DONE 2026-09-11, suite 113/113
+      ×2.** THE GAPS: the DJ booth PANEL was a hardcoded neon palette
+      (24 hexes, ignored every theme), the entry hall themed only at
+      BOOT (never on a live change), the dance hall walls were
+      hardcoded purple-black ENTIRELY, and the LOGO followed the theme
+      when the owner wants it brand. FIXES: (1) booth panel CSS rebuilt
+      on --vb-* derivations (surfaces from the wall via color-mix,
+      text from ink/muted, controls from the accent; deck A =
+      accent-soft, deck B = accent; wave canvas bg derives from the
+      wall; search input + in-panel toast themed); (2) hall.js gets
+      applyTheme — walls/floor/baseboards/ceiling(derived)/door trim/
+      hanging signs (CLOSED keeps warning red); (3) dance.js gets
+      applyTheme — club walls/ceiling/perimeter floor DERIVE from the
+      theme (wall·45% black etc.), tile checker derives, speaker rings
+      + sub mouths + booth glow + faders + laptop screen + DJ'S LIBRARY
+      sign + record plaques wear the accent, HUD deck channels A/B =
+      accent tints; (4) scene.applyTheme calls hall+dance; (5) THE
+      LOGO IS BRAND: the 3D wordmark pins to #ff3ea5 on #0a0f2e
+      (favicon recipe), .vb-logo + the boot ticket pin to brand pink —
+      applyTheme no longer regenerates it. DELIBERATE KEEPS: the light
+      show (beams/LED wall/pools), the LO/MID/HI meter trio, Camelot
+      green, error/ok status colors, the TV (device), the exterior
+      storefront (chain-brand look), neutral architecture (frames/
+      metal/glass). Test t119ThemeEverywhere: wild green theme → booth
+      computed styles derive (fx title = accent, deck B border =
+      accent@40%, btn ink, panel glass = wall-derived rgba with
+      parser for Chrome color(srgb) format), hall wall/floor/trim
+      exact, dance wall = wall·55% + accent + tile base, logo stays
+      rgb(255,62,165) everywhere, restore round-trips. t108 glass
+      assert + t93 sweep updated to the new doctrine (glass = themed
+      translucent; logo = brand, out of the sweep). NOTE: the t118
+      bench regenerated at 22 kHz mono (13 MB) — detection identical
+      (the app decodes to mono-22k anyway), and it now fits the
+      workspace snapshot budget next to the release zips (the 44 kHz
+      30 MB bench was silently dropped by the 128 MB snapshot cap
+      between turns). **Folds into 1.9.0 (still not uploaded).**
+- [x] **t120 THE REST OF THE UI FOLLOWS THE THEME (owner 2026-09-11:
+      "what about UI? … The pink navy type background doesnt always
+      look best when theme is changed. Go thru all ui and make sure it
+      all is able to change other than the 2 things below" — the logo
+      material + the functional colors) — DONE 2026-09-11, suite
+      114/114 ×2.** THE GAPS: (1) --vb-card/--vb-line were set in
+      :root only — every menu/modal/chip/tooltip/toast/HUD button kept
+      Neon Night navy+pink forever; (2) --vb-panel (selects/inputs)
+      was never set at all (navy #141a2e fallback); (3) ten hardcoded
+      surfaces: TV remote (rgba(8,15,38,.82)), TV queue + shelf pager
+      (rgba(8,12,30,.88) + GOLD borders), gate card + its input focus
+      (rgba(10,14,34,.82) + gold), carry chip (rgba(8,12,30,.9) +
+      gold), TV-fullscreen close (rgba(8,12,30,.85)), radio-card.active
+      (pink .16), .badge (pink .18), 2× ui.js inline rgba(10,12,30,.55)
+      inputs; (4) every in-world sign panel sat on hardcoded plum/
+      navy: signage.js aisle lightbox textures (#0b1c4d default) +
+      signEdgeMat #0b1330 + poster borderMat #0e1734, room.js/theater
+      signs ×5 (#160f1e), hall.js signTexture default (#160f1e),
+      dance.js DJ'S LIBRARY (#160f1e) — plus the deck's VHS·DVD·
+      BLU-RAY label never re-themed its accent after boot. FIXES:
+      themeVars() derives card (wall ±10% toward black/white by wall
+      luminance, .94 alpha), line (accent 35%), --vb-panel (wall 50/35%
+      toward black/white, .6/.75 alpha); the ten surfaces now ride
+      card/line/panel vars (gold borders → the line); signBgOf(t) =
+      mixHex(wall,#000,0.5) backs every sign (signage edges .65,
+      poster frames .6), all redrawn live in applyTheme; theater desk
+      label tracked + refreshed; info() hooks: signage.info() (bg/
+      edge/border/count), hall/dance theme.signBg, theater
+      signTheme(), exposed via scene signInfo()/theaterSignBg().
+      KEEPS (owner-approved): logo material brand pink; light show;
+      LO/MID/HI; Camelot green; REC/CLOSED/status; TV content;
+      exterior storefront; neutral furniture/case plastics. Test
+      t120UiAllFollowsTheme (green wall #1c4a2a + accent #7dff5a):
+      root vars exact strings, 6 surfaces = card, badge/radio-active =
+      accent tints, select well = panel, 4 rooms' sign bgs =
+      #0e2515 + edge #0a1a0f + border #0b1e11, logo brand, restore
+      round-trip. BENCH NOTE: bench regenerated with the silent-intro
+      lead restored on b124f (2.5 s — t118's leadInSkip assert needs
+      it; the first regen had music from t=0). **Folds into 1.9.0
+      (still not uploaded).**
+- [x] **t121 THREE OWNER NOTES (2026-09-12: "Music goes back a beat
+      pressing s in the dance hall with music playing" · "Remove hover
+      overlay for Dj menu" · "Rss podcasts Cant shelve as cd as cd was
+      removed. Wont show up in jukebox as it should be able to be
+      listed with all the music thats available to the user. Either
+      that or we make it available on dvd. Either way a fix is needed")
+      — DONE 2026-09-12, suite 116/116 ×2.** (a) THE S-KEY LEAK: the DJ
+      modal's close only HID the modal (classList.add('hidden')), so
+      djpro's window keydown listener + .djp DOM stayed alive after any
+      booth session — walking with WASD then fired booth shortcuts (S =
+      SYNC yanked the live deck onto the other deck's grid; Space/
+      arrows/L/X/[]/cue digits all leaked too). FIX: ui.js closeDj()
+      hides + proUi.unmount()s, wired to #dj-close AND the backdrop
+      click; djpro unmount() now also root.remove()s (true teardown —
+      the panel used to linger in the hidden modal). (b) HOVER: the
+      booth laptop's "💻 Open the DJ menu" tip removed (sp === 'djbooth'
+      → null, the t85 jukebox treatment; click still opens). (c)
+      PODCASTS IN THE JUKEBOX: the classic deck's "Add music" was a
+      <select> capped at music.slice(0, 120) — podcast episodes (late
+      in library order) were unreachable from the jukebox. FIX: the
+      t113 treatment — a #dj-q search box + #dj-list scroll list (150-
+      row chunks, appends on scroll) over ALL music incl. episodes,
+      click-to-queue; the dead select + 'add' branch removed. Podcasts
+      still don't shelve (CDs gone) — the owner's option A. TESTS:
+      t121BoothKeys (close→gone, S/Space/ArrowLeft/L/B leave the
+      engine untouched, reopen ok, jukebox close ok, source asserts),
+      t121JukeboxMusic (237 items: 150 chunk → scroll → all 237,
+      podcast row reachable, 'Store Cast' search narrows exactly,
+      click queues). DE-FLAKES: t118 rec timer now polls ~8 s (RAF
+      painter stall under swiftshader froze the TEXT, engine fine);
+      t121 scroll loop dispatches the scroll event explicitly. **Folds
+      into 1.9.0 (still not uploaded).**
 - [ ] **HB↔HB rung 2** — item-level share granularity · "friend store
       offline" indicator in the UI · follower-side browse polish.
 *(DECIDED: ONE BIGGER RELEASE — t94 hardening + version notice + remote

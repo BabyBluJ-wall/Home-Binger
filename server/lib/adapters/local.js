@@ -14,6 +14,7 @@
 //  joins them back) — resolved against the root with a traversal guard.
 // ─────────────────────────────────────────────────────────────────────────────
 import fs from 'node:fs';
+import { readAudioTags } from '../tagmeta.js';   // t114: instant BPM/key from file tags
 import path from 'node:path';
 
 const VIDEO = /\.(mp4|m4v|webm|mkv|mov|avi|mpg|mpeg|ts|m2ts)$/i;
@@ -66,7 +67,7 @@ function walk(dir, root, out, depth, spot) {
       // '<spotIndex>/<relative path>' — so two spots can hold the same
       // sub-folder name without colliding.
       const kind = isAudio ? 'album' : isVideo ? 'movie' : 'book';
-      out.push({
+      const entry = {
         id: `local:${spot}/${rel}`,
         source: 'local',
         key: `${spot}/${rel}`,                     // play route joins the '/' back
@@ -74,7 +75,11 @@ function walk(dir, root, out, depth, spot) {
         title: path.basename(ent.name, path.extname(ent.name)),
         file: ent.name,
         addedAt: Math.floor(mtime / 1000)
-      });
+      };
+      if (isAudio) {                               // t114: the file's OWN tags — instant BPM/key, no analysis wait
+        try { const tg = readAudioTags(abs); if (tg?.bpm) entry.bpm = tg.bpm; if (tg?.keyTag) entry.keyTag = tg.keyTag; } catch {}
+      }
+      out.push(entry);
     }
   }
 }

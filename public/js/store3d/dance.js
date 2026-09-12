@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1789061225548';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1789174562813';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;
@@ -21,14 +21,33 @@ export function buildDance(theme) {
   const occluders = [];
   const colliders = [];                          // t51: real walk-blocking boxes
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: '#191228', roughness: 0.88 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: '#0e0f1a', roughness: 0.9 });
+  // t119: THE DANCE HALL FOLLOWS THE THEME — the walls were a hardcoded
+  // purple-black no matter the theme, and nothing here re-themed after a
+  // theme change. Club surfaces now DERIVE from the theme (wall → club-dark
+  // walls + ceiling, floor → perimeter floor, accent → every glow + sign +
+  // plaque + the laptop screen), so the whole room recolors live with the
+  // store. The light SHOW keeps its own colors — beams, LED wall and pools
+  // are the show, not the decor.
+  const mixHex = (a, b, k) => {
+    const pa = /^#?([0-9a-f]{6})$/i.exec(String(a || '')), pb = /^#?([0-9a-f]{6})$/i.exec(String(b || ''));
+    if (!pa || !pb) return a || b;
+    const na = parseInt(pa[1], 16), nb = parseInt(pb[1], 16), m = (x, y) => Math.round(x + (y - x) * (k || 0));
+    const r = m(na >> 16 & 255, nb >> 16 & 255), g = m(na >> 8 & 255, nb >> 8 & 255), bl = m(na & 255, nb & 255);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+  };
+  let curTheme = { ...theme };                     // kept fresh so applyTheme + the HUD read it
+  const wallOf = (t) => mixHex(t.wall || '#191228', '#000000', 0.45);   // club-dark version of the store wall
+  const ceilOf = (t) => mixHex(t.wall || '#0e0f1a', '#000000', 0.72);
+  const perimOf = (t) => mixHex(t.floor || '#14131f', '#000000', 0.2);
+
+  const wallMat = new THREE.MeshStandardMaterial({ color: wallOf(theme), roughness: 0.88 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: ceilOf(theme), roughness: 0.9 });
+  const perimFloorMat = new THREE.MeshStandardMaterial({ color: perimOf(theme), roughness: 0.75 });
   const metal = new THREE.MeshStandardMaterial({ color: '#9aa2b8', roughness: 0.3, metalness: 0.75 });
   const T = L.room.wallThickness;
 
   // ── shell ──
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(L.dance.w, L.dance.l),
-    new THREE.MeshStandardMaterial({ color: '#14131f', roughness: 0.75 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(L.dance.w, L.dance.l), perimFloorMat);
   floor.rotation.x = -Math.PI / 2; floor.position.set(xc, 0, zc); group.add(floor);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(L.dance.w, L.dance.l), darkMat);
   ceil.rotation.x = Math.PI / 2; ceil.position.set(xc, H, zc); group.add(ceil);
@@ -64,11 +83,12 @@ export function buildDance(theme) {
   const FT = 6.4, FN = 8, fpSize = FT / FN;            // 8×8 tiles, 6.4 m square
   const floorZ = zc + 1.1;
   const tileMats = [];
+  const tileBase = (t, even) => even ? mixHex(t.wall || '#1d1b2e', '#ffffff', 0.06) : mixHex(t.wall || '#101020', '#000000', 0.35);   // t119: the checker derives from the theme
   const tiles = new THREE.Group();
   for (let ix = 0; ix < FN; ix++) for (let iz = 0; iz < FN; iz++) {
     const even = (ix + iz) % 2 === 0;
     const mat = new THREE.MeshStandardMaterial({
-      color: even ? '#1d1b2e' : '#101020', roughness: 0.18, metalness: 0.5,
+      color: tileBase(theme, even), roughness: 0.18, metalness: 0.5,
       emissive: new THREE.Color(theme.accent), emissiveIntensity: 0
     });
     tileMats.push({ mat, even, ix, iz });
@@ -119,6 +139,14 @@ export function buildDance(theme) {
   beamColors.forEach((col, i) => {
     const a = (i / beamColors.length) * Math.PI * 2;
     const pivot = new THREE.Group();
+    // t115: THE FIX BEHIND "lights are still a bit off" — under the DEFAULT
+    // 'XYZ' Euler order, rotation.y (PAN) has NO effect on a down-pointing
+    // cone (the yaw composes innermost, spinning the cone around its own
+    // axis — invisible). Every beam tipped toward the same world direction
+    // and only the tilt ever showed. 'YXZ' puts the pan OUTERMOST: the head
+    // yaws, then tilts — the real moving-head convention. Every pattern
+    // suddenly draws what it always claimed to.
+    pivot.rotation.order = 'YXZ';
     pivot.position.set(Math.cos(a) * 2.6, H - 0.25, Math.sin(a) * 2.6);   // t95: relative to the truss
     const cone = new THREE.Mesh(new THREE.ConeGeometry(0.95, 6.2, 14, 1, true), beamMat(col));
     cone.position.y = -3.1;   // t86 FIX: NO π-flip — apex AT the fixture (narrow at the ceiling),
@@ -129,6 +157,50 @@ export function buildDance(theme) {
     truss.add(pivot);
     rig.push({ pivot, spot, cone, phase: i * 1.7, z: 1 });
   });
+  // t115: FLOOR-IMPACT SPOTS — a luminous pool where each beam lands,
+  // tracked from the live pan/tilt (additive, cheap, music-pulsed).
+  // t116: THE POOL TAKES THE BEAM'S SHAPE (owner: "should match the shape of
+  // the light. The light is a cone so it shows in a circle") — a unit CIRCLE
+  // scaled per frame: minor axis = the cone's actual spread at the floor
+  // (axial distance × tan(half-angle) × lens zoom), major axis = that
+  // stretched by 1/cos(tilt) ALONG the beam's direction. Steep beam → circle;
+  // tilted beam → ellipse. Soft radial falloff so it reads as light on the
+  // floor, never a decal.
+  const impacts = [];
+  const poolTex = (() => {
+    const cv2 = document.createElement('canvas'); cv2.width = cv2.height = 128;
+    const g2 = cv2.getContext('2d');
+    const grd = g2.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.55, 'rgba(255,255,255,0.5)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g2.fillStyle = grd; g2.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(cv2);
+  })();
+  for (let i = 0; i < 4; i++) {
+    const im = new THREE.Mesh(
+      new THREE.CircleGeometry(1, 28),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, map: poolTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    im.geometry.rotateX(-Math.PI / 2);
+    im.position.set(xc, 0.06, floorZ);
+    im.visible = false;
+    group.add(im);
+    impacts.push(im);
+  }
+  const CONE_TAN = 0.95 / 6.2;                  // the beam cone's half-angle tangent (radius / length)
+  const spotScales = [[1, 1], [1, 1], [1, 1], [1, 1]];   // t116: [semi-major, semi-minor] telemetry
+  const beamHits = [[0, 0], [0, 0], [0, 0], [0, 0]];
+  const beamAz = [0, 0, 0, 0], beamEl = [0, 0, 0, 0];
+  const _awp = new THREE.Vector3();
+  // t115: pan/tilt TARGETS that converge on a world floor point — invert the
+  // beam math (YXZ: dir = (−sin p·sin t, −cos t, −cos p·sin t))
+  function aimTyTx(r, x, z) {
+    r.pivot.getWorldPosition(_awp);
+    const vx = x - _awp.x, vz = z - _awp.z, vy = 0.05 - _awp.y;
+    const t = Math.atan2(Math.hypot(vx, vz), -vy);
+    return [Math.atan2(vx, vz) + Math.PI - truss.rotation.y, Math.min(1.45, t)];
+  }
   // wall washes
   const washes = [];
   for (const sx of [-1, 1]) {
@@ -188,11 +260,12 @@ export function buildDance(theme) {
 
   // ── DJ BOOTH — at the back: counter, TWO turntables, mixer, laptop ──
   const booth = new THREE.Group();
+  const faderMats = [];                             // t119: collected so applyTheme can retint
   const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.94, 0.9),       // t59: lowered — DJ tables sit ~0.94
     new THREE.MeshStandardMaterial({ color: '#1b1d2b', roughness: 0.4, metalness: 0.35 }));
   counter.position.y = 0.47; booth.add(counter);
-  const topGlow = new THREE.Mesh(new THREE.BoxGeometry(3.24, 0.05, 0.94),
-    new THREE.MeshStandardMaterial({ color: theme.accent, emissive: theme.accent, emissiveIntensity: 0.55 }));
+  const topGlowMat = new THREE.MeshStandardMaterial({ color: theme.accent, emissive: theme.accent, emissiveIntensity: 0.55 });   // t119: themed (collected)
+  const topGlow = new THREE.Mesh(new THREE.BoxGeometry(3.24, 0.05, 0.94), topGlowMat);
   topGlow.position.y = 0.965; booth.add(topGlow);
   // turntables
   const DECKX = [-1.25, 1.25];                        // t59: wider — mixer moves BESIDE the laptop
@@ -215,8 +288,9 @@ export function buildDance(theme) {
     const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.045, 10),
       new THREE.MeshStandardMaterial({ color: '#e8ecf6', roughness: 0.3, metalness: 0.4 }));
     knob.position.set(kx - 0.62, 1.045, 0.06); booth.add(knob);
-    const fader = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.16),
-      new THREE.MeshStandardMaterial({ color: theme.accent, emissive: theme.accent, emissiveIntensity: 0.7 }));
+    const faderMat = new THREE.MeshStandardMaterial({ color: theme.accent, emissive: theme.accent, emissiveIntensity: 0.7 });   // t119: themed (collected)
+    faderMats.push(faderMat);
+    const fader = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.16), faderMat);
     fader.position.set(kx - 0.62, 1.045, 0.17); booth.add(fader);
   }
   // THE LAPTOP — screen is the click target for the DJ menu
@@ -228,12 +302,16 @@ export function buildDance(theme) {
   const screenTexCv = document.createElement('canvas');
   screenTexCv.width = 256; screenTexCv.height = 160;
   const sg = screenTexCv.getContext('2d');
-  sg.fillStyle = '#0a0c18'; sg.fillRect(0, 0, 256, 160);
-  sg.fillStyle = theme.accent; sg.font = 'italic 900 30px system-ui';
-  sg.textAlign = 'center'; sg.fillText('🎧 DJ', 128, 70);
-  sg.fillStyle = 'rgba(255,255,255,.7)'; sg.font = '500 16px system-ui';
-  sg.fillText('click to mix', 128, 104);
+  const drawLaptopScreen = (accent) => {            // t119: redrawable — the screen follows the theme
+    sg.fillStyle = '#0a0c18'; sg.fillRect(0, 0, 256, 160);
+    sg.fillStyle = accent; sg.font = 'italic 900 30px system-ui';
+    sg.textAlign = 'center'; sg.fillText('🎧 DJ', 128, 70);
+    sg.fillStyle = 'rgba(255,255,255,.7)'; sg.font = '500 16px system-ui';
+    sg.fillText('click to mix', 128, 104);
+    screenTex.needsUpdate = true;
+  };
   const screenTex = new THREE.CanvasTexture(screenTexCv); screenTex.colorSpace = THREE.SRGBColorSpace;
+  drawLaptopScreen(theme.accent);   // t119: initial paint (screenTex exists now)
   const lscreen = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.29),
     new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
   lscreen.position.set(0, 0.17, -0.149); lscreen.rotation.x = -0.42; laptop.add(lscreen);
@@ -290,10 +368,12 @@ export function buildDance(theme) {
     g.fillText(t, 256, 62);
     const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace; return tx;
   }
+  const plaqueMeshes = [];                         // t119: collected so applyTheme can redraw the plaques
   function setRecords(items) {
     for (const r of records) recGroup.remove(r.mesh);
     records = [];
     recordTargets.length = 0;
+    plaqueMeshes.length = 0;
     const list = (items || []).filter(it => AUDIO_TYPES.includes(it.type)).slice(0, 32);
     // walls of the library: −x (facing +x) · +x (facing −x) · far (facing +z)
     const walls = [
@@ -328,6 +408,7 @@ export function buildDance(theme) {
       const plaque = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.082),
         new THREE.MeshBasicMaterial({ map: plaqueTexture(it.title, theme.accent), toneMapped: false }));
       plaque.position.set(0, -0.34, 0.012); mesh.add(plaque);
+      plaqueMeshes.push({ mesh: plaque, title: it.title });   // t119: theme redraw list
       if (w.axis === 'x') mesh.position.set(w.at, y, along); else mesh.position.set(along, y, w.at);
       mesh.rotation.y = w.ry;
       mesh.userData.item = it;
@@ -340,10 +421,16 @@ export function buildDance(theme) {
   const libSignCv = document.createElement('canvas');
   libSignCv.width = 768; libSignCv.height = 128;
   const lc2 = libSignCv.getContext('2d');
-  lc2.fillStyle = '#160f1e'; lc2.fillRect(0, 0, 768, 128);
-  lc2.fillStyle = theme.accent; lc2.font = 'italic 900 54px system-ui';
-  lc2.textAlign = 'center'; lc2.fillText("DJ'S LIBRARY", 384, 84);
+  let lastSignBg = null;   // t120: the wall-derived sign tone (provable)
+  const drawLibSign = (t) => {                      // t119: redrawable — the sign follows the theme
+    lastSignBg = mixHex(t.wall || '#191228', '#000000', 0.5);   // t120: the sign panel follows the wall (was hardcoded plum)
+    lc2.fillStyle = lastSignBg; lc2.fillRect(0, 0, 768, 128);
+    lc2.fillStyle = t.accent; lc2.font = 'italic 900 54px system-ui';
+    lc2.textAlign = 'center'; lc2.fillText("DJ'S LIBRARY", 384, 84);
+    libSignTex.needsUpdate = true;
+  };
   const libSignTex = new THREE.CanvasTexture(libSignCv); libSignTex.colorSpace = THREE.SRGBColorSpace;
+  drawLibSign(theme);
   const libSign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.42),
     new THREE.MeshBasicMaterial({ map: libSignTex, toneMapped: false }));
   libSign.position.set(bdX, 2.78, Z0 - T + 0.02); group.add(libSign);   // t54: over the library DOOR
@@ -391,14 +478,14 @@ export function buildDance(theme) {
     P = {
       movement: num(mv, P.movement, 0.2, 3),          // t103: wider top end (3×) — full-festival swings
       speed: num(p?.speed, P.speed, 0.3, 3),          // t103: wider top end too
-      pattern: ['auto', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern,
+      pattern: ['auto', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern,   // t115: + the 6 festival programs
       sweep: num(p?.sweep, P.sweep, 0.2, 2.5),        // t109: shape SIZE — circle diameter, arc width, fan reach
       spread: num(p?.spread, P.spread, 0, 1)          // t109: how staggered the four heads are (0 = lockstep, 1 = full ripple)
     };   // t103: ballSpin removed (owner) — saved prefs with it are simply ignored
     if (P.pattern !== 'auto') pattern = P.pattern | 0;   // t95: a program pick applies IMMEDIATELY — never wait for the next kick
   }
   //    hues rotate with the music, particles fly on the kick, floor shifts color
-  let ph = 0, barBeats = 0, pattern = 0, hue = Math.random();
+  let ph = 0, barBeats = 0, bars = 0, pattern = 0, hue = Math.random(), dropT = 0;   // t115: 32-beat rotation + drop blip
   // t59: ADAPTIVE BEAT — the old fixed 0.42 threshold fired early or late
   // depending on how hot the track was mastered. Now a kick must CLEAR the
   // track's OWN rolling bass average by 30% (plus a floor), with a 0.3 s
@@ -406,6 +493,7 @@ export function buildDance(theme) {
   // each beat advances a target pose and the pivots EASE toward it — loose,
   // liquid sweeps instead of per-frame snapping.
   const bassHist = new Array(40).fill(0); let bh = 0, beats = 0, bpm = 0, lastBeatT = -9, lastInt = 0, clock = 0;
+  const fluxHist = new Array(40).fill(0); let fh = 0, prevBass = 0;   // t114: onset-flux history (the kick must be a RISE)
   const col = new THREE.Color();
   let pose = 0, lastBg = 0;                     // t59: beat-advanced pose target · t95: last beat-grid value (for info)
   function update(dt, levels) {
@@ -422,20 +510,39 @@ export function buildDance(theme) {
     clock += dt;
     ph += dt * (0.3 + lv.energy * 0.85) * P.speed;   // t86: livelier drift — beats still lead, energy rides
 
-    // BEAT + PATTERN bookkeeping — adaptive kick; 8 kicks = a bar
+    // BEAT + PATTERN bookkeeping — t114: ONSET-FLUX KICK. The owner's
+    // correction: the rig loved slow flowy tracks and slept through deep,
+    // lively music — sustained sub-bass kept the rolling average high, so a
+    // kick could never "clear its own average" (bass > bAvg × 1.3 was
+    // unreachable over a loud bass bed). Now the kick must be a RISE: the
+    // bass ONSET (flux) against the track's own flux average, over a
+    // softened level test, with a refractory that adapts to the detected
+    // tempo so fast music can actually hit on its beats. Deeper hits also
+    // travel further (movement never brightness — t93 doctrine holds).
     bassHist[bh] = lv.bass; bh = (bh + 1) % bassHist.length;
     let bAvg = 0; for (let i2 = 0; i2 < bassHist.length; i2++) bAvg += bassHist[i2];
     bAvg /= bassHist.length;
-    const kick = !!(lv.live && lv.bass > 0.08 && lv.bass > bAvg * 1.3 + 0.02 && clock - lastBeatT > 0.3);
+    const flux = Math.max(0, lv.bass - prevBass); prevBass = lv.bass;
+    fluxHist[fh] = flux; fh = (fh + 1) % fluxHist.length;
+    let fAvg = 0; for (let i2 = 0; i2 < fluxHist.length; i2++) fAvg += fluxHist[i2];
+    fAvg /= fluxHist.length;
+    const refractory = lastInt > 0.2 ? Math.max(0.16, Math.min(0.3, lastInt * 0.62)) : 0.3;
+    const kick = !!(lv.live && lv.bass > 0.05 && clock - lastBeatT > refractory
+      && flux > Math.max(0.014, fAvg * 1.35) && lv.bass > bAvg * 1.12 + 0.01);
     if (kick) {
       if (lastBeatT >= 0 && clock - lastBeatT < 2.5) { lastInt = clock - lastBeatT; bpm = Math.round(60 / lastInt); }
       lastBeatT = clock; beats++;
       barBeats++;
-      pose += (1.5 + (barBeats % 2) * 0.8) * P.speed;         // the next pose the rig eases to (t86: bigger jumps)
+      pose += (1.2 + (barBeats % 2) * 0.8 + Math.min(1.3, flux * 5)) * P.speed;   // deeper kick → bigger travel (t114)
       hue = (hue + 0.06 + lv.energy * 0.05) % 1;              // every kick nudges the palette
-      if (barBeats >= 4) { barBeats = 0; pattern = (pattern + 1) % 13; }   // t86: rotate the look; t95→t109: 13 programs now
+      if (barBeats >= 4) { barBeats = 0; if (++bars >= 8) { bars = 0; pattern = (pattern + 1) % 19; } }   // t86 rotate · t109 shapes · t115: 32 beats per look, 19 programs
       if (P.pattern !== 'auto') pattern = P.pattern | 0;      // t86: locked look wins
     }
+    // t115: THE DROP DETECTOR — an energy SPIKE (a kick whose onset clears
+    // the track's own flux average hard, on top of a hot bed) blips the
+    // DROP_EXPLODE program for a moment in auto mode: the festival moment.
+    dropT = Math.max(0, dropT - dt);
+    if (P.pattern === 'auto' && kick && flux > Math.max(0.06, fAvg * 2.2) && (lv.energy > 0.65 || lv.bass > 0.9)) dropT = 2.2;   // t115: a real DROP runs hot — gated high so routine beats never seize the rig
     // t95: THE BEAT GRID + beat envelope. bg = beats + fraction-of-beat, so
     // continuous motion (orbits, tilt swings) LANDS on the kicks instead of
     // drifting free — every song locks its own groove. kp spikes to 1 on each
@@ -443,7 +550,7 @@ export function buildDance(theme) {
     // music-only, per the t93 doctrine).
     const beatFrac = (live && lastInt > 0 && lastBeatT >= 0) ? Math.min(1.15, (clock - lastBeatT) / lastInt) : 0;
     const bg = beats + beatFrac;
-    const kp = live ? Math.exp(-Math.max(0, clock - lastBeatT) * 5) : 0;
+    const kp = live ? Math.exp(-Math.max(0, clock - lastBeatT) * (4.5 + Math.min(4, bpm / 45))) : 0;   // t114: livelier tempo → snappier punch
     lastBg = bg;
 
     // FLOOR: same bass/mid checker pulse, but the COLOR rides the hue
@@ -502,7 +609,9 @@ export function buildDance(theme) {
     const sg = bg * Math.PI / 2;                   // t109: the shape clock — one full figure per bar, beat-locked
     const sw = P.sweep;                            // t109: shape size (diameter / width / reach)
     const wrapA = (v) => Math.atan2(Math.sin(v), Math.cos(v));   // t109: shortest-path pan — no multi-turn unwinds
-    const beamCol = (i) => col.setHSL((hue + i * 0.13) % 1, 1, 0.55);
+    const pat = dropT > 0.02 ? 18 : pattern;                   // t115: the drop blip seizes the rig (auto mode only — it's gated above)
+    const ctrTilt = Math.atan2(2.6, H - 0.25);                 // t115: the tilt that lands a beam on the floor CENTER
+    const beamCol = (i) => (pat === 18 ? col.setHSL(0, 0, 0.92) : col.setHSL((hue + i * 0.13) % 1, 1, 0.55));   // t115: the drop explodes in white
     for (let i = 0; i < rig.length; i++) {
       const r = rig[i];
       if (r.spin) { r.spin.rotation.y += dt * (1 + lv.mid * 8) * Mc; continue; }
@@ -526,14 +635,28 @@ export function buildDance(theme) {
       else if (pattern === 10) { const f = 0.30 + 0.70 * (0.5 - 0.5 * Math.cos(bg * Math.PI / 2)); ty = r.phase + ((i / 3) - 0.5) * 1.5 * sw * Mc * f; tx = 0.36 + Math.abs(i - 1.5) / 1.5 * 0.34 * Mc * f; punch *= 1 + kp * 0.8; }   // FAN — peacock open across the bar, close on the one (outer heads dip lower)
       else if (pattern === 11) { ty = r.phase + sg; tx = 0.42 + 0.30 * sw * Mc * Math.cos(sg + i * Math.PI / 2 * P.spread); punch *= 1 + kp * 0.6; }   // SNAKE — the circle ripples around the truss (spread 0 = lockstep, 1 = full ripple)
       else if (pattern === 12) { const sep = 0.12 + kp * 1.1 * sw; ty = r.phase * 0.15 + 0.35 * Mc * Math.sin(sg * 0.25) + (i - 1.5) * sep * Mc; tx = 0.40 + 0.10 * Mc * Math.sin(sg * 0.5); punch *= 1 + kp * 1.2; }   // ALL-EYES — converge, searchlight together, BURST on the kick
+      // ── t115: THE FESTIVAL SIX (owner spec) — scissor · vortex · X · wave ·
+      // ground sweep · drop explode. Converging patterns aim THROUGH the
+      // floor (aimTyTx), so beams actually cross where they claim to. ──
+      else if (pat === 13) { ty = r.phase + (i % 2 === 0 ? 1 : -1) * Math.sin(sg) * 0.7 * sw * Mc; tx = ctrTilt + 0.5 * Mc * Math.sin(2 * sg); punch *= 1 + kp * 0.7; }   // SCISSOR CROSS — mirrored pairs slice in through the center, out to the walls (tilt crosses ctrTilt twice a bar)
+      else if (pat === 14) { const th = sg - i * (Math.PI / 2) * (0.3 + 0.7 * P.spread); const R = 1.6 + 1.0 * sw; const aim = aimTyTx(r, xc + Math.cos(th) * R, floorZ + Math.sin(th) * R); ty = aim[0]; tx = aim[1]; punch *= 1 + kp * 0.8; }   // VORTEX CYCLONE — all four chase an orbiting floor point (1 orbit/bar: fast enough to feel, slow enough to TRACK)
+      else if (pat === 15) { const isA = (i === 0 || i === 3); const reach = (isA ? Math.sin(sg) : Math.cos(sg)) * 2.8 * sw; const aim = aimTyTx(r, xc + 0.707 * reach, floorZ + (isA ? 0.707 : -0.707) * reach); ty = aim[0]; tx = aim[1]; punch *= 1 + kp * 0.6; }   // DIAGONAL X — 0+3 and 1+2 slice the two diagonals through the center
+      else if (pat === 16) { tx = 0.62 + 0.30 * Mc * Math.sin(sg + i * Math.PI / 2); ty = r.phase + 0.6 * sw * Mc * Math.cos(sg / 2 + i * Math.PI / 2); punch *= 1 + kp * 0.5; }   // SINE WAVE CHASE — the fluid wave rolling booth → entrance
+      else if (pat === 17) { const zs = Math.sin(sg * 0.5) * 1.3 * sw, xs = Math.sin(sg) * 0.4 * sw; const aim = aimTyTx(r, xc + xs + (i - 1.5) * 0.45, floorZ + zs); ty = aim[0]; tx = aim[1]; punch *= 1 + kp * 0.4; }   // GROUND SWEEP — steep parallel searchlights (ceiling is 4.27 m: the travel is tuned so every head stays under ~0.8 rad — as steep as geometry allows)
+      else if (pat === 18) { const cx = (i === 0 || i === 2) ? -1 : 1, cz = (i === 0 || i === 1) ? -1 : 1; const orb = sg * 3 + i * Math.PI / 2; const aim = aimTyTx(r, xc + cx * 3.2 * sw + Math.cos(orb), floorZ + cz * 3.2 * sw + Math.sin(orb)); ty = aim[0]; tx = Math.min(1.45, aim[1] + 0.15); punch *= 2.4; }   // DROP EXPLODE — snapped wide to the corners, white, 3× sweeps
       else { const h1 = ((beats * 2654435761 + i * 40503) >>> 0) % 1000 / 1000, h2 = ((beats * 97 + i * 13 + 7) >>> 0) % 1000 / 1000; ty = (h1 * 2.6 - 1.3) * Mc; tx = (0.1 + h2 * 0.9) * Mc; punch *= 1 + kp * 1.5; }  // BEAT JUMP — a fresh 3D pose on every kick, bigger scatter + punch (t103)
       // t109: the shape programs get a kick FLARE (the beams push out ON the
       // kick and settle after — movement, not brightness) and shortest-path
       // pan (a circling head never unwinds through turns it doesn't need).
-      if (pattern >= 6) {
+      if (pat >= 6 && pat !== 17) {          // t115: the scanner stays STEEP — no kick-flare tilt for program 17
         tx += kp * 0.30 * Mc;
-        r.pivot.rotation.y = wrapA(r.pivot.rotation.y);
-        ty = wrapA(ty);
+        // t115: canonical AND shortest-path — wrap the current angle (bounded
+        // telemetry, the t109 contract) and ease toward the nearest equivalent
+        // target angle (no long-way-around sweeps). Pure target-side shortest
+        // path alone let the value drift past ±π after corner-aim programs.
+        const cur = wrapA(r.pivot.rotation.y);
+        r.pivot.rotation.y = cur;
+        ty = cur + wrapA(wrapA(ty) - cur);
       }
       // t59: EASE to the target, then CAP the travel speed — real moving-head
       // fixtures SWEEP to their next position; they never snap. t93: with
@@ -553,6 +676,35 @@ export function buildDance(theme) {
       r.cone.material.color.copy(beamCol(i)); r.cone.material.emissive.copy(beamCol(i));
       r.spot.color.copy(beamCol(i));
     }
+    // t115: track the four beam landings — impact pools on the floor, pulsing
+    // with the sub-bass (the spec's floor-impact spots), plus the telemetry
+    // the tests read (azimuth / elevation / hit point from the REAL angles)
+    for (let i = 0; i < 4; i++) {
+      const r = rig[i];
+      const t = Math.max(0.05, r.pivot.rotation.x), pW = r.pivot.rotation.y + truss.rotation.y;
+      const st = Math.sin(t), ct = Math.cos(t);
+      const dx = -Math.sin(pW) * st, dz = -Math.cos(pW) * st;
+      r.pivot.getWorldPosition(_awp);
+      const k = (_awp.y - 0.05) / ct;
+      const hx = _awp.x + dx * k, hz = _awp.z + dz * k;
+      beamHits[i][0] = +hx.toFixed(2); beamHits[i][1] = +hz.toFixed(2);
+      beamAz[i] = +Math.atan2(dx, dz).toFixed(2); beamEl[i] = +t.toFixed(2);
+      const im = impacts[i];
+      im.position.set(hx, 0.06, hz);
+      // t116: the pool IS the cone's footprint — minor = spread at the floor
+      // (k = axial distance to the floor, r.z = the lens zoom), major =
+      // minor / cos(tilt) along the beam direction; grazing beams smear long
+      const minor = Math.min(2.2, k * CONE_TAN * r.z);
+      const elong = Math.min(3.5, 1 / Math.max(0.12, ct));
+      const major = Math.min(4.0, minor * elong);
+      im.scale.set(major, 1, minor);
+      im.rotation.y = Math.atan2(-dz, dx);      // the ellipse points where the beam points
+      spotScales[i][0] = +major.toFixed(2); spotScales[i][1] = +minor.toFixed(2);
+      const strobe = pat === 18 ? ((bg % 0.5) < 0.25 ? 1 : 0.18) : 1;      // the drop strobes its pools
+      im.material.opacity = live ? Math.min(0.85, (0.12 + lv.bass * 0.55 + kp * 0.18) * strobe) / Math.sqrt(elong) : 0;   // spread wider → softer
+      im.material.color.copy(beamCol(i));
+      im.visible = live;
+    }
     washes[0].intensity = 0.5 + lv.bass * 3.6;
     washes[1].intensity = 0.5 + lv.mid * 3.6;
     ambient.intensity = 0.4 + lv.energy * 0.6;
@@ -570,10 +722,39 @@ export function buildDance(theme) {
     libSign.material.color.setScalar(0.72 + lv.mid * 0.55);      // t54: the sign over the DOOR glows with the mids
   }
 
+  // t119: THE DANCE HALL RE-THEMES — every surface that carries the theme at
+  // build time also follows a live theme change now: club walls/ceiling/
+  // perimeter floor derive from the theme, the checker tiles, the speaker
+  // rings, sub mouths, booth top glow, mixer faders, the laptop screen, the
+  // DJ'S LIBRARY sign and every record plaque wear the accent. The light
+  // show (beams, LED wall, mirror ball) keeps its own colors — it's the show.
+  function applyTheme(t) {
+    curTheme = { ...t };
+    wallMat.color.set(wallOf(t));
+    darkMat.color.set(ceilOf(t));
+    perimFloorMat.color.set(perimOf(t));
+    lfloor.material.color.set(t.floor || '#131d40');
+    for (const tm of tileMats) { tm.mat.color.set(tileBase(t, tm.even)); tm.mat.emissive.set(t.accent); }
+    ringMat.color.set(t.accent); ringMat.emissive.set(t.accent);
+    for (const m of speakerPulse) { m.material.color.set(t.accent); m.material.emissive.set(t.accent); }
+    topGlowMat.color.set(t.accent); topGlowMat.emissive.set(t.accent);
+    for (const fm of faderMats) { fm.color.set(t.accent); fm.emissive.set(t.accent); }
+    drawLaptopScreen(t.accent);
+    drawLibSign(t);
+    for (const p of plaqueMeshes) {
+      p.mesh.material.map?.dispose();
+      p.mesh.material.map = plaqueTexture(p.title, t.accent);
+      p.mesh.material.needsUpdate = true;
+    }
+  }
+
   function info() {
     return {
       lights: { ...P },                     // t86: the adjustable light engine
       ball: { facets: true, glints: SHELL_N + FLOOR_N, pinSpot: true },
+      theme: { wall: '#' + wallMat.color.getHexString(), floor: '#' + perimFloorMat.color.getHexString(),
+        accent: '#' + topGlowMat.color.getHexString(), tiles: tileMats.length ? { even: '#' + tileMats[0].mat.color.getHexString(), emissive: '#' + tileMats[0].mat.emissive.getHexString() } : null,
+        plaques: plaqueMeshes.length, signBg: lastSignBg },   // t119/t120: provable — the dance hall follows the theme
       rigYaw: rig.filter(r => !r.spin).map(r => +r.pivot.rotation.y.toFixed(3)),
       rigSpot: rig.filter(r => !r.spin).map(r => +r.spot.intensity.toFixed(2)),
       x0: X0, x1: X1, z0: Z0, z1: Z1, onRightSide: X0 > 0,
@@ -585,7 +766,12 @@ export function buildDance(theme) {
       },
       sharedWallOpen: L.dance.door.width, doorCenterZ: Z1 - L.dance.door.width / 2 - 0.35,
       speakers: speakerPts.length, subs: 2, ledBars: ledBars.length + 2,
-      boothX, boothZ, patterns: 13,   // t51 · t54 · t95→t109: booth by the DOOR; 13 programs (6 poses + 7 shapes)
+      boothX, boothZ, patterns: 19,   // t51 · t54 · t95→t109: booth by the DOOR · t115: 13 + the festival six
+      beamAz: [...beamAz], beamEl: [...beamEl],                                   // t115: where the beams actually POINT (the Euler-order proof)
+      beamHits: beamHits.map(h => [...h]), floorSpots: impacts.length,            // t115: floor-impact pools + their landings
+      spotShape: impacts[0]?.geometry?.type === 'CircleGeometry' ? 'circle' : 'square',   // t116: the pool matches the cone
+      spotScales: spotScales.map(s2 => [...s2]),                                         // t116: [semi-major, semi-minor] per head
+      dropBlip: dropT > 0.02,                                                     // t115: the drop detector fired
       boothApron: +(boothZ - 0.55 - Z0).toFixed(2),   // walkable gap behind (m)
       subsAtFront: +(subPositions[0].z - Z0).toFixed(2) > 2.4,   // t58: mouths visible past the counter
       boothSideLane: +(boothX - 1.7 - X0).toFixed(2), // walkable left lane (m)
@@ -617,15 +803,42 @@ export function buildDance(theme) {
       sg.fillText(d?.bpm ? Math.round(d.bpm * d.rate) + '' : '—', 190, y);
       sg.textAlign = 'left';
     };
-    deck(20, 'A', '#00f0ff', snap?.a); deck(38, 'B', '#ff2a85', snap?.b);
-    // 3-band VU (FFT → screen)
-    const bars = [['B', snap?.lv?.bass, '#ff2a85'], ['M', snap?.lv?.mid, '#00ff66'], ['T', snap?.lv?.treble, '#00f0ff']];
-    bars.forEach(([lab, v, col], k) => {
-      const y = 52 + k * 14;
-      sg.fillStyle = '#8fa0d8'; sg.font = '600 9px system-ui'; sg.fillText(lab, 8, y + 8);
-      sg.fillStyle = '#12141f'; sg.fillRect(20, y, 216, 9);
-      sg.fillStyle = col; sg.fillRect(20, y, Math.min(216, (v || 0) * 216), 9);
-    });
+    deck(20, 'A', mixHex(curTheme.accent || '#00f0ff', '#ffffff', 0.28), snap?.a); deck(38, 'B', curTheme.accent || '#ff2a85', snap?.b);   // t119: deck channels wear the theme accent (A = light tint, B = full)
+    if (snap?.autoDj?.on) {
+      // t111: AUTO-DJ UP-NEXT — with the mix running, the laptop shows the
+      // queue (how many left + the next three), so you can read the night
+      // from the floor with the menu closed.
+      sg.textAlign = 'left';
+      sg.fillStyle = '#00ff66'; sg.font = '700 11px system-ui';
+      sg.fillText('AUTO-DJ · ' + (snap.autoDj.remaining ?? 0) + ' LEFT' + (snap.autoDj.style ? ' · ' + String(snap.autoDj.style).toUpperCase() : ''), 8, 62);   // t112: the live mix style rides the header
+      sg.font = '500 10px system-ui';
+      (snap.autoDj.next || []).slice(0, 3).forEach((t, k) => {
+        sg.fillStyle = '#dfe6ff';
+        sg.fillText((k + 1) + '. ' + String(t).slice(0, 32), 8, 78 + k * 12);
+      });
+      if ((snap.autoDj.remaining || 0) > 3) { sg.fillStyle = '#8fa0d8'; sg.fillText('+' + (snap.autoDj.remaining - 3) + ' more', 8, 114); }
+      // t114: full 3-band meters while the mix runs (owner: "levels on the
+      // computer when the panel is closed … high mid and low") — LOW/MID/HIGH
+      // columns down the right edge, the same data the idle VU uses
+      const bands = [[snap?.lv?.bass, '#ff2a85'], [snap?.lv?.mid, '#00ff66'], [snap?.lv?.treble, '#00f0ff']];
+      bands.forEach(([v, col2], k) => {
+        const x = 208 + k * 15, top = 58, bot = 128, hh = bot - top;
+        sg.fillStyle = '#12141f'; sg.fillRect(x, top, 11, hh);
+        const f = Math.max(0, Math.min(1, v || 0));
+        sg.fillStyle = col2; sg.fillRect(x, bot - f * hh, 11, f * hh);
+      });
+      sg.fillStyle = '#8fa0d8'; sg.font = '600 8px system-ui'; sg.textAlign = 'center';
+      sg.fillText('LO', 213, 138); sg.fillText('MID', 228, 138); sg.fillText('HI', 243, 138);
+    } else {
+      // 3-band VU (FFT → screen)
+      const bars = [['B', snap?.lv?.bass, '#ff2a85'], ['M', snap?.lv?.mid, '#00ff66'], ['T', snap?.lv?.treble, '#00f0ff']];
+      bars.forEach(([lab, v, col], k) => {
+        const y = 52 + k * 14;
+        sg.fillStyle = '#8fa0d8'; sg.font = '600 9px system-ui'; sg.fillText(lab, 8, y + 8);
+        sg.fillStyle = '#12141f'; sg.fillRect(20, y, 216, 9);
+        sg.fillStyle = col; sg.fillRect(20, y, Math.min(216, (v || 0) * 216), 9);
+      });
+    }
     // badges
     sg.font = '700 11px system-ui'; sg.textAlign = 'center';
     if (snap?.autoDj) { sg.fillStyle = '#00ff66'; sg.fillText('AUTO-DJ', 60, 140); }
@@ -634,5 +847,5 @@ export function buildDance(theme) {
     sg.fillStyle = '#8fa0d8'; sg.font = '500 9px system-ui'; sg.fillText('click to mix', 128, 154);
     screenTex.needsUpdate = true;
   }
-  return { group, occluders, colliders, boothTargets, recordTargets, setRecords, update, info, setPrefs, speakerWorld, paintHud };
+  return { group, occluders, colliders, boothTargets, recordTargets, setRecords, update, info, setPrefs, speakerWorld, paintHud, applyTheme };
 }

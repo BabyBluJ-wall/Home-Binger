@@ -70,7 +70,10 @@ body {
   transition: border-color .15s ease, transform .15s ease;
 }
 #brand-chip:hover { border-color: var(--vb-accent); transform: translateY(-1px); }
-.vb-logo { font-style: italic; font-weight: 900; letter-spacing: 0.5px; color: var(--vb-accent); font-size: 15px; display: block; }
+/* t119: LOGO MATERIAL IS BRAND, NOT THEME — owner: "everything except Logo
+   type material goes with the theme." The wordmarks keep the Home Binger
+   brand pink (same as the favicon + the in-store sign) at all times. */
+.vb-logo { font-style: italic; font-weight: 900; letter-spacing: 0.5px; color: #ff3ea5; font-size: 15px; display: block; }
 .vb-sub { font-size: 10px; color: var(--vb-muted); letter-spacing: 2px; text-transform: uppercase; }
 
 /* ── HUD buttons ── */
@@ -212,7 +215,7 @@ body {
   color: var(--vb-ink); font-size: 13.5px; font-weight: 700; font-family: inherit;
 }
 .radio-card small { display: block; color: var(--vb-muted); font-weight: 500; margin-top: 3px; font-size: 11.5px; }
-.radio-card.active { border-color: var(--vb-accent); background: rgba(255,62,165,.16); }
+.radio-card.active { border-color: var(--vb-accent); background: color-mix(in srgb, var(--vb-accent) 16%, transparent); }   /* t120: was hardcoded pink */
 
 .locked-note {
   background: rgba(255, 120, 120, .1); border: 1px solid rgba(255, 120, 120, .35);
@@ -250,7 +253,7 @@ body {
 .user-row .u-name { flex: 1; font-weight: 700; }
 .badge {
   font-size: 10.5px; font-weight: 800; letter-spacing: .5px; border-radius: 6px; padding: 3px 8px;
-  background: rgba(255,62,165,.18); color: var(--vb-accent);
+  background: color-mix(in srgb, var(--vb-accent) 18%, transparent); color: var(--vb-accent);   /* t120: was hardcoded pink */
 }
 .badge.admin { background: rgba(255, 110, 110, .16); color: #ff9c9c; }
 
@@ -332,12 +335,12 @@ body {
 }
 .loading-inner { text-align: center; padding: 20px; width: min(460px, 92vw); }
 .bb-ticket {
-  border: 3px dashed var(--vb-accent); border-radius: 16px; padding: 26px 20px 30px;
-  transform: rotate(-2deg); background: rgba(255, 210, 63, 0.05); margin-bottom: 30px;
+  border: 3px dashed #ff3ea5; border-radius: 16px; padding: 26px 20px 30px;   /* t119: the ticket is logo material — brand pink, not theme */
+  transform: rotate(-2deg); background: rgba(255, 62, 165, 0.06); margin-bottom: 30px;
 }
 .bb-name {
   font-style: italic; font-weight: 900; font-size: clamp(34px, 8vw, 52px);
-  color: var(--vb-accent); letter-spacing: 1px; text-shadow: 0 6px 0 rgba(0,0,0,.35);
+  color: #ff3ea5; letter-spacing: 1px; text-shadow: 0 6px 0 rgba(0,0,0,.35);   /* t119: brand wordmark */
 }
 .bb-tag { color: var(--vb-ink); font-size: 12.5px; letter-spacing: 3px; margin-top: 8px; }
 .loading-bar {
@@ -362,8 +365,8 @@ body {
 #tv-remote {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 8px; z-index: 30;
-  background: rgba(8, 15, 38, 0.82); border: 1px solid var(--vb-line);
-  border-radius: 12px; padding: 6px 10px; backdrop-filter: blur(4px);
+  background: var(--vb-card); border: 1px solid var(--vb-line);
+  border-radius: 12px; padding: 6px 10px; backdrop-filter: blur(4px);   /* t120: was hardcoded navy */
 }
 #tv-remote.hidden { display: none; }
 #tv-remote input[type="range"] { width: 90px; accent-color: var(--vb-accent, #ffd23f); }
@@ -373,8 +376,8 @@ body {
 #tv-queue {
   position: fixed; bottom: 78px; left: 18px; z-index: 24;
   width: min(300px, 34vw); max-height: 42vh; overflow-y: auto;
-  background: rgba(8, 12, 30, 0.88); border: 1px solid rgba(255, 210, 63, 0.28);
-  border-radius: 12px; padding: 10px 12px; backdrop-filter: blur(6px);
+  background: var(--vb-card); border: 1px solid var(--vb-line);
+  border-radius: 12px; padding: 10px 12px; backdrop-filter: blur(6px);   /* t120: was hardcoded navy + gold */
 }
 #tv-queue.hidden { display: none; }
 .q-row {
@@ -423,7 +426,7 @@ body.tv-fullscreen #vb-fs-video {
   background: linear-gradient(to top, rgba(0,0,0,.66), transparent); }
 #tv-fs-title { font-weight: 800; font-size: 15px; color: #fff;
   text-shadow: 0 1px 6px rgba(0,0,0,.8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tv-fs-close { background: rgba(8,12,30,.85); color: var(--vb-ink, #f4f1ff);
+#tv-fs-close { background: var(--vb-card); color: var(--vb-ink, #f4f1ff);   /* t120: was hardcoded navy */
   border: 1px solid rgba(255,210,63,.35); border-radius: 999px; padding: 8px 16px;
   font-size: 12.5px; cursor: pointer; backdrop-filter: blur(6px); }
 #tv-fs-close:hover { border-color: var(--vb-accent, #ffd23f); }
@@ -474,8 +477,8 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 #shelf-pager {
   position: fixed; bottom: 18px; left: 18px; z-index: 24;
   display: flex; align-items: center; gap: 8px;
-  background: rgba(8, 12, 30, 0.88); border: 1px solid rgba(255, 210, 63, 0.28);
-  border-radius: 999px; padding: 6px 8px 6px 14px; backdrop-filter: blur(6px);
+  background: var(--vb-card); border: 1px solid var(--vb-line);
+  border-radius: 999px; padding: 6px 8px 6px 14px; backdrop-filter: blur(6px);   /* t120: was hardcoded navy + gold */
   font-size: 12.5px; color: var(--vb-ink);
 }
 #shelf-pager.hidden { display: none; }
@@ -484,8 +487,8 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 
 /* ── front desk: sign-in card on the entrance page ── */
 #gate-card { width: 330px; margin: 16px auto 0; text-align: left;
-  background: rgba(10, 14, 34, 0.82); border: 1px solid rgba(255, 210, 63, 0.25);
-  border-radius: 14px; padding: 16px 18px; backdrop-filter: blur(8px); }
+  background: var(--vb-card); border: 1px solid var(--vb-line);
+  border-radius: 14px; padding: 16px 18px; backdrop-filter: blur(8px); }   /* t120: was hardcoded navy + gold */
 #gate-card.hidden { display: none; }
 .gate-title { font-weight: 800; font-size: 12.5px; letter-spacing: 0.09em;
   text-transform: uppercase; color: var(--vb-accent, #ffd23f); margin-bottom: 8px; }   /* t93: follows the theme */
@@ -493,7 +496,7 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 .gate-fields input { width: 100%; box-sizing: border-box; padding: 9px 12px;
   border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(0, 0, 0, 0.35); color: var(--vb-ink); font-size: 14px; }
-.gate-fields input:focus { outline: none; border-color: rgba(255, 210, 63, 0.55); }
+.gate-fields input:focus { outline: none; border-color: color-mix(in srgb, var(--vb-accent, #ffd23f) 55%, transparent); }   /* t120: was hardcoded gold */
 .gate-link { display: block; width: 100%; margin-top: 10px; background: none; border: none;
   color: var(--vb-muted); font-size: 12.5px; text-decoration: underline; cursor: pointer; }
 .gate-link:hover { color: var(--vb-ink); }
@@ -503,8 +506,8 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 /* ── carry chip: the case in your hands ── */
 #carry-chip { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 24;
   display: flex; align-items: center; gap: 8px; max-width: 60vw;
-  background: rgba(8, 12, 30, 0.9); border: 1px solid rgba(255, 210, 63, 0.4);
-  border-radius: 999px; padding: 6px 8px 6px 14px; backdrop-filter: blur(6px);
+  background: var(--vb-card); border: 1px solid var(--vb-line);
+  border-radius: 999px; padding: 6px 8px 6px 14px; backdrop-filter: blur(6px);   /* t120: was hardcoded navy + gold */
   font-size: 13px; color: var(--vb-ink, #f4f1ff); }
 #carry-chip.hidden { display: none; }
 #carry-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

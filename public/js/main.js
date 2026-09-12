@@ -8,11 +8,11 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1789061225548';
-import { api } from './api.js?v=1789061225548';
-import { initUI } from './ui.js?v=1789061225548';
-import { createScene } from './store3d/scene.js?v=1789061225548';
-import { STORE, SUPPORT } from './store3d/config.js?v=1789061225548';
+import { state } from './state.js?v=1789174562813';
+import { api } from './api.js?v=1789174562813';
+import { initUI } from './ui.js?v=1789174562813';
+import { createScene } from './store3d/scene.js?v=1789174562813';
+import { STORE, SUPPORT } from './store3d/config.js?v=1789174562813';
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -42,6 +42,27 @@ function themeVars(t) {
   const light = lum > 0.5;                     // a light wall → dark text, and vice versa
   r.setProperty('--vb-ink', light ? '#171c3f' : '#e8edff');
   r.setProperty('--vb-muted', light ? '#3d4670' : '#93a0c8');
+  // t120: THE PANEL FAMILY FOLLOWS TOO — owner: "go thru all ui and make sure
+  // it all is able to change." --vb-card (every menu/modal/chip surface) and
+  // --vb-line (every border) were still the Neon Night navy/pink from :root,
+  // so panels kept a pink-navy frame no matter the theme. Now the card is the
+  // wall nudged darker (light walls: nudged lighter), the input well
+  // (--vb-panel) sinks further, and the line is the accent at border opacity.
+  if (hx) {
+    const wn = parseInt(hx[1], 16);
+    const ax = /^#?([0-9a-f]{6})$/i.exec(String(acc).trim());
+    const dir = light ? 255 : 0;               // which way panels shade: toward white or black
+    const mixCh = (v, k) => Math.round(v + (dir - v) * k);
+    const wr = wn >> 16 & 255, wg = wn >> 8 & 255, wb = wn & 255;
+    r.setProperty('--vb-card', `rgba(${mixCh(wr, 0.10)}, ${mixCh(wg, 0.10)}, ${mixCh(wb, 0.10)}, 0.94)`);
+    const pk = light ? 0.35 : 0.50;            // input wells: lifted on light walls, sunken on dark
+    const pa = light ? 0.75 : 0.60;
+    r.setProperty('--vb-panel', `rgba(${mixCh(wr, pk)}, ${mixCh(wg, pk)}, ${mixCh(wb, pk)}, ${pa})`);
+    if (ax) {
+      const an = parseInt(ax[1], 16);
+      r.setProperty('--vb-line', `rgba(${an >> 16 & 255}, ${an >> 8 & 255}, ${an & 255}, 0.35)`);
+    }
+  }
 }
 
 

@@ -1,4 +1,237 @@
-## The lights really move now — the movement wave (built for the next release)
+## 2026-09-12 — 1.9.0 (held): t121 — three owner notes (S-key leak, booth hover, podcasts in the jukebox)
+- **"Music goes back a beat pressing s in the dance hall with music
+  playing" — FIXED.** The DJ menu's close button only HID the modal: the
+  pro rig's window-keyboard handler stayed registered with its panel
+  still in the DOM, so after using the booth once, the WASD walk keys
+  fired booth shortcuts in the world — S (walk backward) ran SYNC,
+  yanking the live deck onto the other deck's beat grid. Closing the DJ
+  menu now fully DISMOUNTS the rig: panel DOM removed, keyboard
+  handler removed (unmount also root.remove()s now). Space, A/B, cue
+  digits, L, X, arrows and the crossfader keys all died with it.
+- **"Remove hover overlay for Dj menu" — DONE.** Aiming at the booth
+  laptop no longer pops the "💻 Open the DJ menu" tip (same quiet
+  treatment as the jukebox got in t85). Clicking still opens it.
+- **"Rss podcasts … Wont show up in jukebox as it should be able to be
+  listed with all the music thats available to the user" — FIXED.** The
+  jukebox's "Add music" was a dropdown capped at the FIRST 120 items
+  with no search, so podcast episodes (late in the library) could never
+  be queued from the jukebox — only the booth's search could reach
+  them. The jukebox now has the same picker as the booth (t113): a
+  search box over ALL available music (albums, stations, podcasts,
+  grabber files) with the list scroll-loading past 150 rows; click a
+  row to queue it. Podcasts still don't shelve (CDs are gone) — the
+  jukebox list is their home, per the owner's pick of the two options.
+- Test **t121BoothKeys** (open → close → .djp gone, S/Space/arrows/L/B
+  leave the engine untouched, reopen works, jukebox closes clean,
+  source asserts for the hover removal + close-unmount wiring) and
+  **t121JukeboxMusic** (237-item library: 150-row first chunk, scroll
+  loads all 237, a podcast row is reachable, "Store Cast" search
+  narrows to exactly its episodes, clicking queues on the jukebox).
+  Suite **116/116 ×2**. Also de-flaked: t118's REC-timer read now
+  polls (a stalled RAF painter under swiftshader load froze the text,
+  not the timer), and t121's scroll-append loop dispatches the scroll
+  event explicitly (native delivery can coalesce under load).
+## 2026-09-11 — 1.9.0 (held): t120 — the REST of the UI follows the theme too
+- **Owner: "The pink navy type background doesnt always look best when
+  theme is changed. Go thru all ui and make sure it all is able to
+  change."** The t119 pass covered the booth + both halls, but every
+  2D panel still framed itself in Neon Night navy/pink, and every
+  in-world sign sat on a hardcoded plum/navy backing:
+  - **--vb-card / --vb-line were never re-derived** — every menu,
+    modal, chip, tooltip, toast and HUD button kept the :root navy
+    panel + pink border. themeVars() now derives the card from the
+    wall (dark walls sink 10% toward black, light walls lift 10%
+    toward white), the border from the accent (35% alpha), and a new
+    --vb-panel input-well tone (selects + field inputs never had one —
+    they fell back to navy #141a2e).
+  - **Ten hardcoded surfaces de-branded:** the TV remote, TV queue,
+    shelf pager, front-desk sign-in card, carry chip and the
+    fullscreen-TV close button all wore fixed navy + (some) gold
+    borders; the radio "choice" cards and the profile badges wore
+    fixed pink; two ui.js inline styles hardcoded navy input
+    backgrounds. All now ride the card/line/panel vars.
+  - **Every in-world sign panel derives from the wall:** store aisle
+    lightboxes + their edge frames + the poster frames (signage.js),
+    the theater's doorway signs, the RETURNS chute label AND the
+    deck's VHS·DVD·BLU-RAY label (which also never re-themed its
+    accent after boot — fixed), the hall's hanging signs, and the
+    dance hall's DJ'S LIBRARY sign. All were #160f1e/#0b1c4d-plum or
+    #0b1330/#0e1734-navy; all are now wall·50% black (edges deeper).
+  - **Still brand / still functional (owner-approved):** the logo
+    wordmark stays #ff3ea5 (chip, boot ticket, 3D sign, favicon); the
+    light show, LO/MID/HI meters, Camelot green, REC/CLOSED/status
+    colors, the TV's own content, and neutral furniture/architecture
+    keep their colors.
+  - Test **t120UiAllFollowsTheme**: wild green theme proves the root
+    vars derive exactly (card rgba(25,67,38,.94), panel rgba(14,37,21,
+    .6), line rgba(125,255,90,.35)), all six fixed surfaces wear the
+    card, badges + choice cards wear the accent, the select well
+    follows, all four rooms' sign backgrounds equal wall·50% black
+    (store aisles incl. edges/frames, hall, dance, theater), the logo
+    stays brand pink, and the restore round-trips. Suite 114/114 ×2.
+## 2026-09-11 — 1.9.0 (held): the theme finally goes app-wide — everything but the logo
+- **Change your theme and the WHOLE store changes with it.** Two whole
+  rooms and the biggest panel in the app were missing the party: the
+  **DJ booth panel** was locked to one hardcoded neon palette, the
+  **entry hall** only themed at boot (never on a theme change), and the
+  **dance hall's walls were hardcoded purple-black** no matter what
+  theme you picked. All of it follows the theme now, live:
+  - The booth panel's surfaces derive from your wall color, text from
+    the theme ink, and every control from the accent — deck A wears the
+    accent's light tint, deck B the full accent.
+  - The entry hall, dance hall and DJ booth area recolor on the spot:
+    walls, floors, baseboards, door trim, hanging signs, speaker rings,
+    the booth's glow strip, the mixer faders, the dance-floor checker,
+    the laptop screen, the DJ'S LIBRARY sign and every record plaque.
+  - The store's **light show keeps its own colors** (the beams, LED wall
+    and pools are the show, not the decor), and meters keep their
+    read-out colors (the LO/MID/HIGH trio matches the laptop HUD).
+- **The logo is brand, not theme.** Per the owner: everything except
+  logo-type material follows the theme — so the Home Binger wordmark
+  (the in-store sign, the top-left chip, the boot ticket) now keeps its
+  brand pink no matter the theme. It used to ride the theme accent.
+- Suite: **113/113 ×2 green** (the full booth battery now runs on a
+  smaller ground-truth bench — same detection results, a quarter of the
+  file size).
+
+
+## 2026-09-11 — 1.9.0 (held): the booth gets a full shakedown — five real bugs found and fixed
+- **Every control on the booth is now machine-verified.** A new test
+  battery drives the REAL panel — hot cues ×8, auto-loops 0.5–32 beats,
+  slip, instant doubles, beat jump, SYNC, key lock, the pitch fader with
+  all four ranges, EQ kills, the color knob (filter/dub), nudge, trim,
+  crossfader + curve + channel assign, beat FX with the paddle and
+  brake, mic + auto-ducking, REC, save/load set, beginner↔pro, help —
+  plus a three-transition AUTO-DJ set across actually-different songs
+  (blend → filter → echo). Suite: **112/112 ×2 green.**
+- **SYNC lands exactly on the beat now.** The phase math mixed track
+  positions with wall-clock beat lengths, so at any tempo offset the two
+  songs ended up a tenth of a beat apart — an audible flam on the kick.
+  Sync now compares beat FRACTIONS (correct at any rate); the alignment
+  is exact the instant you press it.
+- **Saved sets remember a synced tempo.** Loading a saved set restored
+  the pitch fader AFTER the rate, and the fader re-derives the rate —
+  so a synced deck snapped back to its fader tempo on every set reload.
+  The rate you hear is now the rate that comes back.
+- **Big genre jumps echo out instead of dragging.** A tempo jump with a
+  key clash used to be treated as a filter bridge — AND synced: a
+  174 BPM track got dragged to 0.70× to match a 128 BPM set. Any gap
+  over 8% now exits with the echo roll and the new song drops at its
+  own tempo.
+- **Silent intros are actually skipped now.** The silence-trim never
+  ran: it read the song length off the audio element before the player
+  had loaded it (NaN), so the trim quietly bailed and the incoming song
+  started from absolute zero. It now falls back to the analyzer's own
+  duration — a track with a 2-second silent intro starts at the music.
+- **BPM detection is tighter.** The background tempo detector rounded
+  every reading to its analysis grid — up to ±2.6% off at some tempos
+  (past beatmatch tolerance). Parabolic peak interpolation (the same
+  trick aubio/librosa use) lands within ±0.8% worst case: measured
+  against five engineered ground-truth tracks (90–174 BPM, known keys),
+  all five keys correct, all five tempos within 0.61%.
+- *Test media note: the bench songs are synthetic, generated with known
+  BPM/key/silence — they live in a git-ignored test folder and never
+  ship in the app or the zips.*
+
+
+## 2026-09-10 — 1.9.0: your own personal DJ — pro transitions, a dependable AUTO-DJ, and the queue on the laptop
+- **AUTO-DJ mixes like a pro now.** Each transition is picked for the
+  pair of songs: matching tempo and key get a long 16-beat blend with
+  the classic **bass swap** — the new song layers in with its bass
+  quietly cut, then the low end swaps over in one move, so two
+  basslines never fight.
+- **AUTO-DJ actually beatmatches now — the real DJ mix.** The tempo of a
+  song is known the moment it loads: Home Binger reads the BPM and key your
+  DAW or DJ tool already wrote into the file's tags (instant), and runs its
+  own background analysis (beat grid, tempo, musical key) on upcoming queue
+  tracks before they're ever needed. Transitions now engage full sync —
+  tempo matched, phase aligned, drift-guarded for the whole blend — plus two
+  new pro touches: the outgoing song sweeps out under a rising filter after
+  the bass swap, and big tempo jumps exit with a one-beat echo roll.
+- **The laptop shows LOW / MID / HIGH meters while the mix runs** (panel
+  closed), not just a bass strip.
+- **The dance-floor lights ride deep bass and lively music.** The beat
+  detector now listens for the kick's RISE (onset) against the track's own
+  flux, instead of requiring a kick to clear its rolling bass average —
+  which sustained sub-bass made impossible (why the rig loved slow flowy
+  tracks and slept through DnB/EDM). Faster tempos hit on their beats
+  (tempo-adaptive refractory), deeper kicks travel further, and the beat
+  punch snaps quicker on lively tracks.
+- **No more tempo ratchet.** AUTO-DJ used to inherit speed: a fast song
+  early in the night pushed every later song faster, and small
+  corrections could pile on top of it — worse the longer it ran. Now
+  each blend's beatmatch corrections are shed the moment the blend
+  ends, and between blends the live deck quietly eases back toward its
+  natural tempo (key lock keeps the pitch — it's speed only). The set
+  rides each song's own groove instead of the fastest thing you queued
+  first.
+- **The queue doesn't repeat anymore.** When AUTO-DJ reaches the end of
+  the queue, the last song plays out naturally and the engine switches
+  itself off — it used to loop the list forever.
+- **The festival lights — six new signature programs, and a real fix
+  underneath.** A subtle geometry bug meant the fixtures' PAN never
+  actually turned the beams — every beam leaned the same direction and
+  only the tilt showed (why the lights felt "off" no matter the song).
+  With pan fixed, the four corner beams now genuinely sweep, cross, and
+  converge: **Scissor Cross** (mirrored pairs slicing through the floor's
+  center), **Vortex Cyclone** (all four chasing an orbiting point in a
+  3D tornado), **Diagonal X** (two pairs slicing the diagonals into an
+  animated X), **Wave Chase** (a fluid wave rolling booth to entrance),
+  **Ground Sweep** (steep parallel searchlights), and **Drop Explode**
+  (beams snap wide to the corners in white with 3× sweeps). On musical
+  drops, the rig seizes a momentary explode — all by itself. The
+  floor-impact pools match the beam's true shape — a circle when the
+  beam is steep, stretching into an ellipse along the beam's direction
+  as it tilts, sized by the cone's actual spread and the lens zoom,
+  with a soft light-like falloff — and Auto-rotate now gives each look
+  a full 32 beats.
+- **The music list loads as you scroll.** The booth's library list used to
+  stop at 250 rows — now it starts with the first batch and keeps loading
+  as you scroll, so you can browse your whole library without remembering
+  a single title. Typing still narrows instantly, and the list stays fast
+  even with thousands of songs.
+- **The AUTO-DJ queue count is live.** Adding songs with the Q buttons
+  while AUTO-DJ is running now shows up immediately in the booth laptop's
+  count — it used to stay stuck at whatever it was when AUTO-DJ started
+  ("1 LEFT" forever, no matter how many you added). Switching AUTO-DJ off
+  and on keeps the night's list, and queued songs survive library
+  refreshes.
+- **Key clashes get a **filter fade** (the
+  incoming track opens up from behind a high-pass while the old one
+  thins away); big tempo jumps get a quick **echo-out**. Transitions
+  fire on the beat grid — 32-beat phrase lines, never mid-bar — the
+  countdown uses the song's last *audible* moment instead of its file
+  length, silent intros get skipped, and a **drift guard** keeps both
+  songs phase-locked for the whole blend (key lock on, pitch steady).
+  Hit stop mid-blend and every knob comes back clean — no deck left
+  with its bass missing or a filter stuck on. The live style shows on
+  the booth laptop: "AUTO-DJ · 3 LEFT · BLEND".
+- **The laptop in the 3D booth shows what's coming.** With AUTO-DJ
+  running, the booth laptop — the one you can see with the menu closed —
+  now displays how many songs are left in the queue and the next three
+  titles, with a slim bass strip so the beat stays readable.
+- **AUTO-DJ no longer stalls.** Three real bugs fixed: the outgoing song
+  now properly stops after each crossfade (it used to keep playing
+  silently, which jammed the next switch), the hand-off no longer waits
+  for tempo detection to finish, and the whole engine now runs on its
+  own timer — so it keeps mixing even when the window is in the
+  background. The crossfade itself is scheduled on the audio clock, so
+  it's sample-smooth and can't be interrupted by a busy page.
+- **No dead air, ever.** If the audible deck stops unexpectedly — a
+  track ends early, playback gets blocked — AUTO-DJ notices within half
+  a second and starts the next song on its own.
+- **Stop means stop.** The full stop button now switches AUTO-DJ off
+  too, instead of letting it resurrect the music.
+- **Booth performance pass:** very large music libraries now render a
+  capped list (smooth instead of thousands of rows), the waveform cache
+  is capped so a long night doesn't grow memory forever, the panel's
+  paint loop idles while the menu is closed, and the meters share one
+  reading per frame.
+- **Also riding in this update:** the official trademark notices
+  (Home Binger™ · The CordCut Co-op™ · TCC™) in the README and the new
+  TRADEMARKS.md.
+
+## 2026-09-10 — 1.8.9: the lights really move now — the movement wave
 - **Each spotlight draws real shapes.** The four heads now sweep
   continuously — pan and tilt working together like real moving-head
   fixtures — instead of gliding to a new pose on each beat. Seven new

@@ -12,10 +12,10 @@
 //  (The big store logo lives in room.js, above the entry door.)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1789061225548';
-import { signTexture, drawPlaceholderCover } from './textures.js?v=1789061225548';
-import { api } from '../api.js?v=1789061225548';
-import { islandSpecs } from './shelves.js?v=1789061225548';
+import { LAYOUT, TUNING } from './config.js?v=1789174562813';
+import { signTexture, drawPlaceholderCover } from './textures.js?v=1789174562813';
+import { api } from '../api.js?v=1789174562813';
+import { islandSpecs } from './shelves.js?v=1789174562813';
 
 export function buildSignage(theme) {
   const group = new THREE.Group();
@@ -23,9 +23,22 @@ export function buildSignage(theme) {
   const W = LAYOUT.room.w / 2, D = LAYOUT.room.l / 2, H = LAYOUT.room.h;
 
   const chainMat = new THREE.MeshStandardMaterial({ color: '#78808f', roughness: 0.4, metalness: 0.8 });
+  // t120: THE SIGN FAMILY FOLLOWS THE THEME — sign backgrounds were hardcoded
+  // navy (#0b1c4d textures, #0b1330 edges, #0e1734 poster frames) no matter
+  // the theme. Every one now derives from the theme wall: a lightbox panel
+  // half-way to black, edges a touch deeper. The accent text was already live.
+  let curTheme = { ...theme };
+  const mixHex = (a, b, k) => {
+    const n = parseInt(a.slice(1), 16), n2 = parseInt(b.slice(1), 16), m = (x, y) => Math.round(x + (y - x) * k);
+    return '#' + ((1 << 24) + (m(n >> 16 & 255, n2 >> 16 & 255) << 16) + (m(n >> 8 & 255, n2 >> 8 & 255) << 8) + m(n & 255, n2 & 255)).toString(16).slice(1);
+  };
+  const signBgOf = (t) => mixHex(t.wall || '#12275e', '#000000', 0.5);      // the lightbox panel tone
+  const edgeOf = (t) => mixHex(t.wall || '#12275e', '#000000', 0.65);       // the slab edge tone
+  let lastSignBg = signBgOf(curTheme);
   // shared dark edge frame for the hanging lightbox signs (never disposed per-sign)
-  const signEdgeMat = new THREE.MeshStandardMaterial({ color: '#0b1330', roughness: 0.5, metalness: 0.35 });
+  const signEdgeMat = new THREE.MeshStandardMaterial({ color: edgeOf(curTheme), roughness: 0.5, metalness: 0.35 });
   let signMeshes = [];
+  let borderMatRef = null;      // t120: the live poster-frame material, so applyTheme can recolor it
 
   // labels: Map(unit → text); faces provide signPos/signRotY per unit
   function rebuild(labels, faces) {
@@ -53,7 +66,7 @@ export function buildSignage(theme) {
       let mesh;
       if (f.kind === 'island') {
         const faceMat = new THREE.MeshBasicMaterial({
-          map: signTexture(text, { accent: theme.accent }), toneMapped: false
+          map: signTexture(text, { accent: curTheme.accent, bg: lastSignBg }), toneMapped: false
         });
         mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.07),
           [signEdgeMat, signEdgeMat, signEdgeMat, signEdgeMat, faceMat, faceMat]);
@@ -61,7 +74,7 @@ export function buildSignage(theme) {
         mesh = new THREE.Mesh(
           new THREE.PlaneGeometry(w, h),
           new THREE.MeshBasicMaterial({
-            map: signTexture(text, { accent: theme.accent }),
+            map: signTexture(text, { accent: curTheme.accent, bg: lastSignBg }),
             side: THREE.DoubleSide, toneMapped: false
           })
         );
@@ -92,17 +105,27 @@ export function buildSignage(theme) {
   }
 
   function applyTheme(t) {
-    // regenerate each sign's texture with the new accent color
+    // t120: regenerate each sign's texture with the new accent AND the new
+    // wall-derived background; recolor the shared edge/frame materials too
+    curTheme = { ...t };
+    lastSignBg = signBgOf(t);
+    signEdgeMat.color.set(edgeOf(t));
+    borderMatRef?.color.set(mixHex(t.wall || '#12275e', '#000000', 0.6));
     for (const m of signMeshes) {
       const text = m.userData.text;
       if (!text) continue;                 // chains have no texture text
       for (const mm of (Array.isArray(m.material) ? m.material : [m.material])) {
         if (!mm.map) continue;             // slab edges have no texture
         mm.map.dispose();
-        mm.map = signTexture(text, { accent: t.accent });
+        mm.map = signTexture(text, { accent: t.accent, bg: lastSignBg });
         mm.needsUpdate = true;
       }
     }
+  }
+  function info() {
+    return { bg: lastSignBg, edge: '#' + signEdgeMat.color.getHexString(),
+      border: borderMatRef ? '#' + borderMatRef.color.getHexString() : null,
+      signs: signMeshes.filter(m => m.userData.text).length };   // t120: provable — signage follows the theme
   }
 
   // ── island end-cap posters — BOTH caps, mirroring each other ──────────────
@@ -132,7 +155,8 @@ export function buildSignage(theme) {
     // fits the low cap panel.
     const PW = Math.min(0.82, LAYOUT.islands.width - 0.16);
     // (PW scales with the island width so the border frame stays on the cap)
-    const borderMat = new THREE.MeshStandardMaterial({ color: '#0e1734', roughness: 0.4, metalness: 0.5 });
+    const borderMat = new THREE.MeshStandardMaterial({ color: mixHex(curTheme.wall || '#12275e', '#000000', 0.6), roughness: 0.4, metalness: 0.5 });
+    borderMatRef = borderMat;   // t120: wall-derived frame, recolorable live
 
     const makeCap = (item, x, z, rotY, outward, sp) => {
       const tall = !sp || sp.height >= 1.3;      // low see-over end units → small poster
@@ -181,7 +205,7 @@ export function buildSignage(theme) {
     });
   }
 
-  return { group, rebuild, applyTheme, rebuildIslandPosters,
+  return { group, rebuild, applyTheme, rebuildIslandPosters, info,
     signBoxes: () => signMeshes.map(m => ({ x: m.position.x, y: m.position.y, z: m.position.z,
       w: m.geometry.parameters?.width || 0, h: m.geometry.parameters?.height || 0, d: m.geometry.parameters?.depth || 0 })) };
 }

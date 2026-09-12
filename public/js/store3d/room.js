@@ -7,8 +7,11 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789061225548';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1789061225548';
+import { LAYOUT } from './config.js?v=1789174562813';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1789174562813';
+
+// t120: sign backgrounds derive from the theme wall (were hardcoded plum #160f1e)
+const signBgOf = (t) => mixHex(t.wall || '#12275e', '#000000', 0.5);
 
 // t102: blend two hex colors (k = share of b) — drives the theme-tinted ceiling
 function mixHex(a, b, k) {
@@ -162,7 +165,12 @@ export function buildRoom(theme) {
   group.add(mat0);
 
   // ── big store logo on the back wall, above the door (seen when you turn around) ──
-  let logoTex = logoTexture(theme.accent);
+  // t119: THE LOGO IS BRAND, NOT THEME — owner: "everything except Logo type
+  // material goes with the theme." The wordmark keeps its brand colors (the
+  // same pink-on-navy as the favicon) no matter what theme the store wears;
+  // applyTheme no longer regenerates it.
+  const LOGO_BRAND = { accent: '#ff3ea5', bg: '#0a0f2e' };
+  const logoTex = logoTexture(LOGO_BRAND.accent, LOGO_BRAND.bg);
   const logo = new THREE.Mesh(
     new THREE.PlaneGeometry(4.6, 4.6 * (384 / 2048)),
     new THREE.MeshBasicMaterial({ map: logoTex, toneMapped: false })
@@ -201,10 +209,7 @@ export function buildRoom(theme) {
     accentPanelMat.emissive.set(t.accent);
     accentLight.color.set(t.accent);
     runner.material.color.set(t.accent);
-    logoTex?.dispose();
-    logoTex = logoTexture(t.accent);
-    logo.material.map = logoTex;
-    logo.material.needsUpdate = true;
+    // t119: the LOGO stays brand — deliberately NOT regenerated here
     // t102: the ceiling follows the theme too (a light tint of the wall —
     // was a hardcoded pale blue that ignored every theme)
     mats.ceiling.map?.dispose();
@@ -257,7 +262,7 @@ export function buildRoom(theme) {
   group.add(subCab);
   const speakerWorld = { sats: SATS.map(({ x, y, z }) => ({ x, y, z })), subs: [SUB], center: { ...LISTENER } };
 
-  return { group, applyTheme, portalMeshes, speakerWorld };
+  return { group, applyTheme, portalMeshes, speakerWorld, logoAccent: () => LOGO_BRAND.accent };   // t119: tests prove the logo stays brand
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -393,6 +398,8 @@ export function buildTheater(theme) {
 
   // ── the player DECK — at the BACK of the room on the flat landing (like
   //    a projection-booth counter). Cases get fed HERE. VHS·DVD·Blu-ray. ──
+  let deskLabelMesh = null;   // t120: tracked so applyTheme refreshes it
+  let lastSignBg = null;      // t120: the wall-derived sign tone (provable)
   const deckTargets = [];
   const deck = new THREE.Group();
   const ped = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.95, 0.5), wood);
@@ -402,10 +409,12 @@ export function buildTheater(theme) {
   const slot = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.05, 0.1),
     new THREE.MeshStandardMaterial({ color: '#08090d', emissive: theme.accent, emissiveIntensity: 0.7 }));
   slot.position.set(0, 1.08, 0.15); deck.add(slot);
-  const labelTex = signTexture('VHS · DVD · BLU-RAY', { accent: theme.accent, bg: '#160f1e', width: 768, height: 128 });
+  const labelTex = signTexture('VHS · DVD · BLU-RAY', { accent: theme.accent, bg: signBgOf(theme), width: 768, height: 128 });
   const label = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.1),
     new THREE.MeshBasicMaterial({ map: labelTex, toneMapped: false }));
   label.position.set(0, 0.80, 0.251); deck.add(label);   // t46: just under the player unit
+  deskLabelMesh = label;   // t120: tracked so applyTheme refreshes it (was frozen at the boot accent)
+  lastSignBg = signBgOf(theme);
   const deckLight = new THREE.PointLight(new THREE.Color(theme.accent), 1.6, 1.8, 2);
   deckLight.position.set(0, 1.5, 0); deck.add(deckLight);
   deck.position.set(0, 0, z0 - 3.7);              // t41: snugged right up against the BACK of the
@@ -487,7 +496,7 @@ export function buildTheater(theme) {
   const chuteMouth = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.07, 0.05),
     new THREE.MeshStandardMaterial({ color: '#000', emissive: theme.accent, emissiveIntensity: 0.4 }));
   chuteMouth.position.set(0, 0.47, 0.375); deck.add(chuteMouth);
-  const chuteLabelTex = signTexture('📥 RETURNS', { accent: theme.accent, bg: '#160f1e', width: 512, height: 128 });
+  const chuteLabelTex = signTexture('📥 RETURNS', { accent: theme.accent, bg: signBgOf(theme), width: 512, height: 128 });
   const chuteLabel = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.13),
     new THREE.MeshBasicMaterial({ map: chuteLabelTex, toneMapped: false }));
   chuteLabel.position.set(0, 0.58, 0.252); deck.add(chuteLabel);   // t46: just above the return slot
@@ -534,7 +543,7 @@ export function buildTheater(theme) {
   // doorway signs on both faces of the shared wall (theme-refreshed)
   const signMeshes = [];
   for (const side of [1, -1]) {
-    const tex = signTexture(side === 1 ? '🎬 THEATER' : '↩ THE STORE', { accent: theme.accent, bg: '#160f1e' });
+    const tex = signTexture(side === 1 ? '🎬 THEATER' : '↩ THE STORE', { accent: theme.accent, bg: signBgOf(theme) });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.42),
       new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
     // t90 FIX: the theater-side sign used to sit at -D-0.03 — INSIDE the wall
@@ -594,14 +603,22 @@ export function buildTheater(theme) {
       for (const sign of signMeshes) {
         const isStore = sign.rotation.y !== 0;
         sign.material.map?.dispose();
-        sign.material.map = signTexture(isStore ? '↩ THE STORE' : '🎬 THEATER', { accent: t.accent, bg: '#160f1e' });
+        sign.material.map = signTexture(isStore ? '↩ THE STORE' : '🎬 THEATER', { accent: t.accent, bg: signBgOf(t) });
         sign.material.needsUpdate = true;
       }
       chuteLabel.material.map?.dispose();
-      chuteLabel.material.map = signTexture('📥 RETURNS', { accent: t.accent, bg: '#160f1e', width: 512, height: 128 });
+      chuteLabel.material.map = signTexture('📥 RETURNS', { accent: t.accent, bg: signBgOf(t), width: 512, height: 128 });
       chuteLabel.material.needsUpdate = true;
       chuteMouth.material.emissive.set(t.accent);
-    }
+      // t120: the deck's VHS·DVD·BLU-RAY label follows too (was stuck at the boot accent)
+      if (deskLabelMesh) {
+        deskLabelMesh.material.map?.dispose();
+        deskLabelMesh.material.map = signTexture('VHS · DVD · BLU-RAY', { accent: t.accent, bg: signBgOf(t), width: 768, height: 128 });
+        deskLabelMesh.material.needsUpdate = true;
+      }
+      lastSignBg = signBgOf(t);
+    },
+    signTheme: () => ({ signBg: lastSignBg })   // t120: provable — the theater signs follow the theme
   };
 }
 

@@ -6,7 +6,7 @@
 //  with the user's theme. Edit any drawing routine to change the store's look.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { STORE } from './config.js?v=1789061225548';   // store branding for the wall sign
+import { STORE } from './config.js?v=1789174562813';   // store branding for the wall sign
 
 function canvas(w, h) {
   const c = document.createElement('canvas');
@@ -167,7 +167,7 @@ export function signTexture(text, opts = {}) {
   const w = opts.width || 1024, h = opts.height || 256;
   const [c, g] = canvas(w, h);
   const accent = opts.accent || '#ffd23f';
-  const bg = opts.bg || '#0b1c4d';
+  const bg = opts.bg || '#0d1016';   // t120: neutral fallback — never default navy; every caller passes a theme/bg color
 
   // ticket background
   g.fillStyle = bg;

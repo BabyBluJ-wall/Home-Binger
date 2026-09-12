@@ -7,7 +7,15 @@
 //  The book room will take the −x side later.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789061225548';
+import { LAYOUT } from './config.js?v=1789174562813';
+// t119: hex mixer (same recipe as room.js) — the hall ceiling derives from the theme wall
+function mixHex(a, b, k) {
+  const pa = /^#?([0-9a-f]{6})$/i.exec(String(a || '')), pb = /^#?([0-9a-f]{6})$/i.exec(String(b || ''));
+  if (!pa || !pb) return a || b;
+  const na = parseInt(pa[1], 16), nb = parseInt(pb[1], 16), m = (x, y) => Math.round(x + (y - x) * (k || 0));
+  const r = m(na >> 16 & 255, nb >> 16 & 255), g = m(na >> 8 & 255, nb >> 8 & 255), bl = m(na & 255, nb & 255);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+}
 
 export function buildHall(theme) {
   const L = LAYOUT, H = L.hall.h;
@@ -154,11 +162,13 @@ export function buildHall(theme) {
   for (const p of streetSlider.panels) streetTargets.push(...p.pg.children.filter(c => c.isMesh));
 
   // ── signage: what's where ──
+  let lastSignBg = null;   // t120: the wall-derived sign tone (provable)
+  const signBgOf = (t) => mixHex(t.wall || '#12275e', '#000000', 0.5);   // t120: signs follow the theme (was hardcoded plum)
   const signTexture = (text, opts = {}) => {
     const cv = document.createElement('canvas');
     cv.width = opts.width || 512; cv.height = opts.height || 128;
     const c2 = cv.getContext('2d');
-    c2.fillStyle = opts.bg || '#160f1e'; c2.fillRect(0, 0, cv.width, cv.height);
+    c2.fillStyle = opts.bg || (lastSignBg = signBgOf(theme)); c2.fillRect(0, 0, cv.width, cv.height);
     c2.fillStyle = opts.accent || theme.accent;
     c2.font = `italic 900 ${cv.height * 0.5}px system-ui, sans-serif`;
     c2.textAlign = 'center'; c2.textBaseline = 'middle';
@@ -169,7 +179,9 @@ export function buildHall(theme) {
   const hang = (text, w, h, x, y, z, ry, opts) => {
     const m4 = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
       new THREE.MeshBasicMaterial({ map: signTexture(text, opts), toneMapped: false }));
-    m4.position.set(x, y, z); m4.rotation.y = ry; group.add(m4); return m4;
+    m4.position.set(x, y, z); m4.rotation.y = ry; group.add(m4);
+    m4.userData.text = text; m4.userData.signOpts = opts || {};   // t119: remembered so applyTheme can redraw
+    return m4;
   };
   const signs = [];
   signs.push(hang('🎬 MOVIES', 1.7, 0.42, 0, L.door.height + 0.5, Z0 + T + 0.02, Math.PI));
@@ -217,8 +229,29 @@ export function buildHall(theme) {
     return { width: W, z0: Z0, z1: Z1, depth: L.hall.d, matchesStoreWidth: Math.abs(W - L.room.w) < 0.001,
       glassOpacity: glassMat.opacity, streetOpeningWidth: L.hall.streetDoor.width,
       streetPanelMeshes: streetSlider.panels.reduce((a, p) => a + p.pg.children.length, 0),   // 12 = clean glass, no overlays
-      danceDoorType: 'swinging', danceDoorPanelSpan: 'z' };   // t50: panels run ALONG the wall (were sideways)
+      danceDoorType: 'swinging', danceDoorPanelSpan: 'z',   // t50: panels run ALONG the wall (were sideways)
+      theme: { wall: '#' + wallMat.color.getHexString(), floor: '#' + floorMat.color.getHexString(),
+        trim: '#' + swingTrim.color.getHexString(), signBg: lastSignBg } };   // t119/t120: provable — the hall follows the theme
   }
 
-  return { group, occluders, streetTargets, update, state, info };
+  // t119: THE HALL FOLLOWS THE THEME — it was built from the theme once at
+  // boot and then never recolored, so every theme change after entering left
+  // the entry hall in the old colors (walls, floor, baseboards, door trim,
+  // hanging signs). Neutral architecture (door frames, metal, glass, ceiling
+  // domes) keeps its own material colors.
+  function applyTheme(t) {
+    wallMat.color.set(t.wall);
+    floorMat.color.set(t.floor);
+    bb.color.set(t.shelf);
+    ceilMat.color.set(mixHex(t.wall || '#12275e', '#000000', 0.35));   // a shade deeper than the walls — lobby mood
+    swingTrim.color.set(t.accent); swingTrim.emissive.set(t.accent);
+    for (const s of signs) {                    // regenerate the hanging sign textures
+      if (s.userData.signOpts?.accent) continue;   // 🔒 CLOSED keeps its warning red
+      s.material.map?.dispose();
+      s.material.map = signTexture(s.userData.text, { accent: t.accent, bg: lastSignBg = signBgOf(t) });
+      s.material.needsUpdate = true;
+    }
+  }
+
+  return { group, occluders, streetTargets, update, state, info, applyTheme };
 }

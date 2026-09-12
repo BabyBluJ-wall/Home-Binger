@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1789061225548';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1789061225548';
-import { buildHall } from './hall.js?v=1789061225548';
-import { buildDance } from './dance.js?v=1789061225548';
-import { buildExterior } from './exterior.js?v=1789061225548';   // the world outside the door
-import { buildSignage } from './signage.js?v=1789061225548';
-import { createDjPro } from './djpro.js?v=1789061225548';
-import { buildTV } from './tv.js?v=1789061225548';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1789061225548';
-import { PosterAtlases } from './atlas.js?v=1789061225548';
-import { createControls } from './controls.js?v=1789061225548';
-import { createJukeAudio } from './jukeaudio.js?v=1789061225548';
+import { LAYOUT, TUNING } from './config.js?v=1789174562813';
+import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1789174562813';
+import { buildHall } from './hall.js?v=1789174562813';
+import { buildDance } from './dance.js?v=1789174562813';
+import { buildExterior } from './exterior.js?v=1789174562813';   // the world outside the door
+import { buildSignage } from './signage.js?v=1789174562813';
+import { createDjPro } from './djpro.js?v=1789174562813';
+import { buildTV } from './tv.js?v=1789174562813';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1789174562813';
+import { PosterAtlases } from './atlas.js?v=1789174562813';
+import { createControls } from './controls.js?v=1789174562813';
+import { createJukeAudio } from './jukeaudio.js?v=1789174562813';
 
 export function createScene(container, theme) {
   // ── renderer ──
@@ -278,7 +278,7 @@ export function createScene(container, theme) {
         ? (carried ? { ...DECK_TIP, title: `🎬 Insert “${carried.title.slice(0, 34)}”` } : DECK_TIP)
         : sp === 'bin'
           ? (carried ? { ...BIN_TIP, title: `📥 Return “${carried.title.slice(0, 34)}”` } : BIN_TIP)
-          : sp === 'djbooth' ? { title: '💻 Open the DJ menu', sub: 'playlists · EQ · fades' }
+          : sp === 'djbooth' ? null   // t121: the booth is quiet on hover too — overlay removed (owner request; same treatment as the jukebox, t85). Click still opens it.
           : sp === 'record' ? { title: `💿 Spin “${(lastRecord?.title || 'that record').slice(0, 30)}”`, sub: 'plays on the jukebox' }
           : sp === 'streetdoor' ? { title: '🧟 Zombie warning, Stay and party', sub: 'the party is inside' }   // t52 — the street door only
           : null;   // t85: the jukebox is quiet on purpose — hover overlay removed (owner request)
@@ -319,10 +319,10 @@ export function createScene(container, theme) {
     jukebox.update?.(dt);
     jukeAudio.update(camera);
     djPro.update(camera);   // t64: pro rig — wing gate, listener, loops, BPM
-    if ((hudTick = (hudTick + 1) & 1) === 0) {         // t108: booth laptop = live monitor (~30fps)
+    if ((hudTick = (hudTick + 1) % 3) === 0) {         // t108: booth laptop = live monitor · t111: ~20fps is plenty (text + VU), and the queue rides along
       try { const inf = djPro.info();
         dance.paintHud?.({ a: inf.decks?.[0], b: inf.decks?.[1], lv: proLv,
-          autoDj: !!inf.autoDj?.on, rec: !!inf.rec?.on, mic: !!inf.mic?.on });
+          autoDj: inf.autoDj, rec: !!inf.rec?.on, mic: !!inf.mic?.on });
       } catch {}
     }
     pickHover(performance.now());
@@ -523,6 +523,8 @@ export function createScene(container, theme) {
       jukebox.applyTheme(t);
       signage.applyTheme(t);
       shelf?.applyTheme(t);
+      hall.applyTheme?.(t);            // t119: the entry hall re-themes (was build-time only)
+      dance.applyTheme?.(t);           // t119: the dance hall + DJ booth area re-theme (walls were hardcoded)
       highlight.material.color.set(t.accent);
       fogColor.copy(new THREE.Color(t.wall).multiplyScalar(0.55));
       scene.background = fogColor.clone();
@@ -532,6 +534,9 @@ export function createScene(container, theme) {
     facadeFlush: () => Math.abs(exterior.position.z - LAYOUT.hall.d) < 0.01,   // t49: facade on the building
     hallInfo: () => hall.info(),
     danceInfo: () => dance.info(),
+    signInfo: () => signage.info?.(),                     // t120: aisle signage follows the theme — provable
+    theaterSignBg: () => theater.signTheme?.().signBg || null,   // t120: theater signs follow the theme — provable
+    logoBrandAccent: () => room.logoAccent?.() || null,   // t119: the logo is brand, not theme — provable
     djPro,   // t64: the booth pro rig (mount/getLevels/info)
     debugStep: (dx, dz) => controls.debugStep(dx, dz),   // t48: walk one REAL step (collision path)
     resetToSpawn() { controls.reset(); controls.syncCamera(); },   // t52: anti-stuck — back to the load-in point

@@ -21,7 +21,7 @@ fs.mkdirSync(STAGE, { recursive: true });
 
 for (const dir of ['server', 'public', 'desktop', 'tools'])
   fs.cpSync(path.join(ROOT, dir), path.join(STAGE, dir), { recursive: true, filter: (f) => !f.includes(`${path.sep}node_modules`) });
-for (const f of ['README.md', 'LICENSE', 'CHANGELOG.md', 'START-HERE.txt', 'START-WITH-NODE.bat'])
+for (const f of ['README.md', 'LICENSE', 'CHANGELOG.md', 'START-HERE.txt', 'START-WITH-NODE.bat', 'TRADEMARKS.md'])   // t110: TRADEMARKS rides along (the README links to it)
   fs.cpSync(path.join(ROOT, f), path.join(STAGE, f));
 // t93: the README's preview screenshots (docs/*.png) ride in the exe too —
 // without them the image links in the bundled README are dead.
