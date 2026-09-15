@@ -7,7 +7,7 @@
 //  The book room will take the −x side later.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789174562813';
+import { LAYOUT } from './config.js?v=1789342462621';
 // t119: hex mixer (same recipe as room.js) — the hall ceiling derives from the theme wall
 function mixHex(a, b, k) {
   const pa = /^#?([0-9a-f]{6})$/i.exec(String(a || '')), pb = /^#?([0-9a-f]{6})$/i.exec(String(b || ''));
@@ -189,11 +189,20 @@ export function buildHall(theme) {
   signs.push(hang('🔒 CLOSED', 1.5, 0.4, 0, L.hall.streetDoor.height + 0.35, Z1 + T - 0.02, 0, { accent: '#ff6a6a' }));
 
   // ── update: proximity slide (store); street stays SHUT; dance doors SWING ──
+  let dLatch = 0, dWasNear = false;   // t134: swing-direction latch — see below
   function update(dt, playerPos) {
     // swinging dance doors — open away from you from EITHER side, spring shut
+    // t134 FIX: DIRECTION LATCH — the swing direction used to flip the moment
+    // you crossed the wall plane (x = wallX). Walking through slowly, both
+    // panels reversed mid-crossing and swept back through you; only running
+    // beat the reversal. The direction is latched on ENTERING the band and
+    // held until you leave it — the doors open away from wherever you came
+    // from, stay open while you're in the doorway, then spring shut.
     const dNear = playerPos && Math.abs(playerPos.z - dzC) < dwD / 2 + 1.0
       && Math.abs(playerPos.x - wallX) < 1.45;
-    const dDir = playerPos && playerPos.x < wallX ? 1 : -1;
+    if (dNear && !dWasNear) dLatch = playerPos.x < wallX ? 1 : -1;
+    dWasNear = !!dNear;
+    const dDir = dLatch;
     for (const d of dPanels) {
       const target = dNear ? dDir * d.side * 1.15 : 0;
       d.angle += (target - d.angle) * Math.min(1, dt * 9);
@@ -222,7 +231,8 @@ export function buildHall(theme) {
       storeDoor: storeSlider.slide > 0.55 ? 'open' : 'closed',
       streetDoor: 'locked',
       danceDoor: Math.abs(dPanels[0].angle) > 0.35 ? 'open' : 'closed',
-      danceDoorAngle: +dPanels[0].angle.toFixed(2)
+      danceDoorAngle: +dPanels[0].angle.toFixed(2),
+      danceDoorAngles: dPanels.map(d => +d.angle.toFixed(2))   // t134: both panels — the swing-latch proof
     };
   }
   function info() {

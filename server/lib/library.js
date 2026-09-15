@@ -13,6 +13,7 @@ import { archiveAdapter } from './adapters/archive.js';
 import { podcastsAdapter } from './adapters/podcasts.js';
 import { radioAdapter } from './adapters/radio.js';
 import { localAdapter } from './adapters/local.js';
+import { iptvAdapter } from './adapters/iptv.js';      // t123: live TV wing
 import { friendAdapter } from './friends.js';            // t97: HB↔HB
 
 export const ADAPTERS = {
@@ -20,6 +21,7 @@ export const ADAPTERS = {
   // free add-on sources — they stack ON TOP of the primary media server
   archive: archiveAdapter, podcast: podcastsAdapter, radio: radioAdapter,
   local: localAdapter,           // t61: the file grabber — local disk, no server
+  iptv: iptvAdapter,             // t123: the live TV wing (Guide-only, never shelved)
 };
 
 // Add-ons are merged into the catalogue when the admin has picked sections /
@@ -29,6 +31,7 @@ const ADDONS = [
   { cfgKey: 'archive', adapter: archiveAdapter, wants: cfg => Array.isArray(cfg?.sections) && cfg.sections.length > 0 },
   { cfgKey: 'podcasts', adapter: podcastsAdapter, wants: cfg => Array.isArray(cfg?.feeds) && cfg.feeds.length > 0 },
   { cfgKey: 'radio', adapter: radioAdapter, wants: cfg => Array.isArray(cfg?.sections) && cfg.sections.length > 0 },
+  { cfgKey: 'iptv', adapter: iptvAdapter, wants: cfg => Array.isArray(cfg?.sections) && cfg.sections.length > 0 },   // t123
   { cfgKey: 'local', adapter: localAdapter,
     wants: cfg => !!(cfg?.on && (Array.isArray(cfg?.spots) ? cfg.spots.length > 0 : !!cfg?.path)) },   // t68: spots OR legacy path — fresh installs have no legacy field
 ];
@@ -40,7 +43,7 @@ function addonSignature(cfg) {
     instances: (cfg.instances || []).map(i => [i.id, i.kind, i.on !== false, i.url || '', i.token || i.apiKey || '', i.sections || []]),   // t87
     stores: (cfg.friendStores || []).map(s => [s.id, s.on !== false, s.url || '', s.token || '']),   // t97: friend stores bust the cache
     addons: ADDONS.map(a => [a.cfgKey, cfg[a.cfgKey]?.sections || [], cfg[a.cfgKey]?.feeds || [],
-      !!cfg[a.cfgKey]?.on, cfg[a.cfgKey]?.path || ''])    // t51: local on/path busts the cache
+      !!cfg[a.cfgKey]?.on, cfg[a.cfgKey]?.path || '', cfg[a.cfgKey]?.unverified === true])   // t51: local on/path busts the cache · t123: iptv unverified too
   });
 }
 
@@ -53,6 +56,7 @@ export function defaultView(cfg) {
     archive: cfg.archive || { sections: [] }, radio: cfg.radio || { sections: [] },
     podcasts: cfg.podcasts || { feeds: [] },
     local: cfg.local || { on: false, path: '' },     // t61: file grabber root
+    iptv: cfg.iptv || { sections: [], unverified: false },    // t123: live TV wing
     // t87: extra Plex/Jellyfin connections — on + credentialed only
     instances: (cfg.instances || []).filter(i => i.on !== false && i.url && (i.token || i.apiKey)),
     stores: (cfg.friendStores || []).filter(s => s.on !== false && /^https?:\/\//.test(s.url || '') && !!s.token),   // t97
@@ -71,6 +75,7 @@ export function userView(cfg, userSources) {
     archive: { ...d.archive, sections: u.archive ?? d.archive.sections },
     radio: { ...d.radio, sections: u.radio ?? d.radio.sections },
     podcasts: d.podcasts, local: d.local,           // t61: local files stack for everyone
+    iptv: d.iptv,                                   // t123: live TV — admin's pick applies to everyone
     // t87: each extra instance honors the user's own toggle (default: on)
     instances: d.instances.filter(i => (typeof u[i.id] === 'boolean' ? u[i.id] : true)),
     // t97: each friend's store honors the user's own toggle (default: on)
@@ -90,7 +95,13 @@ let cache = new Map();   // sig → { at, items } — one slot per distinct medi
 export function sourceConfig(source) {
   const cfg = getConfig();
   if (typeof source !== 'string') return null;
-  if (ADAPTERS[source] && cfg[source]) return { adapter: ADAPTERS[source], cfg: cfg[source] };
+  // t122: the podcasts adapter is registered under 'podcast' (that's the
+  // source id every episode item carries), but its CONFIG lives under
+  // 'podcasts' (plural). The mismatch made sourceConfig('podcast') return
+  // null → /api/play/podcast/* and its poster route 404'd — podcast
+  // episodes queued on the jukebox could never actually play.
+  const cfgKey = source === 'podcast' ? 'podcasts' : source;
+  if (ADAPTERS[source] && cfg[cfgKey]) return { adapter: ADAPTERS[source], cfg: cfg[cfgKey] };
   const inst = (cfg.instances || []).find(i => i.id === source);
   if (inst && ADAPTERS[inst.kind]) return { adapter: ADAPTERS[inst.kind], cfg: { ...inst } };
   const store = (cfg.friendStores || []).find(s => s.id === source);   // t97: a friend's store resolves like any source

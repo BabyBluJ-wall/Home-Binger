@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1789174562813';
-import { createCaseView } from './store3d/caseview.js?v=1789174562813';   // the 3D case in the item modal
-import { state } from './state.js?v=1789174562813';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789174562813';
-import { placeholderDataUrl } from './store3d/textures.js?v=1789174562813';
+import { api } from './api.js?v=1789342462621';
+import { createCaseView } from './store3d/caseview.js?v=1789342462621';   // the 3D case in the item modal
+import { state } from './state.js?v=1789342462621';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789342462621';
+import { placeholderDataUrl } from './store3d/textures.js?v=1789342462621';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -102,22 +102,19 @@ export function initUI(ctx) {
     for (const el of document.querySelectorAll('.guest-only')) {
       el.classList.toggle('hidden', !!me && !me.isGuest);
     }
-    const src = state.boot?.source;
-    const chip = $('#sidebar-source');
-    chip.textContent = src?.ok ? `${src.label}${src.name ? ` — ${src.name}` : ''}` : `${src?.label || '?'} — ${src?.error || 'offline'}`;
-    chip.className = 'source-chip ' + (src?.ok ? 'ok' : 'bad');
+    // t130: the bottom chip (source status) is gone — the ™© mark sits there now
   }
 
   // ── settings shell ──
   const TITLES = {
-    look: 'My Theme', shelves: 'My Shelves', media: 'My Media', profile: 'My Profile',
+    look: 'My Theme', shelves: 'My Shelves', profile: 'My Profile',
     admin: 'Admin'
   };
   function openSettings(tab) {
     $('#settings-title').textContent = TITLES[tab] || 'Settings';
     $('#settings-body').innerHTML = '';
     ({
-      look: panelLook, shelves: panelShelves, media: panelMedia, profile: panelProfile,
+      look: panelLook, shelves: panelShelves, profile: panelProfile,
       admin: panelAdmin
     }[tab] || panelLook)($('#settings-body'));
     $('#settings').classList.remove('hidden');
@@ -175,7 +172,7 @@ export function initUI(ctx) {
            ['loop', 'Synthwave loop', 'built-in attraction channel'],
            ['item', 'A favorite title', 'loops quietly on the TV']]
           .map(([id, label, sub]) => `
-          <button class="radio-card ${((state.prefs.tv || {}).idleMode || 'white') === id ? 'active' : ''}" data-idle="${id}">
+          <button class="radio-card ${((state.prefs.tv || {}).idleMode ?? '') === id ? 'active' : ''}" data-idle="${id}">
             ${label}<small>${sub}</small></button>`).join('')}
       </div>
       <div class="field" id="idle-item-wrap" style="margin-top:10px">
@@ -365,7 +362,7 @@ export function initUI(ctx) {
         </div>` : `
         <div class="lib-row juke-map-row" style="cursor:default;opacity:.65">
           <b style="min-width:150px">🎵 Jukebox</b>
-          <small style="margin-left:auto;color:var(--vb-muted)">no music yet — switch on Radio in My Media</small>
+          <small style="margin-left:auto;color:var(--vb-muted)">no music yet — the admin can turn on Radio in Admin → Media</small>
         </div>`)
         + units.map(u => `
         <div class="lib-row" style="cursor:default">
@@ -378,11 +375,19 @@ export function initUI(ctx) {
         </div>`).join('');
       rows.querySelectorAll('[data-unit]').forEach(sel => {
         sel.onchange = () => {
-          if (sel.value) myMap[sel.dataset.unit] = sel.value;
-          else delete myMap[sel.dataset.unit];
-          ctx.previewShelves({ ...myMap });          // live preview behind the panel
-          state.updatePrefs({ shelves: { ...myMap } });   // t88 BUG 2 FIX: commit-on-change —
-          state.shelves = { ...myMap };                   // the preview IS the saved map, always
+          const unit = sel.dataset.unit;
+          if (sel.value) myMap[unit] = sel.value;
+          else delete myMap[unit];
+          // t134 FIX (novice pass): setting a shelf back to "Automatic" now
+          // sends an explicit '' tombstone. The old code sent the map WITHOUT
+          // the key, and the server's {...saved, ...patch} merge re-inherited
+          // the abandoned pin — it resurrected on the next load ("My Shelves
+          // is buggy when selecting individual categories"). Same shape the
+          // reset button has always used, now per-unit too.
+          const patch = { [unit]: sel.value || '' };   // '' rides the wire and clears the pin
+          ctx.previewShelves({ ...myMap });            // live preview behind the panel
+          state.updatePrefs({ shelves: patch });       // t88 BUG 2 FIX: commit-on-change —
+          state.shelves = { ...myMap };                // the preview IS the saved map, always
         };
       });
     }
@@ -393,8 +398,9 @@ export function initUI(ctx) {
         ⚠ ${stale.length} pinned section${stale.length > 1 ? 's' : ''} no longer exist${stale.length > 1 ? '' : 's'} (library renamed or a source changed) — those shelves are showing the automatic mix.
         <button class="btn" id="btn-shelves-clean">Remove missing</button></div>`;
       note.querySelector('#btn-shelves-clean').onclick = () => {
-        for (const [unit] of stale) delete myMap[unit];
-        state.updatePrefs({ shelves: { ...myMap } });
+        const clear = {};                             // t134: tombstones — omitting the keys let the stale pins resurrect
+        for (const [unit] of stale) { delete myMap[unit]; clear[unit] = ''; }
+        state.updatePrefs({ shelves: clear });
         state.shelves = { ...myMap };
         ctx.previewShelves({ ...myMap });
         root.innerHTML = '';    // re-render clean (panelShelves appends, not replaces)
@@ -421,88 +427,6 @@ export function initUI(ctx) {
     alpha: 'A–Z with letter-range signs', rating: 'highest rated first',
     year: 'newest/oldest releases', type: 'movies · TV · music sections'
   }[id]);
-
-  // ═══════════════ MY MEDIA (public — everyone's own source mix) ═══════════════
-  async function panelMedia(root) {
-    let cat;
-    try { cat = await api.sources(); }
-    catch (e) { root.innerHTML = `<div class="locked-note">${esc(e.message)}</div>`; return; }
-    const mine = state.prefs.sources || null;
-    const d = cat.storeDefaults;
-    const eff = mine || {
-      plex: d.sources.plex, jellyfin: d.sources.jellyfin,
-      archive: d.archive, radio: d.radio
-    };
-    eff.archive = mine ? (mine.archive ?? d.archive) : d.archive;
-    eff.radio = mine ? (mine.radio ?? d.radio) : d.radio;
-    root.innerHTML = `
-      <p class="hint" style="margin:0 0 6px">Choose what stocks <b>your</b> shelves — the store's setup is the default; flip anything to make it yours. (Connections are set by an admin in Admin → Server.)</p>
-      ${mine ? '' : '<div class="hint" style="margin:0 0 12px">✨ Currently following the store\'s setup.</div>'}
-      ${cat.available.plex ? `
-      <div class="toggle-row">
-        <div><div class="t-label">🛰️ Plex</div><div class="t-sub">this store's Plex server</div></div>
-        <label class="switch"><input type="checkbox" id="md-plex" ${eff.plex ? 'checked' : ''}><span class="track"></span></label>
-      </div>` : ''}
-      ${cat.available.jellyfin ? `
-      <div class="toggle-row">
-        <div><div class="t-label">🛰️ Jellyfin</div><div class="t-sub">this store's Jellyfin server</div></div>
-        <label class="switch"><input type="checkbox" id="md-jf" ${eff.jellyfin ? 'checked' : ''}><span class="track"></span></label>
-      </div>` : ''}
-      ${(cat.instances || []).filter(i => i.ready).map(i => `
-      <div class="toggle-row">
-        <div><div class="t-label">🛰️ ${esc(i.name)}</div><div class="t-sub">extra ${i.kind === 'plex' ? 'Plex' : 'Jellyfin'} connection</div></div>
-        <label class="switch"><input type="checkbox" id="md-inst-${CSS.escape(i.id)}" ${(mine ? mine[i.id] : i.on) !== false ? 'checked' : ''}><span class="track"></span></label>
-      </div>`).join('')}
-      ${(cat.stores || []).filter(s => s.ready).map(s => `
-      <div class="toggle-row">
-        <div><div class="t-label">🤝 ${esc(s.name)}</div><div class="t-sub">friend's Home Binger</div></div>
-        <label class="switch"><input type="checkbox" id="md-fs-${CSS.escape(s.id)}" ${(mine ? mine[s.id] : s.on) !== false ? 'checked' : ''}><span class="track"></span></label>
-      </div>`).join('')}
-      <div class="section-title" style="margin-top:14px">🎞️ Classics wing</div>
-      <div id="media-archive" class="lib-list">
-        ${cat.archive.map(c => `<label class="lib-row"><input type="checkbox" value="${esc(c.key)}" ${eff.archive.includes(c.key) ? 'checked' : ''}>
-          <b>${esc(c.title)}</b><small>free</small></label>`).join('')}
-      </div>
-      <div class="section-title" style="margin-top:14px">📻 Radio wall</div>
-      <div id="media-radio" class="lib-list">
-        ${cat.radio.map(g => `<label class="lib-row"><input type="checkbox" value="${esc(g.key)}" ${eff.radio.includes(g.key) ? 'checked' : ''}>
-          <b>${esc(g.title)}</b><small>free</small></label>`).join('')}
-      </div>
-      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn" id="media-follow">↺ Follow the store's setup</button>
-        <button class="btn accent" id="media-save">Save my media mix</button>
-      </div>
-      <div class="hint" style="margin-top:10px">Your mix is saved to your profile and restocks <b>your</b> shelves only — everyone else keeps theirs.</div>`;
-    const build = () => {
-      const out = {
-        plex: cat.available.plex ? root.querySelector('#md-plex')?.checked ?? false : null,
-        jellyfin: cat.available.jellyfin ? root.querySelector('#md-jf')?.checked ?? false : null,
-        archive: [...root.querySelectorAll('#media-archive input:checked')].map(c => c.value),
-        radio: [...root.querySelectorAll('#media-radio input:checked')].map(c => c.value)
-      };
-      for (const i of (cat.instances || [])) {          // t87: per-instance toggles
-        const el = root.querySelector(`#md-inst-${CSS.escape(i.id)}`);
-        if (el) out[i.id] = el.checked;
-      }
-      for (const s of (cat.stores || [])) {              // t97: per-friend-store toggles
-        const el = root.querySelector(`#md-fs-${CSS.escape(s.id)}`);
-        if (el) out[s.id] = el.checked;
-      }
-      return out;
-    };
-    root.querySelector('#media-save').onclick = async () => {
-      state.updatePrefs({ sources: build() });
-      toast('Media mix saved — restocking your shelves…');
-      closeSettings();
-      await ctx.reloadLibrary();
-    };
-    root.querySelector('#media-follow').onclick = async () => {
-      state.updatePrefs({ sources: null });
-      toast('Following the store\'s setup again');
-      closeSettings();
-      await ctx.reloadLibrary();
-    };
-  }
 
   // ═══════════════ PROFILE ═══════════════
   // t84: one-tap invite — shows & copies this store's LAN address, so friends
@@ -557,9 +481,8 @@ export function initUI(ctx) {
         </div>
         <div class="section-title" style="margin-top:20px">Start fresh</div>
         <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
-        <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick, dance floor lights and media mix all return to the store defaults — no reinstall needed.</div>
-        <div class="section-title" style="margin-top:20px">Invite a friend</div>
-        <div id="invite-box"><div class="hint">…</div></div>`;
+        <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick and dance floor lights all return to the store defaults — no reinstall needed.</div>
+`;
       root.querySelector('#name-save').onclick = async () => {
         try {
           await api.renameSelf(root.querySelector('#me-name').value.trim());
@@ -583,7 +506,6 @@ export function initUI(ctx) {
         toast('Signed out — back to guest mode (this device)');
         closeSettings();
       };
-      loadInvite(root);
       return;
     }
     root.innerHTML = `
@@ -593,16 +515,13 @@ export function initUI(ctx) {
       Create an account at the <b>front entrance</b> if you'd like them to <b>sync across your devices</b>.</p>
       <div class="section-title">Start fresh</div>
       <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
-      <div class="hint" style="margin:6px 0 18px">Theme, shelves, shelf map, TV pick, dance floor lights and media mix all return to the store defaults — no reinstall needed.</div>
-      <div class="section-title">Invite a friend</div>
-      <div id="invite-box"><div class="hint">…</div></div>
+      <div class="hint" style="margin:6px 0 18px">Theme, shelves, shelf map, TV pick and dance floor lights all return to the store defaults — no reinstall needed.</div>
       <div class="section-title" style="margin-top:18px">Sign in</div>
       <p class="hint" style="margin:0 0 14px">🔑 First time? The store manager account is
       <b>BabyBluJ</b> / <b>BluJNetwork</b> — sign in at the front entrance, then change it in ☰ Menu → Admin → Users.<br>🔑 Accounts live at the <b>front entrance</b> now —
       use <b>🚪 Back to front entrance</b> in the sidebar and sign in (or create an account) right
       at the front desk, then walk straight into your media. Admins get their panels in ☰ Menu
       once they're in.</p>`;
-    loadInvite(root);
   }
 
   // ═══════════════ ADMIN · ALL IN ONE PLACE (t82: server + users + policies under one tab) ═══════════════
@@ -725,7 +644,7 @@ export function initUI(ctx) {
       </div>
 
       <div class="section-title" style="margin-top:8px">More libraries — another Plex or Jellyfin</div>
-      <div class="hint" style="margin:-4px 0 10px">Two servers in the house (or a friend's)? Connect <b>as many as you like</b> — every extra one stacks on the shelves under its own nickname, and each visitor can switch it on or off in My Media.</div>
+      <div class="hint" style="margin:-4px 0 10px">Two servers in the house (or a friend's)? Connect <b>as many as you like</b> — every extra one stacks on the shelves under its own nickname.</div>
       <div id="instance-list"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" id="btn-add-plex">+ Add another Plex</button>
@@ -733,7 +652,7 @@ export function initUI(ctx) {
       </div>
 
       <div class="section-title" style="margin-top:16px">🤝 Friends' stores — their shelves, in your store</div>
-      <div class="hint" style="margin:-4px 0 10px">Add a friend's <b>Home Binger</b> with the address + friend code they give you. Their shared shelves appear as new sections — their media streams through <b>their</b> store, so nobody's logins ever leave home. Everyone can toggle each friend in My Media.</div>
+      <div class="hint" style="margin:-4px 0 10px">Add a friend's <b>Home Binger</b> with the address + friend code they give you. Their shared shelves appear as new sections — their media streams through <b>their</b> store, so nobody's logins ever leave home.</div>
       <div id="friend-store-list"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" id="btn-add-fstore">+ Add a friend's Home Binger</button>
@@ -756,6 +675,17 @@ export function initUI(ctx) {
 
       <div class="section-title" style="margin-top:14px">📻 Radio wall (live stations)</div>
       <div id="radio-libraries" class="lib-list"><div class="hint">Loading genres…</div></div>
+
+      <div class="section-title" style="margin-top:14px">📺 Live TV (the theater's Guide)</div>
+      <div class="hint" style="margin:-4px 0 8px">Free channels from the public <b>iptv-org</b> directory, curated to
+        officially-free sources (Pluto, Tubi, ABC, PBS, public broadcasters…). They play in the theater's
+        <b>GUIDE</b> (press <b>G</b> in the theater) — never on the shelves.</div>
+      <div id="iptv-libraries" class="lib-list"><div class="hint">Loading groups…</div></div>
+      <div class="toggle-row" style="margin-top:8px">
+        <div><div class="t-label">Show every channel (unverified)</div>
+        <div class="t-sub">widens the Guide beyond the curated tier — includes streams nobody has vouched for</div></div>
+        <label class="switch"><input type="checkbox" id="iptv-unverified" ${adminCfg.iptv?.unverified ? 'checked' : ''}><span class="track"></span></label>
+      </div>
 
       <div class="section-title" style="margin-top:14px">🎙️ Podcast rack (RSS)</div>
       <div id="podcast-feeds" class="lib-list"></div>
@@ -894,6 +824,7 @@ export function initUI(ctx) {
     };
     loadStaticLibs('archive', '#archive-libraries', adminCfg.archive?.sections);
     loadStaticLibs('radio', '#radio-libraries', adminCfg.radio?.sections);
+    loadStaticLibs('iptv', '#iptv-libraries', adminCfg.iptv?.sections);   // t123: the Guide's groups
     if (adminCfg.plex.url) loadLibs('plex').catch(() => {});
     if (adminCfg.jellyfin.url) loadLibs('jellyfin').catch(() => {});
     // ── t87: EXTRA INSTANCES — unlimited Plex/Jellyfin connections ──
@@ -1087,6 +1018,16 @@ export function initUI(ctx) {
       shareDrafts.push({ id: '', name: '', token: '', sections: [], on: true, _new: true });
       renderFShare();
     };
+    // t125: a group list that failed to load must NEVER read as "zero groups
+    // picked" (that's exactly how the t124 admin-list bug wiped Live TV's
+    // sections on save) — if the list didn't render its checkboxes, keep the
+    // sections already saved instead of sending an empty list.
+    const keptSections = (sel, saved) => {
+      const box = root.querySelector(sel);
+      return box?.querySelector('input[type="checkbox"]')
+        ? [...box.querySelectorAll('input:checked')].map(c => c.value)
+        : (saved || []);
+    };
     const draft = () => ({
       sources: {
         plex: root.querySelector('#src-plex').checked,
@@ -1096,8 +1037,10 @@ export function initUI(ctx) {
         sections: [...root.querySelectorAll('#plex-libraries input:checked')].map(c => c.value) },
       jellyfin: { url: root.querySelector('#jf-url').value.trim(), apiKey: root.querySelector('#jf-key').value.trim(),
         sections: [...root.querySelectorAll('#jf-libraries input:checked')].map(c => c.value) },
-      archive: { sections: [...root.querySelectorAll('#archive-libraries input:checked')].map(c => c.value) },
-      radio: { sections: [...root.querySelectorAll('#radio-libraries input:checked')].map(c => c.value) },
+      archive: { sections: keptSections('#archive-libraries', adminCfg.archive?.sections) },   // t125: wipe-guarded
+      radio: { sections: keptSections('#radio-libraries', adminCfg.radio?.sections) },         // t125: wipe-guarded
+      iptv: { sections: keptSections('#iptv-libraries', adminCfg.iptv?.sections),              // t125: wipe-guarded
+        unverified: !!(root.querySelector('#iptv-unverified')?.checked) },   // t123: the Guide
       podcasts: { feeds: podcastList },
       local: { on: !!(root.querySelector('#local-on')?.checked),
         spots: [...root.querySelectorAll('.local-path')].map(el => el.value.trim()).filter(Boolean) },   // t62: multi-spot grabber
@@ -1165,10 +1108,15 @@ export function initUI(ctx) {
       if (d.sources.jellyfin && d.jellyfin.sections.length === 0)
         return toast('No Jellyfin libraries are ticked — hit "↻ Load libraries" and tick at least one (or switch Jellyfin off)', true);
       try {
+        const beforeKeys = new Set((state.sections || []).map(s => s.key));
         await api.adminSaveConfig(draft());
         toast('Saved — restocking the shelves…');
         closeSettings();
         await ctx.reloadLibrary();
+        // t123: the owner's link-time flow — every NEW library gets its
+        // "who gets this?" question the moment it's linked. Cancel/All = everyone.
+        const fresh = (state.sections || []).map(s => s.key).filter(k => !beforeKeys.has(k));
+        if (fresh.length) await promptLibraryAccess(fresh).catch(() => {});
       } catch (err) { toast(err.message, true); }
     };
     // live TV guide lives here (uses the tuner connection above)
@@ -1250,6 +1198,135 @@ export function initUI(ctx) {
   }
 
   // ═══════════════ ADMIN · USERS ═══════════════
+  // t123: INVITE A FRIEND — the Tailscale on-ramp card (Users panel).
+  // Generates a one-time .bat the friend runs: installs Tailscale quietly,
+  // joins with the pre-auth key, opens the store. The KEY lives only in the
+  // file — the server records just nickname + dates.
+  async function renderInviteCard(box) {
+    if (!box) return;
+    box.innerHTML = `
+      <div class="section-title" style="margin-top:20px">🎫 Invite a friend (remote access)</div>
+      <div class="hint" style="margin:-4px 0 10px">Friends join over your free <b>Tailscale</b> network — no port
+      forwarding, nothing public. Create a one-time key in the Tailscale admin console
+      (<a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener">Settings → Keys</a> →
+      <b>Generate auth key</b> · reusable OFF · pre-approved ON · expiry ~30 days), paste it here.</div>
+      <div class="row2">
+        <div class="field"><label>Their nickname</label><input type="text" id="inv-name" placeholder="e.g. Dave" maxlength="24"></div>
+        <div class="field"><label>Store address they open</label><input type="text" id="inv-host" placeholder="100.x.y.z:8181 (your Tailscale IP)"></div>
+      </div>
+      <div class="field"><label>Pre-auth key (starts with tskey-)</label>
+        <input type="text" id="inv-key" placeholder="tskey-auth-…" autocomplete="off"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn accent" id="inv-dl">⬇ Download invite (.bat)</button>
+        <button class="btn" id="inv-ip">Find my Tailscale IP</button>
+      </div>
+      <div class="hint" id="inv-out" style="margin-top:8px"></div>
+      <div class="locked-note" style="margin-top:8px">
+        <b>What your friend sees:</b> Windows may show a blue "protected your PC" screen for the invite file —
+        that's normal for unsigned scripts: <b>More info → Run anyway</b>.<br>
+        <b>Lockdown (optional, not yet field-verified):</b> in the Tailscale console under Access Controls you can
+        restrict what friends reach — ask and I'll walk you through the one-line rule before you rely on it.<br>
+        <b>Revoking:</b> disable the key in the Tailscale console (Keys page) — the invite stops working instantly.
+      </div>
+      <div id="inv-list" class="lib-list" style="margin-top:10px"></div>`;
+    const out = box.querySelector('#inv-out');
+    try {
+      const tip = await api.adminTailscaleIp();
+      if (tip.ip) { box.querySelector('#inv-host').value = tip.ip + ':8181'; out.textContent = 'Found your Tailscale IP: ' + tip.ip; }
+    } catch { /* manual entry */ }
+    box.querySelector('#inv-ip').onclick = async () => {
+      out.textContent = 'Looking…';
+      try { const r = await api.adminTailscaleIp(); out.textContent = r.ip ? ('Found: ' + r.ip + ' (filled in above)') : 'Not found — is Tailscale running on this machine? Enter the address by hand.'; if (r.ip) box.querySelector('#inv-host').value = r.ip + ':8181'; }
+      catch (e) { out.textContent = e.message; }
+    };
+    const renderList = async () => {
+      try {
+        const r = await api.adminInvites();
+        box.querySelector('#inv-list').innerHTML = (r.invites || []).length
+          ? r.invites.slice().reverse().map(i => `<label class="lib-row" style="cursor:default">
+              <b>${esc(i.name)}</b><small>invited ${new Date(i.createdAt).toLocaleDateString()} · key expires ~${new Date(i.expiresAt).toLocaleDateString()}</small></label>`).join('')
+          : '<div class="hint" style="margin:0">No invites sent yet.</div>';
+      } catch { /* quiet */ }
+    };
+    renderList();
+    box.querySelector('#inv-dl').onclick = async () => {
+      const name = box.querySelector('#inv-name').value.trim() || 'friend';
+      const key = box.querySelector('#inv-key').value.trim();
+      const host = box.querySelector('#inv-host').value.trim();
+      out.textContent = '';
+      try {
+        const r = await fetch('/api/admin/invite/bat?name=' + encodeURIComponent(name) + '&key=' + encodeURIComponent(key) + '&host=' + encodeURIComponent(host),
+          { credentials: 'include', headers: authHeaders() });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'Invite failed'); }
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'HB-Invite-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.bat';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        out.textContent = 'Invite downloaded — send the file to your friend (email, Discord, USB…).';
+        renderList();
+      } catch (e) { out.textContent = '❌ ' + e.message; }
+    };
+  }
+  function authHeaders() {
+    const t = localStorage.getItem('vb_sess');
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  }
+
+  // t123: "Who gets this library?" — asked AT LINK TIME (owner's flow).
+  // Absent = all accounts (the safe default: linking is never blocked).
+  async function promptLibraryAccess(newKeys) {
+    const { access, users } = await api.adminLibraryAccess();
+    if (!users.length) return;                          // no accounts yet — nothing to split
+    const sections = state.sections || [];
+    for (const key of newKeys) {
+      if (key in access) continue;                      // already answered
+      const name = sections.find(s => s.key === key)?.name || key;
+      await new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.innerHTML = `
+          <div class="modal-card narrow">
+            <h2 style="margin:0 0 6px">Who gets this library?</h2>
+            <p class="hint" style="margin:0 0 14px">You just linked <b>${esc(name)}</b>.</p>
+            <div id="la-pick" style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn accent" data-la="all" style="flex:1">All accounts</button>
+              <button class="btn" data-la="some" style="flex:1">Only certain accounts…</button>
+            </div>
+            <div id="la-users" class="lib-list" style="margin-top:12px;display:none"></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn accent" id="la-save" style="display:none;flex:1">Save</button>
+              <button class="btn" id="la-cancel" style="flex:1">Everyone (default)</button>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const done = () => { overlay.remove(); resolve(); };
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) done(); });
+        const pick = overlay.querySelector('#la-pick'), ubox = overlay.querySelector('#la-users'), save = overlay.querySelector('#la-save');
+        pick.onclick = (e) => {
+          const b = e.target.closest('[data-la]');
+          if (!b) return;
+          if (b.dataset.la === 'all') { api.adminSetLibraryAccess(key, 'all').catch(() => {}); done(); }
+          else {
+            pick.style.display = 'none';
+            ubox.style.display = '';
+            save.style.display = '';
+            ubox.innerHTML = users.map(u => `
+              <label class="lib-row"><input type="checkbox" value="${esc(u.username)}" checked>
+              <b>${esc(u.username)}</b></label>`).join('');
+          }
+        };
+        save.onclick = () => {
+          const chosen = [...ubox.querySelectorAll('input:checked')].map(c => c.value);
+          api.adminSetLibraryAccess(key, { users: chosen }).catch(() => {});
+          done();
+        };
+        overlay.querySelector('#la-cancel').onclick = done;
+      });
+    }
+  }
+
   async function panelUsers(root) {
     const render = async () => {
       const { users } = await api.adminUsers();
@@ -1262,11 +1339,16 @@ export function initUI(ctx) {
             <button class="btn small" data-rename="${u.id}" data-name="${esc(u.username)}">Rename</button>
             <button class="btn small" data-reset="${u.id}" data-name="${esc(u.username)}">Set password</button>
             <button class="btn small" data-admin="${u.id}" data-name="${esc(u.username)}" data-has="${u.isAdmin ? 1 : 0}">${u.isAdmin ? 'Remove admin' : 'Make admin'}</button>
+            ${u.isAdmin ? '' : `<button class="btn small" data-libs="${esc(u.username)}">Libraries</button>`}
             <button class="btn small danger" data-del="${u.id}" data-name="${esc(u.username)}">Delete</button>
           </div>`).join('')}
         <div class="hint" style="margin-top:14px">Accounts are <b>self-serve</b> — visitors create their own at the
         front entrance page (the store owner can allow/block new sign-ups in Admin → Policies).
-        You can still reset a forgotten password or remove an account here.</div>`;
+        You can still reset a forgotten password or remove an account here.</div>
+        <div id="invite-card"></div>
+        <div class="section-title" style="margin-top:18px">On the same Wi-Fi?</div>
+        <div class="hint" style="margin:-4px 0 8px">No invite needed — anyone on the same Wi-Fi opens this address in any browser (phones too). Nothing to install.</div>
+        <div id="invite-box"><div class="hint">…</div></div>`;
       // t81b: INLINE EDITORS — Electron (the desktop exe) does not support
       // window.prompt — it returns null instantly, so prompt-based flows are
       // DEAD in the exe while working in every browser (how it slipped through
@@ -1297,6 +1379,60 @@ export function initUI(ctx) {
         };
         inp.onkeydown = e => { if (e.key === 'Enter') save.click(); if (e.key === 'Escape') done(); };
       };
+      root.querySelectorAll('[data-libs]').forEach(btn => {      // t123: per-user libraries (audit/edit door)
+        btn.onclick = async () => {
+          const uname = btn.dataset.libs;
+          let data;
+          try { data = await api.adminLibraryAccess(); }
+          catch (e) { toast(e.message, true); return; }
+          const sections = state.sections || [];
+          const access = data.access || {};
+          const allowed = (k) => {
+            const v = access[k];
+            return !(v && typeof v === 'object' && Array.isArray(v.users) && !v.users.includes(uname));
+          };
+          const overlay = document.createElement('div');
+          overlay.className = 'modal';
+          overlay.innerHTML = `
+            <div class="modal-card narrow">
+              <h2 style="margin:0 0 6px">${esc(uname)} — libraries</h2>
+              <p class="hint" style="margin:0 0 12px">Untick a library and ${esc(uname)} stops seeing it — shelves, search, and the streams themselves.</p>
+              <div class="lib-list">${sections.map(s => `
+                <label class="lib-row"><input type="checkbox" value="${esc(s.key)}" ${allowed(s.key) ? 'checked' : ''}>
+                <b>${esc(s.name)}</b><small>${esc(s.sourceLabel || '')}</small></label>`).join('') || '<div class="hint">No libraries yet.</div>'}</div>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button class="btn accent" id="ul-save" style="flex:1">Save</button>
+                <button class="btn" id="ul-close" style="flex:1">Close</button>
+              </div>
+            </div>`;
+          document.body.appendChild(overlay);
+          const done = () => overlay.remove();
+          overlay.addEventListener('click', (e) => { if (e.target === overlay) done(); });
+          overlay.querySelector('#ul-close').onclick = done;
+          overlay.querySelector('#ul-save').onclick = async () => {
+            const boxes = [...overlay.querySelectorAll('input[type="checkbox"]')];
+            try {
+              for (const b of boxes) {
+                const k = b.value, nowAllowed = b.checked, was = allowed(k);
+                if (nowAllowed === was) continue;
+                const v = access[k];
+                if (nowAllowed) {                        // re-allow: add them to the list (or clear the list)
+                  const list = (v && Array.isArray(v.users)) ? v.users : [];
+                  if (!list.includes(uname)) list.push(uname);
+                  await api.adminSetLibraryAccess(k, { users: list });
+                } else {                                 // restrict: everyone else keeps it
+                  const others = (v && Array.isArray(v.users)) ? v.users.filter(n => n !== uname) : data.users.map(u => u.username).filter(n => n !== uname);
+                  await api.adminSetLibraryAccess(k, { users: others });
+                }
+              }
+              toast('Library access saved');
+              done();
+            } catch (e) { toast(e.message, true); }
+          };
+        };
+      });
+      renderInviteCard(root.querySelector('#invite-card'));   // t123: the Tailscale on-ramp
+      loadInvite(root);   // t128: the same-Wi-Fi address box — invites live HERE only now
       root.querySelectorAll('[data-rename]').forEach(btn => {   // t81: rename — shelves/prefs ride the user id, so only the name changes
         btn.onclick = () => inlineEdit(btn, { value: btn.dataset.name, okMsg: 'Name changed',
           onSave: v => api.adminRenameUser(btn.dataset.rename, v) });
@@ -1354,12 +1490,24 @@ export function initUI(ctx) {
         <label class="switch"><input type="checkbox" id="allow-reg" ${adminCfg.registration ? 'checked' : ''}><span class="track"></span></label>
       </div>
       <div class="section-title">Store defaults (new visitors &amp; when locked)</div>
+      <div class="field"><label>Default theme — pick a preset</label>
+        <select id="def-preset">
+          <option value="">Custom (the colors below)</option>
+          ${THEME_PRESETS.map(p => `<option value="${esc(p.name)}" ${
+            ['wall', 'floor', 'shelf', 'accent', 'style'].every(k => (adminCfg.defaults.theme[k] || '') === p.theme[k]) ? 'selected' : ''
+          }>${esc(p.name)}</option>`).join('')}
+        </select></div>
       <div class="row2">
         ${['wall', 'floor', 'shelf', 'accent'].map(k => `
           <div class="color-row">
             <input type="color" id="def-${k}" value="${adminCfg.defaults.theme[k]}">
             <span class="color-name">${{ wall: 'Walls', floor: 'Floor', shelf: 'Shelves', accent: 'Accent' }[k]}</span>
           </div>`).join('')}
+      </div>
+      <div class="toggle-row" id="retheme-row">
+        <div><div class="t-label">Re-theme everyone now</div>
+        <div class="t-sub">writes this theme into every visitor's settings (yours too) — nobody has to change anything themselves; they can re-personalize unless theming is locked</div></div>
+        <label class="switch"><input type="checkbox" id="def-retheme" checked><span class="track"></span></label>
       </div>
       <div class="row2">
         <div class="field"><label>Default shelf style</label>
@@ -1370,6 +1518,14 @@ export function initUI(ctx) {
             `<option value="${m.id}" ${adminCfg.defaults.sorting.mode === m.id ? 'selected' : ''}>${m.label}</option>`).join('')}</select></div>
       </div>
       <button class="btn accent" id="policies-save">Save policies</button>`;
+    // t130: picking a preset fills the color pickers + shelf style below (the
+    // pickers stay for fine-tuning — that's how the "Custom" option happens)
+    root.querySelector('#def-preset').onchange = (e) => {
+      const p = THEME_PRESETS.find(x => x.name === e.target.value);
+      if (!p) return;
+      for (const k of ['wall', 'floor', 'shelf', 'accent']) root.querySelector(`#def-${k}`).value = p.theme[k];
+      root.querySelector('#def-style').value = p.theme.style;
+    };
     root.querySelector('#policies-save').onclick = async () => {
       try {
         await api.adminSaveConfig({
@@ -1385,6 +1541,20 @@ export function initUI(ctx) {
             sorting: { mode: root.querySelector('#def-sort').value, dir: adminCfg.defaults.sorting.dir }
           }
         });
+        // t132: a changed default theme + "re-theme everyone" switches every
+        // saved profile (this admin included) — the store visibly changes.
+        const picked = {
+          wall: root.querySelector('#def-wall').value, floor: root.querySelector('#def-floor').value,
+          shelf: root.querySelector('#def-shelf').value, accent: root.querySelector('#def-accent').value,
+          style: root.querySelector('#def-style').value
+        };
+        const changed = ['wall', 'floor', 'shelf', 'accent', 'style'].some(k => picked[k] !== adminCfg.defaults.theme[k]);
+        // t133: fires under the lock too — the lock is a true sync, so a
+        // changed house theme reaches every saved profile either way
+        if (changed && root.querySelector('#def-retheme')?.checked) {
+          const r = await api.adminRetheme(picked);
+          toast(`Store re-themed — ${r.rethemed} profile${r.rethemed === 1 ? '' : 's'} switched`);
+        }
         await state.refresh();
         await ctx.rebuildStore();
         toast('Store policies saved');
@@ -1664,6 +1834,13 @@ export function initUI(ctx) {
   $('#btn-help').onclick = () => { $('#help-overlay').classList.remove('hidden'); document.exitPointerLock?.(); };
   $('#btn-help-close').onclick = () => $('#help-overlay').classList.add('hidden');
   $('#help-overlay').addEventListener('click', (e) => { if (e.target.id === 'help-overlay') $('#help-overlay').classList.add('hidden'); });
+  // t134 (novice pass): Esc closes the help too — every other modal honors it;
+  // a first-time user pressing "the universal close key" got nothing here.
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const ov = $('#help-overlay');
+    if (ov && !ov.classList.contains('hidden')) { ov.classList.add('hidden'); e.preventDefault(); }
+  });
 
   // ═══════════════ SIDEBAR SEARCH ═══════════════
   const searchInput = $('#side-search');
@@ -1778,21 +1955,91 @@ export function initUI(ctx) {
     };
     const REPEAT_UI = { off: '➡️', all: '🔁', one: '🔂' };
     const REPEAT_NAME = { off: 'Repeat off', all: 'Repeat playlist', one: 'Repeat one' };
-    // ONE remote, TWO systems: the buttons bind to whichever room you're
-    // standing in when you press them (jukebox in the store, screen in the theater)
-    const inStore = () => ctx.playerRoom?.() !== 'theater';   // t47: store AND dance hall → jukebox
-    $('#tv-play').onclick = () => inStore() ? ctx.jukeboxToggle?.() : tvApi()?.togglePlay();
-    $('#tv-prev').onclick = () => inStore() ? stepJuke(-1) : tvApi()?.step(-1);
-    $('#tv-next').onclick = () => inStore() ? stepJuke(1) : tvApi()?.step(1);
-    $('#tv-skip-back').onclick = () => inStore() ? ctx.jukeboxSeek?.(-10) : tvApi()?.seekBy(-10);
-    $('#tv-skip-fwd').onclick = () => inStore() ? ctx.jukeboxSeek?.(10) : tvApi()?.seekBy(10);
-    $('#tv-stop').onclick = () => {
-      if (inStore()) { ctx.jukeboxStop?.(); toast('Jukebox stopped.'); return; }
-      tvApi()?.stop();
-      ctx.setVhsLook?.(false);
-      toast('Playback stopped — the projector returns to its idle screen.');
+    // ONE remote, THREE systems (t134): the buttons bind to whichever room
+    // you're standing in when you press them — the jukebox in the store, the
+    // booth rig in the dance hall, the big screen in the theater. (t47 bound
+    // store AND dance to the jukebox; t134 gives the dance hall its own booth
+    // remote after the theater's remote kept haunting the dance floor.)
+    // The "booth" is whichever system is live: the PRO RIG (the laptop's own
+    // decks) when it has vinyl loaded, else the classic booth channel.
+    const proDecks = () => { try { return ctx.boothPro?.()?.decksRef?.() || []; } catch { return []; } };
+    const boothMode = () => proDecks().some(dk => dk.item) ? 'pro' : 'classic';
+    const proPlaying = () => proDecks().some(dk => dk.el && !dk.el.paused);
+    const proToggle = () => {
+      const decks = proDecks();
+      if (!decks.length) return;
+      if (proPlaying()) decks.forEach(dk => { try { dk.el?.pause(); } catch {} });
+      else decks.forEach(dk => { if (dk.el && dk.item) { try { dk.el.play().catch(() => {}); } catch {} } });
     };
-    $('#tv-vol').oninput = (e) => inStore() ? ctx.jukeboxSetVolume?.(e.target.value / 100) : tvApi()?.setVolume(e.target.value / 100);
+    const proSeek = (s) => proDecks().forEach(dk => {
+      if (dk.el && !dk.el.paused && isFinite(dk.el.duration)) {
+        try { dk.el.currentTime = Math.max(0, Math.min(dk.el.duration, dk.el.currentTime + s)); } catch {}
+      }
+    });
+    const roomSystem = () => {
+      const room = ctx.playerRoom?.() || 'store';
+      if (room === 'theater') return 'theater';
+      if (room === 'dance') return 'booth';
+      return 'jukebox';
+    };
+    const deckFor = () => roomSystem() === 'booth' ? ctx.dj?.booth : ctx.dj?.jukebox;
+    $('#tv-play').onclick = () => {
+      const s = roomSystem();
+      if (s === 'theater') tvApi()?.togglePlay();
+      else if (s === 'booth' && boothMode() === 'pro') proToggle();
+      else if (s === 'booth') ctx.boothToggle?.();
+      else ctx.jukeboxToggle?.();
+    };
+    $('#tv-prev').onclick = () => {
+      const s = roomSystem();
+      if (s === 'theater') tvApi()?.step(-1);
+      else if (s === 'booth') {
+        if (boothMode() === 'pro') toast('The booth\u2019s set list lives on the laptop — skip from the pro rig');
+        else deckFor()?.prev();
+      }
+      else stepJuke(-1);
+    };
+    $('#tv-next').onclick = () => {
+      const s = roomSystem();
+      if (s === 'theater') tvApi()?.step(1);
+      else if (s === 'booth') {
+        if (boothMode() === 'pro') toast('The booth\u2019s set list lives on the laptop — skip from the pro rig');
+        else deckFor()?.next();
+      }
+      else stepJuke(1);
+    };
+    $('#tv-skip-back').onclick = () => {
+      const s = roomSystem();
+      if (s === 'theater') tvApi()?.seekBy(-10);
+      else if (s === 'booth' && boothMode() === 'pro') proSeek(-10);
+      else if (s === 'booth') ctx.boothSeek?.(-10);
+      else ctx.jukeboxSeek?.(-10);
+    };
+    $('#tv-skip-fwd').onclick = () => {
+      const s = roomSystem();
+      if (s === 'theater') tvApi()?.seekBy(10);
+      else if (s === 'booth' && boothMode() === 'pro') proSeek(10);
+      else if (s === 'booth') ctx.boothSeek?.(10);
+      else ctx.jukeboxSeek?.(10);
+    };
+    $('#tv-stop').onclick = () => {
+      const s = roomSystem();
+      if (s === 'theater') {
+        tvApi()?.stop();
+        ctx.setVhsLook?.(false);
+        toast('Playback stopped — the projector returns to its idle screen.');
+        return;
+      }
+      if (s === 'booth') { ctx.boothPro?.()?.stopAll?.(); ctx.boothStop?.(); toast('Booth stopped.'); return; }
+      ctx.jukeboxStop?.(); toast('Jukebox stopped.');
+    };
+    $('#tv-vol').oninput = (e) => {
+      const s = roomSystem();
+      if (s === 'theater') tvApi()?.setVolume(e.target.value / 100);
+      else if (s === 'booth' && boothMode() === 'pro') ctx.boothPro?.()?.setMaster?.(e.target.value / 100);
+      else if (s === 'booth') ctx.boothSetVolume?.(e.target.value / 100);
+      else ctx.jukeboxSetVolume?.(e.target.value / 100);
+    };
     // ⛶ true full-screen — the raw video at native resolution (movies only)
     const fsBtn = $('#btn-tv-full');
     if (fsBtn) fsBtn.onclick = () => {
@@ -1800,19 +2047,20 @@ export function initUI(ctx) {
       if (tv.fullscreenActive?.()) { tv.exitFullscreen(); return; }
       if (!tv.enterFullscreen()) toast('Play a movie or video first — full screen is for video', true);
     };
-    // repeat — a perk for SIGNED-IN users (guests just get straight-through play)
+    // t130: repeat is the DECKS' button now — the owner called it: repeat
+    // isn't needed for TV or movies (the playlist feature covers those). It
+    // shows wherever a deck is playing (jukebox in the store, booth in the
+    // dance hall) and cycles THAT deck; hidden in the theater.
     const repeatBtn = $('#tv-repeat');
-    const me = state.me();
-    if (repeatBtn && me && !me.isGuest) repeatBtn.style.display = '';
     if (repeatBtn) {
       repeatBtn.onclick = () => {
-        const tv = tvApi(); if (!tv) return;
-        const order = ['off', 'all', 'one'];
-        const next = order[(order.indexOf(tv.getRepeatMode()) + 1) % order.length];
-        tv.setRepeatMode(next);
+        const deck = deckFor(); if (!deck) return;
+        const cur = deck.repeat || 'off';
+        const next = cur === 'off' ? 'one' : cur === 'one' ? 'all' : 'off';
+        deck.repeat = next;
         repeatBtn.textContent = REPEAT_UI[next];
         repeatBtn.title = REPEAT_NAME[next];
-        toast(REPEAT_NAME[next]);
+        toast(`${deck === ctx.dj?.booth ? 'Booth' : 'Jukebox'}: ${REPEAT_NAME[next].toLowerCase()}`);
       };
     }
     const queueEl = $('#tv-queue');
@@ -1839,7 +2087,35 @@ export function initUI(ctx) {
       if (q.length > end) rows.push(`<div class="q-title">+${q.length - end} more</div>`);
       queueEl.innerHTML = rows.join('');
     };
+    // t134: the dance hall's remote shows the BOOTH's set list (same card,
+    // booth queue instead of the TV's)
+    const renderBoothQueue = () => {
+      if (!queueEl) return;
+      const deck = ctx.dj?.booth;
+      const q = deck?.state?.();
+      const show = !!(q && q.queue.length > 1 && (ctx.boothStats?.() || {}).playing);
+      queueEl.classList.toggle('hidden', !show);
+      if (!show) { queueEl.innerHTML = ''; return; }
+      const rows = [];
+      const cur = q.idx;
+      const start = Math.max(0, cur - 1);
+      const end = Math.min(q.queue.length, start + 5);
+      if (start > 0) rows.push(`<div class="q-title">ON DECK · ${q.queue.length} tracks</div>`);
+      for (let i = start; i < end; i++) {
+        const item = q.queue[i];
+        if (!item) continue;
+        rows.push(`<div class="q-row ${i === cur ? 'current' : ''}" data-bqidx="${i}">
+          <span>${i === cur ? '▶' : i === cur + 1 ? '⏭' : '·'}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.title)}</span>
+          <small>${esc(item.type || '')}</small>
+        </div>`);
+      }
+      if (q.queue.length > end) rows.push(`<div class="q-title">+${q.queue.length - end} more</div>`);
+      queueEl.innerHTML = rows.join('');
+    };
     queueEl?.addEventListener('click', (e) => {
+      const bq = e.target.closest('[data-bqidx]');
+      if (bq) { ctx.dj?.booth?.playAt(+bq.dataset.bqidx); return; }   // t134: booth rows
       const row = e.target.closest('[data-qidx]');
       if (!row) return;
       tvApi()?.playAt(+row.dataset.qidx);
@@ -1848,18 +2124,52 @@ export function initUI(ctx) {
       const tv = tvApi();
       if (!tv) return;
       updateShelfPager();                 // works while browsing, playing or not
-      // ── room-aware remote: jukebox in the store, screen in the theater ──
-      const room = ctx.playerRoom?.() || 'theater';
+      // ── room-aware remote (t134): jukebox in the store, the booth rig in
+      //    the dance hall, the screen in the theater. The dance hall used to
+      //    fall through to the THEATER branch, so the movie's remote haunted
+      //    the dance floor whenever the projector ran.
+      const room = ctx.playerRoom?.() || 'store';
+      const sys = room === 'theater' ? 'theater' : room === 'dance' ? 'booth' : 'jukebox';
       remote.dataset.room = room;
       const roomTag = $('#remote-room');
-      if (roomTag) roomTag.textContent = room === 'store' ? '🎵 JUKEBOX' : '🎬 THEATER';
+      if (roomTag) roomTag.textContent = sys === 'theater' ? '🎬 THEATER' : sys === 'booth' ? '🎧 BOOTH' : '🎵 JUKEBOX';
+      // t130: the Guide button is THEATER-only; repeat belongs to the decks.
+      // (Runs before the show/hide early-return so the bar never shows a
+      // button that belongs to the other room.)
+      const gBtn = $('#tv-guide');
+      if (gBtn) gBtn.style.display = sys === 'theater' ? '' : 'none';
+      if (repeatBtn) {
+        if (sys === 'theater' || (sys === 'booth' && boothMode() === 'pro')) repeatBtn.style.display = 'none';
+        else {
+          repeatBtn.style.display = '';
+          const r = (sys === 'booth' ? ctx.dj?.booth : ctx.dj?.jukebox)?.repeat || 'off';
+          repeatBtn.textContent = REPEAT_UI[r];
+          repeatBtn.title = REPEAT_NAME[r];
+        }
+      }
       let st, show;
-      if (room === 'store') {
-        st = ctx.jukeboxStats?.() || {};
-        show = !!st.playing;
-      } else {
+      if (sys === 'theater') {
         st = tv.stats();
         show = st.playing && st.kind !== 'card';
+      } else if (sys === 'booth' && boothMode() === 'pro') {
+        const decks = proDecks();
+        const live = decks.find(dk => dk.el && !dk.el.paused) || decks.find(dk => dk.el && dk.item) || {};
+        const el = live.el;
+        st = {
+          playing: proPlaying(),
+          paused: !proPlaying(),
+          time: el && isFinite(el.currentTime) ? el.currentTime : 0,
+          duration: el && isFinite(el.duration) ? el.duration : 0,
+          volume: ctx.boothPro?.()?.masterValue?.() ?? 0.8,
+          title: live.item?.title || null
+        };
+        show = !!st.playing;
+      } else if (sys === 'booth') {
+        st = ctx.boothStats?.() || {};
+        show = !!st.playing;
+      } else {
+        st = ctx.jukeboxStats?.() || {};
+        show = !!st.playing;
       }
       remote.classList.toggle('hidden', !show);
       if (!show) { queueEl?.classList.add('hidden'); return; }
@@ -1868,19 +2178,15 @@ export function initUI(ctx) {
         ? `${fmt(st.time)} / ${fmt(st.duration)}` : fmt(st.time);
       const vol = Math.round((st.volume ?? 0.85) * 100);
       if (document.activeElement !== $('#tv-vol')) $('#tv-vol').value = vol;
-      if (room === 'store') {
-        queueEl?.classList.add('hidden');
-        const fsB = $('#btn-tv-full'); if (fsB) fsB.style.display = 'none';
-      } else {
+      if (sys === 'theater') {
         const fsB = $('#btn-tv-full'); if (fsB) fsB.style.display = '';
-        const mode = tv.getRepeatMode();
-        if (repeatBtn) {
-          repeatBtn.textContent = REPEAT_UI[mode];
-          repeatBtn.title = REPEAT_NAME[mode];
-        }
         const fsOn = !!tv.fullscreenActive?.();
         if (fsB) { fsB.textContent = fsOn ? '🗗' : '⛶'; fsB.classList.toggle('active', fsOn); }
         renderQueue(tv, st);
+      } else {
+        queueEl?.classList.add('hidden');
+        const fsB = $('#btn-tv-full'); if (fsB) fsB.style.display = 'none';
+        if (sys === 'booth') renderBoothQueue();
       }
     }, 500);
   }

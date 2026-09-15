@@ -1,0 +1,4 @@
+hls.js v1.7.3 — https://github.com/video-dev/hls.js
+License: Apache License 2.0 — https://github.com/video-dev/hls.js/blob/master/LICENSE
+Vendored verbatim from the official dist build (no modifications).
+Used for: live TV (HLS streams) in the theater Guide and Simple Mode.

@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1789174562813';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1789174562813';
-import { buildHall } from './hall.js?v=1789174562813';
-import { buildDance } from './dance.js?v=1789174562813';
-import { buildExterior } from './exterior.js?v=1789174562813';   // the world outside the door
-import { buildSignage } from './signage.js?v=1789174562813';
-import { createDjPro } from './djpro.js?v=1789174562813';
-import { buildTV } from './tv.js?v=1789174562813';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1789174562813';
-import { PosterAtlases } from './atlas.js?v=1789174562813';
-import { createControls } from './controls.js?v=1789174562813';
-import { createJukeAudio } from './jukeaudio.js?v=1789174562813';
+import { LAYOUT, TUNING } from './config.js?v=1789342462621';
+import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1789342462621';
+import { buildHall } from './hall.js?v=1789342462621';
+import { buildDance } from './dance.js?v=1789342462621';
+import { buildExterior } from './exterior.js?v=1789342462621';   // the world outside the door
+import { buildSignage } from './signage.js?v=1789342462621';
+import { createDjPro } from './djpro.js?v=1789342462621';
+import { buildTV } from './tv.js?v=1789342462621';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1789342462621';
+import { PosterAtlases } from './atlas.js?v=1789342462621';
+import { createControls } from './controls.js?v=1789342462621';
+import { createJukeAudio } from './jukeaudio.js?v=1789342462621';
 
 export function createScene(container, theme) {
   // ── renderer ──
@@ -423,7 +423,10 @@ export function createScene(container, theme) {
       // they stay in the catalogue for the future readers, but only playable
       // media stands on the shelves.
       const PLAYABLE = new Set(['movie', 'show', 'album', 'musicvideo', 'episode', 'radio', 'live']);
-      const items = itemsRaw.filter(i => PLAYABLE.has(i.type));
+      // t123: guideOnly items (the live TV wing) NEVER stand on the shelves —
+      // the owner's design: free TV lives in the theater's Guide menu only.
+      // (Plex-tuner channels keep their shelf cases — only iptv carries the flag.)
+      const items = itemsRaw.filter(i => PLAYABLE.has(i.type) && !i.guideOnly);
       currentItems = items;
       dance.setRecords(items);           // t47: the DJ's library restocks its vinyl
       if (shelves) currentShelves = shelves;
@@ -537,6 +540,13 @@ export function createScene(container, theme) {
     signInfo: () => signage.info?.(),                     // t120: aisle signage follows the theme — provable
     theaterSignBg: () => theater.signTheme?.().signBg || null,   // t120: theater signs follow the theme — provable
     logoBrandAccent: () => room.logoAccent?.() || null,   // t119: the logo is brand, not theme — provable
+    stuckAudit: () => ({   // t134: provable — every accent that used to freeze at the boot theme
+      subMouth: room.themeAudit?.().subMouth || null,
+      satRing: room.themeAudit?.().satRing || null,
+      seatPiping: theater.themeAudit?.().seatPiping || null,
+      cones: theater.themeAudit?.().cones || null,
+      slot: theater.themeAudit?.().slot || null
+    }),
     djPro,   // t64: the booth pro rig (mount/getLevels/info)
     debugStep: (dx, dz) => controls.debugStep(dx, dz),   // t48: walk one REAL step (collision path)
     resetToSpawn() { controls.reset(); controls.syncCamera(); },   // t52: anti-stuck — back to the load-in point
@@ -560,7 +570,8 @@ export function createScene(container, theme) {
     },
     // theater telemetry (tests + the curious)
     theaterState: () => ({ doors: theater.doorsState(), lights: theater.lightState(),
-      seats: theater.seatsInfo(), screen: theater.screenInfo() }),
+      seats: theater.seatsInfo(), screen: theater.screenInfo(),
+      doorsAngles: theater.doorsAngles?.() || null }),   // t134: the swing-latch proof
     lockMouse: () => controls.lock(),
     unlockMouse: () => controls.unlock(),
     jukeboxAudio: jukeAudio,

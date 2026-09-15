@@ -7,8 +7,8 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789174562813';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1789174562813';
+import { LAYOUT } from './config.js?v=1789342462621';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1789342462621';
 
 // t120: sign backgrounds derive from the theme wall (were hardcoded plum #160f1e)
 const signBgOf = (t) => mixHex(t.wall || '#12275e', '#000000', 0.5);
@@ -218,6 +218,9 @@ export function buildRoom(theme) {
     // t102: the speakers' accent rings follow the theme (they were frozen
     // at whatever theme was live when the store was built)
     for (const rm of satRingMats) { rm.color.set(t.accent); rm.emissive.set(t.accent); rm.emissiveIntensity = 0.5; }
+    // t134 FIX: the bass cabinet's glowing mouth (right beside the jukebox)
+    // was frozen at the boot accent — the "speaker stuck on a color" report.
+    if (subMouthMat) subMouthMat.emissive.set(t.accent);
   }
 
   // ── t55: the STORE'S 7.1 — real cabinets on the walls, all aimed at the
@@ -254,6 +257,7 @@ export function buildRoom(theme) {
   const shell = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, SUB_D), new THREE.MeshStandardMaterial({ color: '#101218', roughness: 0.7 })); subCab.add(shell);
   const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.06, 20),
     new THREE.MeshStandardMaterial({ color: '#05060a', emissive: theme.accent, emissiveIntensity: 0.3 }));
+  const subMouthMat = mouth.material;   // t134: tracked so applyTheme can retint it (was frozen at the boot accent)
   mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0.1, SUB_D / 2 + 0.02); subCab.add(mouth);
   subCab.rotation.order = 'YXZ';
   subCab.position.set(SUB.x, SUB.y, SUB.z);
@@ -262,7 +266,12 @@ export function buildRoom(theme) {
   group.add(subCab);
   const speakerWorld = { sats: SATS.map(({ x, y, z }) => ({ x, y, z })), subs: [SUB], center: { ...LISTENER } };
 
-  return { group, applyTheme, portalMeshes, speakerWorld, logoAccent: () => LOGO_BRAND.accent };   // t119: tests prove the logo stays brand
+  return { group, applyTheme, portalMeshes, speakerWorld, logoAccent: () => LOGO_BRAND.accent,   // t119: tests prove the logo stays brand
+    themeAudit: () => ({   // t134: provable — the once-stuck accents, live
+      subMouth: subMouthMat ? '#' + subMouthMat.emissive.getHexString() : null,
+      satRing: satRingMats.length ? '#' + satRingMats[0].color.getHexString() : null
+    })
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -539,6 +548,7 @@ export function buildTheater(theme) {
     doorPanels.push({ hinge, side, angle: 0 });
   }
   function doorsState() { return Math.abs(doorPanels[0].angle) > 0.35 ? 'open' : 'closed'; }
+  const doorsAngles = () => doorPanels.map(d => +d.angle.toFixed(2));   // t134: both panels — the swing-latch proof
 
   // doorway signs on both faces of the shared wall (theme-refreshed)
   const signMeshes = [];
@@ -561,17 +571,25 @@ export function buildTheater(theme) {
   };
   let mode = 'bright', target = LEVELS.bright;
   const cur = { ...LEVELS.bright };
+  let doorLatch = 0, doorWasNear = false;   // t134: swing-direction latch (see update)
   const state = {
     setPlaying(p) { mode = p ? 'dim' : 'bright'; target = LEVELS[mode]; },
     update(dt, playerPos) {
       // swinging doors: open when the player is in the doorway band, spring shut
+      // t134 FIX: DIRECTION LATCH — the swing direction used to flip the
+      // instant you crossed the door plane, so a slow walk had both panels
+      // reverse THROUGH you mid-crossing (running simply beat the reversal).
+      // The direction is now latched when you ENTER the band and held until
+      // you leave it — walk through at any speed and the doors stay open
+      // away from you, then spring shut behind you.
+      const near = !!(playerPos && Math.abs(playerPos.x) < dw / 2 + 0.6
+        && playerPos.z > cz - 0.9 && playerPos.z < cz + 0.9);
+      if (near && !doorWasNear) doorLatch = playerPos.z > cz ? -1 : 1;
+      doorWasNear = near;
       for (const d of doorPanels) {
-        const near = playerPos && Math.abs(playerPos.x) < dw / 2 + 0.6
-          && playerPos.z > cz - 0.9 && playerPos.z < cz + 0.9;
         // double-acting: push INTO the theater when coming from the store,
         // INTO the store when leaving — never locked to one direction
-        const dir = playerPos && playerPos.z > cz ? -1 : 1;
-        const target = near ? dir * d.side * 1.15 : 0;
+        const target = near ? doorLatch * d.side * 1.15 : 0;
         // direct exponential approach — stable at ANY frame rate (the render
         // loop clamps dt, so a spring would oscillate on slow machines)
         d.angle += (target - d.angle) * Math.min(1, dt * 9);
@@ -588,7 +606,8 @@ export function buildTheater(theme) {
     lightState: () => mode,
     seatsInfo,
     screenInfo: () => ({ w: th.screen.w, h: th.screen.w * 9 / 16, cy: th.screen.cy, z: zc - LEN / 2 + 0.12 }),
-    doorsState
+    doorsState,
+    doorsAngles
   };
 
   return {
@@ -599,6 +618,12 @@ export function buildTheater(theme) {
     applyTheme(t) {
       slot.material.emissive.set(t.accent);
       deckLight.color.set(t.accent);
+      // t134 FIX: the seat piping and the 8.2 surround cones were frozen at
+      // the boot accent ("the theater gets stuck on a color") — both follow
+      // the theme now, like every other accent in the building.
+      glowMat.color.set(t.accent);
+      glowMat.emissive.set(t.accent);
+      coneMat.emissive.set(t.accent);
       // signs + bin label redraw with the new accent
       for (const sign of signMeshes) {
         const isStore = sign.rotation.y !== 0;
@@ -618,7 +643,12 @@ export function buildTheater(theme) {
       }
       lastSignBg = signBgOf(t);
     },
-    signTheme: () => ({ signBg: lastSignBg })   // t120: provable — the theater signs follow the theme
+    signTheme: () => ({ signBg: lastSignBg }),   // t120: provable — the theater signs follow the theme
+    themeAudit: () => ({   // t134: provable — the once-stuck accents, live
+      seatPiping: '#' + glowMat.color.getHexString(),
+      cones: '#' + coneMat.emissive.getHexString(),
+      slot: '#' + slot.material.emissive.getHexString()
+    })
   };
 }
 

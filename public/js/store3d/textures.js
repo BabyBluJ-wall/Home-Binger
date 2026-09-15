@@ -6,7 +6,7 @@
 //  with the user's theme. Edit any drawing routine to change the store's look.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { STORE } from './config.js?v=1789174562813';   // store branding for the wall sign
+import { STORE } from './config.js?v=1789342462621';   // store branding for the wall sign
 
 function canvas(w, h) {
   const c = document.createElement('canvas');

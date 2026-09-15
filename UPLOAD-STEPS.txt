@@ -16,13 +16,13 @@ EVERY UPDATE — three drags
 --------------------------
 1. On github.com, open your repo → "Add file" → "Upload files" → drag
    EVERYTHING from inside this zip in (matching files get replaced).
-   Commit message: a one-liner like "1.9.0".
+   Commit message: a one-liner like "1.10.0".
 2. Releases (right column) → "Draft a new release".
-3. Tag: v1.9.0        <- plain "v" + the version number, no extra letters
-   Title: Home Binger 1.9.0
+3. Tag: v1.10.0        <- plain "v" + the version number, no extra letters
+   Title: Home Binger 1.10.0
    Notes: paste the release-notes file delivered next to this zip
-   (RELEASE-NOTES-v1.9.0.md).
-   Drag the exe zip (HomeBinger-1.9.0-beta.zip) into "Attach binaries",
+   (RELEASE-NOTES-v1.10.0.md).
+   Drag the exe zip (HomeBinger-1.10.0-beta.zip) into "Attach binaries",
    then Publish. Do NOT tick "Set as a pre-release" — the app's update
    notice only looks at regular releases.
 

@@ -57,6 +57,7 @@ function serveStatic(req, res, pathname) {
   if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end(); return; }
 
   if (filePath === PUBLIC_DIR || pathname === '/') filePath = path.join(PUBLIC_DIR, 'index.html');
+  if (pathname === '/m') filePath = path.join(PUBLIC_DIR, 'm.html');   // t123: Simple Mode (the phone list client)
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     // SPA-style fallback → index.html (keeps deep links working behind proxies)
     filePath = path.join(PUBLIC_DIR, 'index.html');

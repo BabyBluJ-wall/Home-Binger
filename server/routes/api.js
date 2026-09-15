@@ -40,6 +40,7 @@ import path from 'node:path';                             // t89: thumb cache di
 import { DATA_DIR } from '../lib/store.js';                // t89: grabbed-file case art
 import { CATALOG_SECTIONS } from '../lib/adapters/archive.js';
 import { GENRES as RADIO_GENRES } from '../lib/adapters/radio.js';
+import { proxyIptv } from '../lib/adapters/iptv.js';      // t123: the live TV proxy
 
 // t96: own version + the release feed (new-version notice)
 const PKG = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
@@ -125,6 +126,23 @@ function maskConfig(cfg) {
   return safe;
 }
 
+// ── t123: PER-USER LIBRARY ACCESS — derivation + guards ──────────────────────
+// The libraryAccess map (config) is the single source of truth:
+//   absent | 'all'            → everyone (today's behavior; upgrades unchanged)
+//   { users: [name, …] }      → only those accounts (denied for everyone else)
+// Admins and anonymous visitors are never restricted (v1 doctrine).
+function sectionKeyOfItem(i) { return i.sectionId || 'auto:' + (i.sectionTitle || i.type); }
+function deniedSectionsFor(req) {
+  const user = getSessionUser(req);
+  if (!user || user.isAdmin) return null;
+  const la = getConfig().libraryAccess || {};
+  const denied = new Set();
+  for (const [k, v] of Object.entries(la)) {
+    if (v && typeof v === 'object' && Array.isArray(v.users) && !v.users.includes(user.username)) denied.add(k);
+  }
+  return denied.size ? denied : null;
+}
+
 // ── the router ───────────────────────────────────────────────────────────────
 export async function handleApi(req, res, pathname) {
   const method = req.method;
@@ -143,15 +161,20 @@ export async function handleApi(req, res, pathname) {
       const locks = cfg.locks;
       // If a lock is on, the store default wins over personal prefs.
       const effective = {
-        theme: locks.theme ? { ...cfg.defaults.theme } : prefs.theme,
-        sorting: locks.sorting ? { ...cfg.defaults.sorting } : prefs.sorting,
+        // t132: personal theme/sorting wins; NULL (never personalized, or a
+        // fresh profile) falls back to the store's CONFIGURED default —
+        // previously this handed every new visitor the built-in snapshot,
+        // so the Policies default reached nobody without the lock.
+        theme: locks.theme ? { ...cfg.defaults.theme } : (prefs.theme ?? cfg.defaults.theme),
+        sorting: locks.sorting ? { ...cfg.defaults.sorting } : (prefs.sorting ?? cfg.defaults.sorting),
         visualizer: prefs.visualizer || { style: 'bars' },
         // personal shelf map; falls back to the store-wide map (admin's baseline);
         // a lock forces the store's map on everyone
         shelves: locks.shelves ? (cfg.shelves || {}) : (prefs.shelves && Object.keys(prefs.shelves).length ? prefs.shelves : (cfg.shelves || {})),
         tv: prefs.tv || { idleMode: '', itemId: '' },
         dance: prefs.dance || { movement: 1, speed: 1, ballSpin: 1, pattern: 'auto' },   // t86 · t93: movement, not brightness
-        sources: locks.sources ? null : (prefs.sources ?? null)
+        sources: locks.sources ? null : (prefs.sources ?? null),
+        guideFavs: Array.isArray(prefs.guideFavs) ? prefs.guideFavs : []   // t128: favorite channels
       };
       const status = await libraryStatus();
       const tvTitle = await resolveTvTitle(cfg).catch(() => null);
@@ -286,17 +309,27 @@ export async function handleApi(req, res, pathname) {
       const cfg = getConfig();
       // per-visitor view: the store's setup overlaid with their media mix
       const view = userView(cfg, readPrefs(profileKeyFor(req, res))?.sources);
-      const items = await getLibrary(req.url.includes('refresh=1'), view);
+      let items = await getLibrary(req.url.includes('refresh=1'), view);
+      // t123: per-user library access — hidden libraries leave the catalogue
+      // entirely (shelves, search, jukebox, Guide — every surface follows)
+      const denied = deniedSectionsFor(req);
+      let sections = await librarySections(view);
+      if (denied) {
+        items = items.filter(i => !denied.has(sectionKeyOfItem(i)));
+        sections = sections.filter(s => !denied.has(s.key));
+      }
       return ok(res, {
         items: items.map(i => ({
           id: i.id, source: i.source, key: i.key, type: i.type, title: i.title,
           year: i.year, rating: i.rating, addedAt: i.addedAt, genres: i.genres,
           bpm: i.bpm || null, keyTag: i.keyTag || null,            // t114: the file's own tags — instant tempo/key for the booth
           sectionId: i.sectionId || null,          // Shelf Map key (e.g. 'archive:staff-picks')
-          sectionTitle: i.sectionTitle || null     // real library name (By Library sort)
+          sectionTitle: i.sectionTitle || null,    // real library name (By Library sort)
+          guideOnly: i.guideOnly === true,         // t123: live TV lives in the Guide, never on shelves
+          langs: Array.isArray(i.langs) ? i.langs.slice(0, 4) : []   // t127: the Guide's language pages
           // NOTE: no 'thumb' — posters are fetched via /img/<source>/<key>
         })),
-        sections: await librarySections(view),
+        sections,
         shelves: cfg.shelves || {},
         count: items.length
       });
@@ -311,10 +344,14 @@ export async function handleApi(req, res, pathname) {
       const prefs = readPrefs(key);
       // Respect locks: ignore changes to locked areas.
       if (!cfg.locks.theme && body.theme) {
-        prefs.theme = sanitizeTheme({ ...prefs.theme, ...body.theme });
+        // t132: a personal patch rides on the STORE'S configured default (not
+        // the built-in one) — recoloring one wall keeps the rest of the look
+        const base = prefs.theme ?? cfg.defaults.theme;
+        prefs.theme = sanitizeTheme({ ...base, ...body.theme });
       }
       if (!cfg.locks.sorting && body.sorting) {
-        prefs.sorting = sanitizeSorting({ ...prefs.sorting, ...body.sorting });
+        const baseS = prefs.sorting ?? cfg.defaults.sorting;   // t132
+        prefs.sorting = sanitizeSorting({ ...baseS, ...body.sorting });
       }
       if (body.visualizer) {
         const v = body.visualizer;
@@ -344,6 +381,8 @@ export async function handleApi(req, res, pathname) {
       }
       // personal media mix (null = follow the store's setup)
       if (body.sources !== undefined && !cfg.locks.sources) prefs.sources = sanitizeSourcesPref(body.sources);
+      if (Array.isArray(body.guideFavs))   // t128: the Guide's favorite channels (per profile)
+        prefs.guideFavs = [...new Set(body.guideFavs.map(String).filter(s => s.length > 0 && s.length <= 100))].slice(0, 300);
       // personal TV idle pick ('' = follow the store default)
       if (body.tv) {
         prefs.tv = {
@@ -429,6 +468,13 @@ export async function handleApi(req, res, pathname) {
       const sc = sourceConfig(source);                 // t87: built-in or instance
       const adapter = sc?.adapter;
       if (!adapter) return fail(res, 404, 'Unknown source');
+      {   // t123: per-user access guard
+        const denied = deniedSectionsFor(req);
+        if (denied) {
+          const it = await findItem(source, key).catch(() => null);
+          if (it && denied.has(sectionKeyOfItem(it))) return fail(res, 403, 'That library is not shared with your account');
+        }
+      }
       const detail = await adapter.detail(sc?.cfg || {}, key);
       if (!detail) return fail(res, 404, 'Not found');
       return ok(res, detail);
@@ -438,6 +484,13 @@ export async function handleApi(req, res, pathname) {
     if (method === 'GET' && pathname.startsWith('/img/')) {
       const _gp = pathname.split('/').map(decodeURIComponent);
       const source = _gp[2], key = _gp.slice(3).join('/');   // key may contain '/'
+      {   // t123: per-user access guard — posters of hidden libraries 404
+        const denied = deniedSectionsFor(req);
+        if (denied) {
+          const it = await findItem(source, key).catch(() => null);
+          if (it && denied.has(sectionKeyOfItem(it))) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('no poster'); return true; }
+        }
+      }
       // t89: GRABBER CASE ART — grabbed videos have no art upstream; the
       // first browser to visit grabs a frame and POSTs it (below). Cached
       // on disk, then served like any other poster.
@@ -493,6 +546,26 @@ export async function handleApi(req, res, pathname) {
       const _p = pathname.split('/').map(decodeURIComponent);
       const source = _p[3], key = _p.slice(4).join('/');   // t51: local keys contain '/'
       const isAudio = new URL(req.url, 'http://x').searchParams.get('audio') === '1';
+      // t123: per-user access — a hidden library is a hard 403 on the STREAM,
+      // not just invisible menus (dev tools must not reach it either)
+      {
+        const denied = deniedSectionsFor(req);
+        if (denied) {
+          const it = await findItem(source, key).catch(() => null);
+          if (it && denied.has(sectionKeyOfItem(it))) {
+            res.writeHead(403, { 'Content-Type': 'text/plain' });
+            res.end('That library is not shared with your account');
+            return true;
+          }
+        }
+      }
+      // t123: the live TV wing — HLS through the signed m3u8-rewrite proxy
+      if (source === 'iptv') {
+        const sc0 = sourceConfig('iptv');
+        if (!sc0) { res.writeHead(404); res.end('unknown source'); return true; }
+        await proxyIptv(req, res, key, sc0.cfg);
+        return true;
+      }
       const sc = sourceConfig(source);                 // t87: built-in or instance
       if (!sc) { res.writeHead(404); res.end('unknown source'); return true; }
       const adapter = sc.adapter;
@@ -521,6 +594,13 @@ export async function handleApi(req, res, pathname) {
         upstream = cfg.tv.url;
       } else if (cfg.tv.mode === 'item' && cfg.tv.itemId) {
         const [source, key] = splitItemId(cfg.tv.itemId);
+        {   // t123: per-user access guard on the idle-item stream
+          const denied = deniedSectionsFor(req);
+          if (denied) {
+            const it = await findItem(source, key).catch(() => null);
+            if (it && denied.has(sectionKeyOfItem(it))) { res.writeHead(403); res.end('That library is not shared with your account'); return true; }
+          }
+        }
         upstream = await streamUrlFor(source, key);
       }
       if (!upstream) { res.writeHead(404); res.end('no TV source'); return true; }
@@ -538,6 +618,110 @@ export async function handleApi(req, res, pathname) {
       const fIds = friendSourceIds(cfg);
       const sections = (await librarySections({ ...defaultView(cfg), stores: [] })).filter(s => !fIds.has(s.source));   // t99: own shelves only, no circular fetches
       return ok(res, { sections });
+    }
+
+    // ── t123: PER-USER LIBRARY ACCESS (the parents/kids feature) ──
+    if (method === 'GET' && pathname === '/api/admin/library-access') {
+      if (!requireAdmin(req, res)) return true;
+      const cfg = getConfig();
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      return ok(res, {
+        access: cfg.libraryAccess || {},
+        users: db.users.filter(u => !u.isAdmin).map(u => ({ username: u.username }))
+      });
+    }
+    if (method === 'PUT' && pathname === '/api/admin/library-access') {
+      if (!requireAdmin(req, res)) return true;
+      const body = await readBody(req, 64 * 1024);
+      const key = String(body.key || '').slice(0, 120);
+      if (!key) return fail(res, 400, 'Missing library key');
+      const cfg = getConfig();
+      const la = { ...(cfg.libraryAccess || {}) };
+      const v = body.value;
+      if (v === null || v === undefined) delete la[key];                        // back to 'all'
+      else if (v === 'all') la[key] = 'all';
+      else if (v && typeof v === 'object' && Array.isArray(v.users)) la[key] = { users: v.users.map(String).slice(0, 64).filter(Boolean) };
+      else return fail(res, 400, 'Value must be null, "all", or { users: [...] }');
+      Object.assign(configRef(), { libraryAccess: la });   // same in-place pattern the config PUT uses
+      saveConfig();
+      return ok(res, { ok: true, access: la });
+    }
+
+    // ── t123: FRIEND INVITES (the Tailscale on-ramp) ──
+    if (method === 'GET' && pathname === '/api/admin/tailscale-ip') {
+      if (!requireAdmin(req, res)) return true;
+      const { execFile } = await import('node:child_process');
+      const ip = await new Promise((resolve) => {
+        const p = execFile('tailscale', ['ip', '-4'], { timeout: 4000, windowsHide: true }, (e, stdout) => {
+          const m = String(stdout || '').match(/\b100\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/);
+          resolve(m ? m[0] : null);
+        });
+        if (p?.on) p.on('error', () => resolve(null));
+      }).catch(() => null);
+      return ok(res, { ip });
+    }
+    if (method === 'GET' && pathname === '/api/admin/invites') {
+      if (!requireAdmin(req, res)) return true;
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      return ok(res, { invites: (db.invites || []).slice(-50) });
+    }
+    if (method === 'GET' && pathname === '/api/admin/invite/bat') {
+      if (!requireAdmin(req, res)) return true;
+      const sp = new URL(req.url, 'http://x').searchParams;
+      const name = (sp.get('name') || 'friend').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'friend';
+      const key = String(sp.get('key') || '').trim().slice(0, 120);
+      const host = String(sp.get('host') || '').trim().slice(0, 100);
+      if (!/^tskey-/.test(key)) return fail(res, 400, 'That does not look like a Tailscale pre-auth key (it starts with tskey-)');
+      if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host) || !host) return fail(res, 400, 'Enter the store address your friend will open (e.g. 100.101.102.103:8181)');
+      const bat = [
+        '@echo off',
+        'REM ============================================================',
+        'REM  Home Binger - friend invite (' + name + ')',
+        'REM  SmartScreen may show "Windows protected your PC" because this',
+        'REM  file is unsigned. Click "More info" then "Run anyway".',
+        'REM ============================================================',
+        'echo Welcome to Home Binger, ' + name + '!',
+        'echo This one-time script connects your PC to the store.',
+        'echo.',
+        'where tailscale >nul 2>nul',
+        'if errorlevel 1 (',
+        '  echo Installing Tailscale (the free private network)...',
+        '  curl -L -f -o "%TEMP%\\hb-tailscale.msi" https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi',
+        '  if errorlevel 1 (',
+        '    echo.',
+        '    echo Could not download Tailscale automatically.',
+        '    echo Install it free from https://tailscale.com/download,',
+        '    echo then run this file again.',
+        '    pause',
+        '    exit /b 1',
+        '  )',
+        '  msiexec /i "%TEMP%\\hb-tailscale.msi" /qn TS_NOLAUNCH=1 TS_UNATTENDEDMODE=always TS_ONBOARDING_FLOW=hide',
+        '  echo Waiting for the installer...',
+        '  timeout /t 8 /nobreak >nul',
+        ')',
+        'echo Connecting to the store...',
+        'tailscale up --authkey=' + key + ' --timeout=90s',
+        'echo.',
+        'echo Opening the store in your browser...',
+        'start http://' + host,
+        'echo.',
+        'echo All done! You can close this window.',
+        'pause'
+      ].join('\r\n');
+      // record the invite (nickname + dates only — the KEY itself is never stored)
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      if (!Array.isArray(db.invites)) db.invites = [];
+      db.invites.push({ name, host, createdAt: Date.now(), expiresAt: Date.now() + 30 * 864e5 });
+      store.saveDb();
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="HB-Invite-' + name + '.bat"'
+      });
+      res.end(bat);
+      return true;
     }
 
     if (method === 'GET' && pathname === '/api/admin/config') {
@@ -612,6 +796,15 @@ export async function handleApi(req, res, pathname) {
           next.radio.sections = incoming.radio.sections.map(String).slice(0, 12);
         if (typeof incoming.radio.url === 'string')
           next.radio.url = /^https?:\/\//.test(incoming.radio.url) ? incoming.radio.url.trim() : '';         // '' = radio-browser
+      }
+      // t123: the live TV wing — Guide-only sections + the unverified toggle
+      if (incoming.iptv) {
+        const VALID = new Set(['news', 'movies', 'series', 'kids', 'documentary', 'entertainment', 'comedy', 'sports', 'music', 'animation', 'classic', 'public']);
+        if (Array.isArray(incoming.iptv.sections))
+          next.iptv.sections = incoming.iptv.sections.map(String).filter(s => VALID.has(s)).slice(0, 12);
+        if (typeof incoming.iptv.url === 'string')
+          next.iptv.url = /^https?:\/\//.test(incoming.iptv.url) ? incoming.iptv.url.trim() : '';   // '' = the real iptv-org API
+        next.iptv.unverified = incoming.iptv.unverified === true;
       }
       // t61/t62: the file grabber — MULTIPLE spots on this machine, recursive
       if (incoming.local) {
@@ -727,8 +920,38 @@ export async function handleApi(req, res, pathname) {
           sorting: sanitizeSorting({ ...next.defaults.sorting, ...incoming.defaults.sorting })
         };
       }
+      // t133: snapshot the PRE-SAVE lock/default state (cfg is the live
+      // config object — Object.assign below mutates it in place)
+      const preLocks = { ...(cfg.locks || {}) };
+      const preDefaults = { theme: { ...(cfg.defaults?.theme || {}) }, sorting: { ...(cfg.defaults?.sorting || {}) } };
       Object.assign(configRef(), next); // replace in place
       saveConfig();
+      // t133: A LOCK IS A TRUE SYNC, NOT A MASK — turning the theme lock on
+      // (or changing the locked default) WRITES the house theme into every
+      // saved profile. Owner: "the admin theme lock works for only part of
+      // it not all of it. everyone would still have to go sync their theme
+      // by changing it themselves." Before this, the lock only OVERLAID the
+      // house theme on display while every profile kept its old personal
+      // theme underneath — so the moment the lock came off, everyone snapped
+      // back out of sync. Now the lock genuinely syncs: nothing to redo, no
+      // snap-back. Same rule for the sorting lock.
+      const syncKeys = [];
+      if (next.locks?.theme && (preLocks.theme !== true
+        || JSON.stringify(next.defaults.theme) !== JSON.stringify(preDefaults.theme))) syncKeys.push('theme');
+      if (next.locks?.sorting && (preLocks.sorting !== true
+        || JSON.stringify(next.defaults.sorting) !== JSON.stringify(preDefaults.sorting))) syncKeys.push('sorting');
+      if (syncKeys.length) {
+        const store = await import('../lib/store.js');
+        const db = store.getDb();
+        for (const k of Object.keys(db.profiles || {})) {
+          const p = { ...db.profiles[k] };
+          if (syncKeys.includes('theme')) p.theme = { ...next.defaults.theme };
+          if (syncKeys.includes('sorting')) p.sorting = { ...next.defaults.sorting };
+          p.updatedAt = Date.now();
+          db.profiles[k] = p;
+        }
+        store.saveDb();
+      }
       invalidateCache();
       return ok(res, { config: maskConfig(getConfig()),
         localNotes: localNotes.length ? `Folder not found (check the spelling): ${localNotes.join(' · ')}` : '' });   // t66: no silent grabber failures
@@ -764,9 +987,13 @@ export async function handleApi(req, res, pathname) {
       const cfg = getConfig();
       const body = await readBody(req);
       const source = String(body.source || '');
-      if (source === 'archive' || source === 'radio') {
+      if (source === 'archive' || source === 'radio' || source === 'iptv') {   // t123: + the Guide's groups
         const a = ADAPTERS[source];
-        return ok(res, a.libraries ? a.libraries() : { libraries: [] });
+        // t125: AWAIT — iptv's libraries() is async; the old bare call handed a
+        // Promise to json() → "{}" → the admin group list rendered as an error →
+        // saves collected ZERO checked groups and wiped the Guide's sections.
+        const r = await a.libraries();
+        return ok(res, r || { libraries: [] });
       }
       // t87: built-in slots AND saved extra instances resolve the same way
       const sc = sourceConfig(source);
@@ -783,6 +1010,24 @@ export async function handleApi(req, res, pathname) {
       } catch (e) {
         return fail(res, 502, e?.message || 'Could not list libraries');
       }
+    }
+
+    // t132: RE-THEME EVERYONE — the admin changed the store's default theme
+    // and wants the whole store (every saved profile, including their own)
+    // switched to it now. One-time: visitors can still personalize after.
+    if (method === 'POST' && pathname === '/api/admin/retheme') {
+      if (!requireAdmin(req, res)) return true;
+      const body = await readBody(req);
+      const theme = sanitizeTheme(body.theme || {});
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      let n = 0;
+      for (const k of Object.keys(db.profiles || {})) {
+        db.profiles[k] = { ...db.profiles[k], theme: { ...theme }, updatedAt: Date.now() };
+        n++;
+      }
+      store.saveDb();
+      return ok(res, { rethemed: n });
     }
 
     if (method === 'GET' && pathname === '/api/admin/users') {

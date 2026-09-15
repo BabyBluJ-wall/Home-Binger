@@ -18,7 +18,7 @@ const djpUi = { eq: [{}, {}], trim: [1, 1], fader: [1, 1], rate: [1, 1], xf: 0.5
   pitch: 0, pitchRange: 8, xfAssign: ['a', 'b'], color: [0.5, 0.5], colorMode: ['filter', 'filter'] };   // t108
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789174562813';
+import { LAYOUT } from './config.js?v=1789342462621';
 
 const D = LAYOUT.room.l / 2;
 const AUDIO_RE = /\.(mp3|wav|ogg|oga|flac|m4a|aac|opus)$/i;
@@ -1907,6 +1907,9 @@ export function createDjPro() {
 
   const api = { mount, update, getLevels, playItem, info, seek: (t) => decks.forEach(dk => { if (dk.el && !dk.el.paused) try { dk.el.currentTime = t; } catch {} }),
     stopAll: () => { if (autoDj.on) setAutoDj(false); decks.forEach(dk => { try { dk.el?.pause(); } catch {} }); },   // t76 deterministic · t111: stop means STOP — AUTO-DJ off too
+    // t134: the dance-hall remote's volume knob — same smoothing as the panel slider
+    setMaster: (v) => { djpUi.master = Math.max(0, Math.min(1, +v || 0)); if (masterGain && actx) masterGain.gain.setTargetAtTime(djpUi.master, actx.currentTime, 0.03); },
+    masterValue: () => (djpUi.master ?? 0.8),
     setSurround: (s) => { surround = s; buildRing(); },
     // t108: controllers (the DJBoothSystem surface)
     setFx, setFxParam, setFxOn, brakeActive, enableMic, startRec, stopRec, setAutoDj,

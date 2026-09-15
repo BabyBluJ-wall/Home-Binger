@@ -139,6 +139,12 @@ body {
 .side-link:hover { background: color-mix(in srgb, var(--vb-accent, #ffd23f) 14%, transparent); border-color: color-mix(in srgb, var(--vb-accent, #ffd23f) 40%, var(--vb-line)); }
 .side-link.active { border-left: 3px solid var(--vb-accent); padding-left: 11px; background: color-mix(in srgb, var(--vb-accent, #ffd23f) 10%, transparent); }
 .sidebar-foot { padding: 14px 16px 18px; border-top: 1px solid rgba(255,255,255,.08); }
+.sidebar-tm {
+  text-align: center; font-size: 10.5px; letter-spacing: .4px; opacity: .55;
+  line-height: 1.6; padding: 2px 0 4px; user-select: none; cursor: default;
+}
+.sidebar-tm span { font-size: 9.5px; opacity: .8; }
+/* retired t130: .source-chip (the sidebar's source-status dot) — replaced by the ™© mark */
 .source-chip {
   font-size: 12px; color: var(--vb-muted); background: rgba(255,255,255,.05);
   border-radius: 999px; padding: 7px 12px; text-align: center;
@@ -414,6 +420,22 @@ body.tv-fullscreen #vb-fs-video {
   position: fixed; inset: 0; width: 100vw; height: 100vh;
   object-fit: contain; background: #000; z-index: 80;
 }
+/* ── t134: G in full screen docks the TV Guide on the right — the video
+   keeps its EXACT size (1:1, object-fit never rescales) and slides left
+   to make room; closing the Guide slides it back to center ── */
+body.tv-fullscreen.fs-guide #vb-fs-video {
+  transform: translateX(calc(-0.5 * min(460px, 44vw)));
+  transition: transform .28s ease;
+}
+body.tv-fullscreen.fs-guide #guide-modal {
+  left: auto; right: 0; width: min(460px, 44vw);
+  padding: 14px; z-index: 95; justify-content: flex-end;
+  background: linear-gradient(to left, rgba(3,7,22,.86), rgba(3,7,22,.6));
+}
+body.tv-fullscreen.fs-guide #guide-modal .guide-card {
+  width: 100%; max-height: none; height: 100%;
+}
+body.tv-fullscreen.fs-guide #guide-modal .guide-hint { display: none; }   /* no room in the dock */
 /* ── full-screen HUD: progress bar + controls; fades out when idle ── */
 #tv-fs-hud { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
 #tv-fs-hud.hidden { display: none; }
@@ -555,3 +577,62 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 /* t93: theme goes app-wide — every control follows the accent */
 input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: var(--vb-accent, #ffd23f); }
 a { color: var(--vb-accent, #ffd23f); }
+
+/* ═══════════════ t123: THE TV GUIDE (theater overlay) ═══════════════ */
+.guide-card { width: min(680px, 94vw); max-height: 84vh; display: flex; flex-direction: column; }
+.guide-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.guide-head h2 { margin: 0; font-size: 20px; letter-spacing: 1px; }
+.guide-hint { flex: 1; font-size: 11.5px; opacity: .65; }
+#guide-body { overflow-y: auto; border: 1px solid var(--vb-line, #2a3354); border-radius: 10px; padding: 6px; }
+.guide-group { margin-bottom: 10px; }
+.guide-group-title {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--vb-panel, rgba(10,12,30,.92));
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--vb-accent, #ff3ea5);
+  padding: 6px 8px 4px; border-bottom: 1px solid var(--vb-line, #2a3354);
+}
+.guide-group-title small { float: right; opacity: .6; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.guide-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 8px; border-radius: 8px; cursor: pointer;
+}
+.guide-row:hover, .guide-row.sel { background: var(--vb-accent, #ff3ea5); color: #fff; }
+.guide-row.sel .guide-num { color: #fff; }
+.guide-num {
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700;
+  font-size: 13px; opacity: .8; min-width: 3ch; text-align: right;
+}
+.guide-name { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.guide-cell { font-size: 11px; letter-spacing: .5px; opacity: .85; white-space: nowrap; }
+.guide-cell.off { opacity: .5; text-decoration: line-through; }
+/* t126: the category bar — click a category (or ◀/▶) to page through the guide */
+.guide-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.guide-cat {
+  border: 1px solid var(--vb-line, #2a3354); background: transparent; color: inherit;
+  border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 700;
+  letter-spacing: .5px; cursor: pointer;
+}
+.guide-cat small { margin-left: 6px; opacity: .6; font-weight: 400; }
+.guide-cat:hover { border-color: var(--vb-accent, #ff3ea5); }
+.guide-cat.active { background: var(--vb-accent, #ff3ea5); border-color: var(--vb-accent, #ff3ea5); color: #fff; }
+.guide-cat.active small { opacity: .8; }
+/* t127: the language row — pick a language and every category page shows only that language's channels */
+.guide-langs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.guide-lang {
+  border: 1px solid var(--vb-line, #2a3354); background: transparent; color: inherit;
+  border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 700;
+  letter-spacing: .3px; cursor: pointer;
+}
+.guide-lang small { margin-left: 5px; opacity: .6; font-weight: 400; }
+.guide-lang:hover { border-color: var(--vb-accent, #ff3ea5); }
+.guide-lang.active { background: var(--vb-accent, #ff3ea5); border-color: var(--vb-accent, #ff3ea5); color: #fff; }
+.guide-lang.more { opacity: .75; }
+/* t128: favorite channels */
+.guide-star {
+  border: none; background: none; color: inherit; cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 2px 4px; opacity: .45;
+}
+.guide-star:hover { opacity: 1; transform: scale(1.15); }
+.guide-star.on { color: #ffd23f; opacity: 1; }
+.guide-row.sel .guide-star.on { color: #ffd23f; }

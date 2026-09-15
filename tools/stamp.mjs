@@ -40,6 +40,8 @@ const idx = path.join(root, 'index.html');
 let html = fs.readFileSync(idx, 'utf8');
 html = html.replace(/\?v=\d+/g, '');
 html = html.replace(/(src=")(\/js\/[^"]+\.js)(")/g, `$1$2?v=${stamp}$3`);
+// t126: the stylesheet is stamped too — new Guide styles must not ride a cached CSS
+html = html.replace(/(href=")(\/css\/[^"]+\.css)(")/g, `$1$2?v=${stamp}$3`);
 fs.writeFileSync(idx, html);
 
 console.log(`stamped ${changed} module files + index.html with ?v=${stamp}`);

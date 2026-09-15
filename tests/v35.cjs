@@ -1,7 +1,9 @@
 // v35 — consolidated regression (runs from the workspace; needs the store on :8181)
 // Covers: album→track audio (t16) · library filtering (t17) · theme-synced visualizer ·
 // play-next/queue · free add-ons (archive/podcasts/radio) · PUBLIC per-user shelf map ·
-// compiled panels · queue panel moved to the left edge · walk.
+// compiled panels · queue panel moved to the left edge · walk ·
+// t122: the podcast play 404 (sourceConfig 'podcast'/'podcasts' mismatch) and the
+// dead-track queue wedge on the jukebox (fast-fail + advance, never wedge).
 //
 // Run:  node tests/v35.js   (playwright-core + a chrome must be reachable — see tests/README)
 const { chromium } = require('playwright-core');
@@ -173,6 +175,37 @@ const addonMock = http.createServer((req, res) => {
   }
   if (u.pathname.startsWith('/audio/')) { res.writeHead(200, { 'Content-Type': 'audio/mpeg' }); return res.end(Buffer.alloc(4096, 9)); }
   if (u.pathname === '/cover.jpg') { res.writeHead(200, { 'Content-Type': 'image/jpeg' }); return res.end(JPG); }
+  // ── t123: the live TV wing (mock iptv-org + a tiny HLS ladder) ──
+  if (u.pathname === '/iptv/channels.json') return json([
+    { id: 'NewsOne.us', name: 'News One', network: 'ABC', owners: ['ABC'], country: 'US', categories: ['news'], is_nsfw: false },
+    { id: 'SpicyTV.us', name: 'Spicy TV', network: 'Someone', owners: [], country: 'US', categories: ['news'], is_nsfw: true },   // NEVER ships
+    { id: 'RandoCast.us', name: 'Rando Cast', network: 'Who Knows', owners: [], country: 'US', categories: ['news'], is_nsfw: false },   // curated out unless "unverified"
+    { id: 'KidsOne.us', name: 'Kids One', network: 'PBS', owners: ['PBS'], country: 'US', categories: ['kids'], is_nsfw: false },   // t126: a second category for the Guide's tabs
+    { id: 'CineLatino.us', name: 'Cine Latino', network: 'Pelis Pop', owners: [], country: 'US', categories: ['movies'], is_nsfw: false }   // t127: Spanish, unverified tier
+  ]);
+  if (u.pathname === '/iptv/streams.json') return json([
+    { channel: 'NewsOne.us', url: 'http://127.0.0.1:32790/hls/master.m3u8', quality: '720p' },
+    { channel: 'SpicyTV.us', url: 'http://127.0.0.1:32790/hls/spicy.m3u8', quality: '540p' },
+    { channel: 'RandoCast.us', url: 'http://127.0.0.1:32790/hls/rando.m3u8', quality: '480p' },
+    { channel: 'KidsOne.us', url: 'http://127.0.0.1:32790/hls/kids.m3u8', quality: '720p' },
+    { channel: 'CineLatino.us', url: 'http://127.0.0.1:32790/hls/cine.m3u8', quality: '540p' }
+  ]);
+  if (u.pathname === '/hls/master.m3u8' || u.pathname === '/hls/kids.m3u8' || u.pathname === '/hls/cine.m3u8') { res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' }); return res.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nmedia.m3u8\n'); }
+  // t127: the directory's by-language playlist (channel id → group-title language)
+  if (u.pathname === '/iptv/index.language.m3u') {
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    return res.end([
+      '#EXTM3U',
+      '#EXTINF:-1 tvg-id="NewsOne.us@SD" group-title="English",News One',
+      '#EXTINF:-1 tvg-id="KidsOne.us@SD" group-title="English",Kids One',
+      '#EXTINF:-1 tvg-id="RandoCast.us@SD" group-title="Spanish",Rando Cast',
+      '#EXTINF:-1 tvg-id="CineLatino.us@SD" group-title="Spanish",Cine Latino',
+      '#EXTINF:-1 tvg-id="SpicyTV.us@SD" group-title="English",Spicy TV'
+    ].join('\n'));
+  }
+  if (u.pathname === '/hls/media.m3u8') { res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' }); return res.end('#EXTM3U\n#EXTINF:10,\nseg001.ts\n#EXTINF:10,\nseg002.ts\n'); }
+  if (u.pathname === '/hls/seg001.ts' || u.pathname === '/hls/seg002.ts') { res.writeHead(200, { 'Content-Type': 'video/mp2t' }); return res.end(Buffer.alloc(512, 7)); }
+  if (u.pathname === '/hls/spicy.m3u8' || u.pathname === '/hls/rando.m3u8') { res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' }); return res.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nx.m3u8\n'); }
   res.writeHead(404); res.end();
 });
 
@@ -202,7 +235,7 @@ const addonMock = http.createServer((req, res) => {
   // 1) plex library picker + vault filtering (t17)
   const libs = await j(await fetch(BASE + '/api/admin/libraries', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ source: 'plex', url: 'http://localhost:32770', token: 't' }) }));
   await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
-    body: JSON.stringify({ sources: { demo: false, plex: true, jellyfin: false }, plex: { url: 'http://localhost:32770', token: 't', sections: ['1', '2', '4'] },
+body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, plex: true, jellyfin: false }, plex: { url: 'http://localhost:32770', token: 't', sections: ['1', '2', '4'] },
       archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] }, radio: { url: 'http://127.0.0.1:32790', sections: ['oldies'] },
       podcasts: { feeds: ['http://127.0.0.1:32790/feed.rss'] }, shelves: {} }) });
   const lib1 = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
@@ -238,6 +271,23 @@ const addonMock = http.createServer((req, res) => {
   const hasPod = items.filter(i => i.source === 'podcast').length >= 3;
   R.checks.addons = { hasFilmArchive, hasRadio, hasPod, ok: hasFilmArchive && hasRadio && hasPod };
 
+  // 3b) t122: THE PODCAST PLAY 404. /api/play/podcast/* answered 404
+  //     "unknown source" since the podcasts adapter shipped — ADAPTERS
+  //     registers it as 'podcast' but its CONFIG lives under 'podcasts',
+  //     so sourceConfig('podcast') → null. The t121 picker finally put
+  //     podcasts on the jukebox and the dead route got hit for real
+  //     (owner: "the jukebox is now broken… things wont play"). Play AND
+  //     poster must both answer for a podcast episode now.
+  {
+    const podItem = items.find(i => i.source === 'podcast');
+    const pr = await fetch(`${BASE}/api/play/podcast/${podItem.key}?audio=1&vb_auth=${login.token}`);
+    const pb = await pr.arrayBuffer();
+    const postr = await fetch(`${BASE}/img/podcast/${podItem.key}?vb_auth=${login.token}`);
+    R.checks.t122PodcastPlay = { playStatus: pr.status, type: pr.headers.get('content-type'), bytes: pb.byteLength,
+      poster: postr.status,
+      ok: (pr.status === 200 || pr.status === 206) && pb.byteLength > 1000 && /audio|octet/.test(pr.headers.get('content-type') || '') && postr.status !== 404 };
+  }
+
   // 4) archive range proxy (t18)
   const film = items.find(i => i.source === 'archive');
   const rr = await fetch(`${BASE}/api/play/archive/${film.key}?vb_auth=${login.token}`, { headers: { range: 'bytes=0-999' } });
@@ -245,8 +295,9 @@ const addonMock = http.createServer((req, res) => {
   R.checks.archiveProxy = { status: rr.status, len: rb.byteLength, ok: (rr.status === 206 || rr.status === 200) && rb.byteLength === 1000 && !!rr.headers.get('content-range') };
 
   // 4b) FREE-ONLY STORE — demo/plex/jellyfin all OFF → only free media shelved
+  //     (local spots OFF too — t111's staging persists across runs via data/)
   await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
-    body: JSON.stringify({ sources: { plex: false, jellyfin: false }, archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] },
+    body: JSON.stringify({ local: { on: false, spots: [] }, sources: { plex: false, jellyfin: false }, archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] },
       radio: { url: 'http://127.0.0.1:32790', sections: [] }, podcasts: { feeds: [] } }) });
   const freeOnly = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
   const freeSrcs = new Set((freeOnly.items || []).map(i => i.source));
@@ -308,11 +359,11 @@ const addonMock = http.createServer((req, res) => {
   // 6) compiled panels — tabs trimmed, sections landed in their new homes
   R.checks.panels = await page.evaluate(async () => {
     const tabs = [...document.querySelectorAll('#sidebar-nav .side-link')].map(b => b.dataset.tab);
-    const wanted = ['look', 'shelves', 'media', 'profile', 'admin'];
-    // 6 side-links: the 5 panels + the guest "Admin sign-in" shortcut (also data-tab="profile").
+    const wanted = ['look', 'shelves', 'profile', 'admin'];   // t128: My Media is gone (owner ask)
+    // 5 side-links: the 4 panels + the guest "Admin sign-in" shortcut (also data-tab="profile").
     // t82 merged the three admin tabs into ONE Admin tab (server+users+policies live inside it).
     const adminHidden = !!document.querySelector('.side-link[data-tab="admin"]')?.classList.contains('hidden');
-    const tabOk = tabs.length === 6 && wanted.every(t => tabs.includes(t)) && adminHidden
+    const tabOk = tabs.length === 5 && wanted.every(t => tabs.includes(t)) && adminHidden && !tabs.includes('media')
       && !['viz', 'livetv', 'tvadmin', 'shelfmap', 'server', 'users', 'policies'].some(t => tabs.includes(t));
     // open My Theme as the (guest) — admin sections hidden
     const side = document.querySelector('#btn-menu') || document.querySelector('[id*=menu]');
@@ -2596,6 +2647,15 @@ const addonMock = http.createServer((req, res) => {
     if (fs.existsSync(root + '/song.m4a')) {
       const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
       await put({ local: { on: true, spots: [root] } });
+      // t134 note: by t111 the renderer carries ~800MB of accumulated media
+      // state from the t51–t108 marathon (the box has 2GB) — the real-song
+      // decode here OOM-killed the target about half the time. Fresh page for
+      // the audio block: every check in it is panel/server-driven (no page-
+      // position or theme deps), and the server config survives reloads.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => !!window.__VB, { timeout: 45000 });
+      await page.evaluate(() => { const b = document.getElementById('btn-enter'); if (b) b.click(); });
+      await page.waitForTimeout(1200);
       R.checks.t111AutoDj = await page.evaluate(async () => {
         const w = window, sleep = (ms) => new Promise(r => setTimeout(r, ms));
         const login2 = await (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) })).json();
@@ -3766,6 +3826,575 @@ const addonMock = http.createServer((req, res) => {
       ok: kc.total > 150 && kc.podcasts > 0 && kc.initialRows === 150 && kc.allListed && kc.podcastRow && kc.searchOk && kc.queued };
   }
 
+  // 17b1bd2) t122: A DEAD TRACK MUST NOT WEDGE THE JUKEBOX QUEUE. A 404
+  //          first track used to burn the retry ladder in silence — 'ended'
+  //          never fired, so the deck sat on the dead item forever and
+  //          NOTHING after it in the queue would play. Now a URL that dies
+  //          before its first note fast-fails and the queue moves on.
+  {
+    const put122 = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    const p122 = require('node:path');
+    await put122({ local: { on: true, spots: [p122.resolve('tests/media/bench')] } });   // real WAVs — decode guaranteed
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    const da = await page.evaluate(async () => {
+      const w = window, sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      try { await w.__VB.mainCtx?.reloadLibrary?.(); } catch {}
+      await sleep(400);
+      const album = (w.__VB.state.items || []).find(i => i.type === 'album' && /\.wav$/i.test(i.key || ''));
+      out.hasAlbum = !!album;
+      w.__VB.mainCtx.djDevice = 'jukebox';
+      const deck = w.__VB.mainCtx.dj.jukebox;
+      const jb = w.__VB.scene.jukeboxAudio;
+      jb.stop(); deck.queue.length = 0; deck.idx = -1;
+      // the dead one first (a podcast key that was never registered → the
+      // server's honest 404), a real WAV right behind it
+      const dead = { id: 'podcast:pe000000000000', source: 'podcast', key: 'pe000000000000', type: 'episode', title: 'DEAD LINK (t122)' };
+      deck.add(dead);
+      deck.add(album);
+      await sleep(3500);
+      const st = w.__VB.mainCtx.djState();
+      out.idxAfter = deck.idx;
+      out.nowTitle = st.now ? st.now.title : null;
+      out.advancedToGood = deck.idx === 1 && !!album && st.now && st.now.title === album.title;
+      await sleep(2000);
+      out.goodTime = jb.stats().time;
+      jb.stop(); deck.queue.length = 0; deck.idx = -1;
+      return out;
+    });
+    // leave tidy (local back off — the suite's later checks expect it off)
+    await put122({ local: { on: false, spots: [] } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+    R.checks.t122DeadAdvance = { ...da,
+      ok: da.hasAlbum && da.idxAfter === 1 && da.advancedToGood };
+  }
+
+  // 17b1bd3) t123: THE LIVE TV WING + PER-USER LIBRARIES + SIMPLE MODE +
+  //          INVITES — everything in the combined release, against mocks.
+  {
+    const put123 = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+
+    // ── (a) the adapter: curation + NSFW exclusion + guideOnly + the proxy ──
+    await put123({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'] } });
+    const lib123 = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+    const iptvItems = (lib123.items || []).filter(i => i.source === 'iptv');
+    const a = {
+      count: iptvItems.length,
+      onlyNewsOne: iptvItems.length === 1 && iptvItems[0].title === 'News One',   // spicy (nsfw) + rando (unverified tier) both excluded
+      guideOnly: iptvItems.every(i => i.guideOnly === true),
+      sectioned: iptvItems[0]?.sectionId === 'iptv:news',
+      // the proxy: manifest → rewritten signed URLs → segments; tamper/unsigned → 403
+    };
+    {
+      const key = iptvItems[0].key;
+      const m = await fetch(`${BASE}/api/play/iptv/${key}?vb_auth=${login.token}`);
+      const body = await m.text();
+      a.manifestStatus = m.status;
+      a.manifestType = m.headers.get('content-type');
+      a.rewritten = body.includes(`/api/play/iptv/${key}?u=`) && body.includes('&s=');
+      const line = body.split('\n').find(l => l.startsWith('/api/play/iptv/'));
+      if (line) {
+        const segDoc = await (await fetch(BASE + line + '&vb_auth=' + login.token)).text();   // the variant playlist
+        const segLine = segDoc.split('\n').find(l => l.startsWith('/api/play/iptv/'));
+        a.variantServed = segDoc.includes('#EXTINF');
+        if (segLine) {
+          const ts = await fetch(BASE + segLine + '&vb_auth=' + login.token);
+          const tsb = await ts.arrayBuffer();
+          a.segmentStatus = ts.status; a.segmentBytes = tsb.byteLength;
+        }
+        a.tampered = (await fetch(BASE + line.replace(/s=[0-9a-f]+/, 's=deadbeefdeadbeefdead') + '&vb_auth=' + login.token)).status;
+      }
+      a.unsigned = (await fetch(`${BASE}/api/play/iptv/${key}?u=http://1.2.3.4/x.ts&vb_auth=${login.token}`)).status;
+      a.unknownKey = (await fetch(`${BASE}/api/play/iptv/lvdoesnotexist?vb_auth=${login.token}`)).status;
+    }
+    // t125 regression: the admin group list must return REAL groups — the route
+    // used to serialize the async iptv adapter's Promise as {}, the Live TV list
+    // in Admin → Media died, and the next save wiped the Guide's sections
+    const adminLibs = await j(await fetch(BASE + '/api/admin/libraries', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ source: 'iptv' }) }));
+    a.adminLibs = Array.isArray(adminLibs.libraries) && adminLibs.libraries.length === 12
+      && adminLibs.libraries.some(l => l.key === 'news' && l.type === 'live');
+    // t125: a toggle-only save (the owner's exact move) must NOT touch sections
+    await put123({ iptv: { unverified: true } });
+    const cfgT = await j(await fetch(BASE + '/api/admin/config', { headers: authH }));
+    a.toggleKeptSections = Array.isArray(cfgT.config?.iptv?.sections) && cfgT.config.iptv.sections.length === 1
+      && cfgT.config.iptv.sections[0] === 'news' && cfgT.config.iptv.unverified === true;
+    // t125: with the unverified tier on, curated channels keep the front rows
+    const libU = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+    const iu = (libU.items || []).filter(i => i.source === 'iptv');
+    a.unverifiedAdds = iu.length === 2 && iu[0].title === 'News One' && iu[1].title === 'Rando Cast';
+    await put123({ iptv: { unverified: false } });   // back to curated for the Guide test below
+    R.checks.t123IptvAdapter = { ...a,
+      ok: a.onlyNewsOne && a.guideOnly && a.sectioned && a.manifestStatus === 200 && a.rewritten
+        && a.variantServed === true && a.segmentStatus === 200 && a.segmentBytes === 512
+        && a.tampered === 403 && a.unsigned === 403 && a.unknownKey === 404
+        && a.adminLibs === true && a.toggleKeptSections === true && a.unverifiedAdds === true };
+
+    // ── (b) the GUIDE in the browser: shelves clean, G-key gated, opens in
+    //        the theater, numbered rows, CATEGORY TABS page between groups
+    //        (t126), click plays via hls ──
+    await put123({ iptv: { sections: ['news', 'kids'] } });   // t126: two categories
+    await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
+    const g = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      // t125: opening the Guide must free the mouse (the owner had to hit Esc)
+      const lockCalls = [];
+      const origExit = document.exitPointerLock;
+      document.exitPointerLock = function () { lockCalls.push('exit'); return origExit?.apply(document, arguments); };
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(600);
+      const sceneSrc = null;   // source asserts done outside
+      // shelves clean of live TV
+      const iptvTitles = new Set((VB.state.items || []).filter(i => i.guideOnly).map(i => i.title));
+      let shelfTitles = [];
+      for (const u of s.shelfUnits().map(x => x.id)) { try { shelfTitles = shelfTitles.concat(s.placementsByUnit(u) || []); } catch {} }
+      out.shelvesClean = shelfTitles.filter(t => iptvTitles.has(t)).length === 0;
+      // G outside the theater → no guide (start from the STORE — earlier
+      // suite blocks may have left the player in another room)
+      s.debugTeleport(0, 4.2);
+      await sleep(200);
+      out.startRoom = ctx.playerRoom();
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(300);
+      out.gGatedOutside = document.getElementById('guide-modal').classList.contains('hidden');
+      // into the theater → G opens
+      s.debugTeleport(0, -8);
+      out.room = ctx.playerRoom();
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(400);
+      out.opens = !document.getElementById('guide-modal').classList.contains('hidden');
+      out.freedMouse = lockCalls.includes('exit');
+      // t126: the category bar — News + Kids, the list shows ONE category
+      out.cats = [...document.querySelectorAll('.guide-cat')].length;
+      const rows = [...document.querySelectorAll('.guide-row')];
+      out.rows = rows.length;
+      out.numbered = rows.length === 1 && rows[0].querySelector('.guide-num')?.textContent === '001';
+      // click the Kids tab → its channels, numbering restarts at 001 (a fresh page)
+      document.querySelector('[data-cat="1"]')?.click();
+      await sleep(200);
+      const kRows = [...document.querySelectorAll('.guide-row')];
+      out.catSwitch = kRows.length === 1 && kRows[0].querySelector('.guide-name')?.textContent === 'Kids One'
+        && kRows[0].querySelector('.guide-num')?.textContent === '001';
+      // ◀▶ keys page categories too — ArrowRight wraps Kids → News
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      await sleep(200);
+      // (trim: the tab template carries leading whitespace before the title)
+      out.arrowCat = (document.querySelector('.guide-cat.active')?.textContent || '').trim().startsWith('News');
+      // click → the TV takes the channel through hls (MSE — srcSet via the
+      // handle). Picking a channel CLOSES the guide — the screen takes over.
+      document.querySelector('.guide-row')?.click();
+      await sleep(2500);
+      out.playing = { kind: s.tv.stats().kind, srcSet: s.tv.surfaceInfo().srcSet };
+      out.tvTookIt = s.tv.stats().kind === 'video' && s.tv.surfaceInfo().srcSet === true;
+      out.closed = document.getElementById('guide-modal').classList.contains('hidden');
+      s.tv.stop();
+      document.exitPointerLock = origExit;   // t125: un-spy
+      return out;
+    });
+    const fs123 = require('node:fs');
+    const sceneSrc = fs123.readFileSync('public/js/store3d/scene.js', 'utf8');
+    const idxSrc = fs123.readFileSync('public/index.html', 'utf8');
+    R.checks.t123Guide = { ...g,
+      shelfExclusionAssert: sceneSrc.includes('!i.guideOnly'),
+      redirectAssert: idxSrc.includes("location.replace('/m')") && idxSrc.includes('hb_desktop'),
+      ok: g.shelvesClean && g.gGatedOutside && g.room === 'theater' && g.opens && g.numbered && g.tvTookIt
+        && g.freedMouse === true && g.cats === 2 && g.catSwitch && g.arrowCat && g.closed
+        && sceneSrc.includes('!i.guideOnly') && idxSrc.includes("location.replace('/m')") };
+
+    // t126: back to the single-category config the access checks below expect
+    await put123({ iptv: { sections: ['news'] } });
+    await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
+
+    // ── (c) PER-USER LIBRARY ACCESS: link-time map, derived views, 403s ──
+    {
+      // register a kid + a grown-up
+      for (const [un, pw] of [['t123kid', 'kidpass1'], ['t123grown', 'grownpass1']]) {
+        await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: un, password: pw }) });
+      }
+      const kidLogin = await j(await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 't123kid', password: 'kidpass1' }) }));
+      // the news library is for grown-ups only
+      const put = await fetch(BASE + '/api/admin/library-access', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ key: 'iptv:news', value: { users: ['t123grown'] } }) });
+      const kidLib = await j(await fetch(BASE + '/api/library?vb_auth=' + kidLogin.token));
+      const kidIptv = (kidLib.items || []).filter(i => i.source === 'iptv').length;
+      const newsItem = iptvItems[0];
+      const kidPlay = await fetch(`${BASE}/api/play/iptv/${newsItem.key}?vb_auth=${kidLogin.token}`);
+      const kidImg = await fetch(`${BASE}/img/iptv/${encodeURIComponent(newsItem.key)}?vb_auth=${kidLogin.token}`);
+      const grownLogin = await j(await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 't123grown', password: 'grownpass1' }) }));
+      const grownPlay = await fetch(`${BASE}/api/play/iptv/${newsItem.key}?vb_auth=${grownLogin.token}`);
+      const anonLib = await j(await fetch(BASE + '/api/library'));
+      const anonIptv = (anonLib.items || []).filter(i => i.source === 'iptv').length;
+      // the admin audit door reflects the same map
+      const laGet = await j(await fetch(BASE + '/api/admin/library-access', { headers: authH }));
+      // upgrade-compat + removal: clear it, kid sees the library again
+      await fetch(BASE + '/api/admin/library-access', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ key: 'iptv:news', value: null }) });
+      const kidLib2 = await j(await fetch(BASE + '/api/library?vb_auth=' + kidLogin.token));
+      const kidIptv2 = (kidLib2.items || []).filter(i => i.source === 'iptv').length;
+      R.checks.t123Access = {
+        putOk: put.status === 200,
+        kidSeesHiddenLib: kidIptv,          // must be 0
+        kidPlayBlocked: kidPlay.status,     // must be 403
+        kidPosterBlocked: kidImg.status,    // must be 404
+        grownPlays: grownPlay.status,       // must be 200
+        anonSees: anonIptv,                 // anonymous = everyone (v1 doctrine) → 1
+        auditDoor: laGet.access?.['iptv:news']?.users?.[0] === 't123grown' || laGet.access?.['iptv:news'] === undefined,   // after clear it's undefined — check pre-clear below
+        restored: kidIptv2,                 // must be 1
+        ok: put.status === 200 && kidIptv === 0 && kidPlay.status === 403 && kidImg.status === 404
+          && grownPlay.status === 200 && anonIptv === 1 && kidIptv2 === 1
+      };
+    }
+
+    // ── (d) SIMPLE MODE: /m serves, lists, and the phone redirect fires ──
+    {
+      const mp = await browser.newPage({ viewport: { width: 390, height: 700 }, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
+      await mp.goto(BASE + '/', { waitUntil: 'domcontentloaded' }).catch(() => {});
+      await mp.waitForTimeout(1800);
+      const redirected = /\/m$/.test(new URL(mp.url()).pathname);
+      const mHtml = await (await fetch(BASE + '/m')).text();
+      const serves = mHtml.includes('Simple Mode') && mHtml.includes('/js/m.js');
+      // the list actually renders + the data-saver toggle works
+      const mm = await mp.evaluate(async () => {
+        const out = {};
+        await new Promise(r => setTimeout(r, 1200));
+        out.gridCells = document.querySelectorAll('#grid .cell, #list .row').length;
+        const modeBtn = document.getElementById('mode');
+        if (modeBtn) { modeBtn.click(); await new Promise(r => setTimeout(r, 300)); }
+        out.toggled = !!document.getElementById('list') && !document.getElementById('list').hidden;
+        out.desktopLink = !!document.querySelector('footer a[href="/?desktop=1"]');
+        return out;
+      });
+      await mp.close();
+      R.checks.t123SimpleMode = { redirected, serves, ...mm,
+        ok: redirected && serves && mm.gridCells > 0 && mm.toggled && mm.desktopLink };
+    }
+
+    // ── (e) INVITES: the .bat is generated, validated, recorded ──
+    {
+      const bat = await fetch(`${BASE}/api/admin/invite/bat?name=SuitePal&key=tskey-auth-suite123&host=100.101.102.103:8181`, { headers: authH });
+      const batText = await bat.text();
+      const badKey = await fetch(`${BASE}/api/admin/invite/bat?name=x&key=nope&host=1.2.3.4:8181`, { headers: authH });
+      const noAuth = await fetch(`${BASE}/api/admin/invite/bat?name=x&key=tskey-auth-x&host=1.2.3.4:8181`);
+      const list = await j(await fetch(`${BASE}/api/admin/invites`, { headers: authH }));
+      R.checks.t123Invite = {
+        status: bat.status,
+        disposition: bat.headers.get('content-disposition') || '',
+        hasKey: batText.includes('tskey-auth-suite123'),
+        hasHost: batText.includes('100.101.102.103:8181'),
+        hasInstaller: batText.includes('tailscale-setup-latest-amd64.msi') && batText.includes('--authkey='),
+        failsLoudly: batText.includes('curl -L -f') && batText.includes('tailscale.com/download'),
+        pathOk: batText.includes('%TEMP%' + String.fromCharCode(92) + 'hb-tailscale.msi'),
+        badKey: badKey.status, noAuth: noAuth.status,
+        recorded: (list.invites || []).some(i => i.name === 'suitepal'),
+        ok: bat.status === 200 && batText.includes('tskey-auth-suite123') && batText.includes('100.101.102.103:8181')
+          && batText.includes('tailscale-setup-latest-amd64.msi') && batText.includes('curl -L -f')
+          && batText.includes('%TEMP%' + String.fromCharCode(92) + 'hb-tailscale.msi')
+          && badKey.status === 400 && noAuth.status === 403
+          && (list.invites || []).some(i => i.name === 'suitepal')
+      };
+    }
+
+    // ── (f) t125: the owner's broken Guide — recovery + guards ──
+    {
+      const { pathToFileURL } = require('node:url');
+      const { recoverIptvSections } = await import(pathToFileURL(require('node:path').resolve('server/lib/store.js')).href);
+      const mk = (sections, flag) => { const c = { iptv: { url: '', sections, unverified: false } }; if (flag) c._iptvRecheck = true; return c; };
+      const wiped = mk([]);       const healed = recoverIptvSections(wiped);       // wiped → the default six return
+      const again = mk([], true); const reflagged = recoverIptvSections(again);    // once-flagged → a deliberate off STAYS off
+      const kept  = mk(['news']); recoverIptvSections(kept);                       // non-empty → untouched
+      const uiSrc = require('node:fs').readFileSync('public/js/ui.js', 'utf8');
+      const guideSrc = require('node:fs').readFileSync('public/js/guide.js', 'utf8');
+      R.checks.t125WipeGuard = {
+        healed, sixBack: wiped.iptv.sections.length === 6,
+        onceOnly: !reflagged && again.iptv.sections.length === 0,
+        nonEmptyKept: kept.iptv.sections.length === 1 && kept.iptv.sections[0] === 'news',
+        uiGuard: uiSrc.includes('keptSections') && uiSrc.includes("'#iptv-libraries'"),
+        guideUnlocks: guideSrc.includes('exitPointerLock'),
+        ok: healed && wiped.iptv.sections.length === 6 && !reflagged && again.iptv.sections.length === 0
+          && kept.iptv.sections.length === 1 && uiSrc.includes('keptSections') && guideSrc.includes('exitPointerLock')
+      };
+    }
+
+    // ── (g) t127: the Guide's LANGUAGE pages ──
+    {
+      await put123({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news', 'kids', 'movies'], unverified: true } });
+      await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
+      const lg = await page.evaluate(async () => {
+        const w = window, s = w.__VB.scene, ctx = w.__VB.mainCtx;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = {};
+        try { await ctx.reloadLibrary?.(); } catch {}
+        await sleep(600);
+        s.debugTeleport(0, -8); await sleep(250);
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+        await sleep(400);
+        out.open = !document.getElementById('guide-modal').classList.contains('hidden');
+        out.pills = [...document.querySelectorAll('.guide-lang')].map(b => b.textContent.trim());
+        // Spanish → only Spanish channels; categories with no Spanish channels hide
+        const spa = [...document.querySelectorAll('.guide-lang')].find(b => b.textContent.trim().startsWith('Spanish'));
+        spa?.click(); await sleep(250);
+        out.catsAfter = [...document.querySelectorAll('.guide-cat')].map(b => b.textContent.trim());
+        // page through the Spanish categories: News → Rando Cast, Movies → Cine Latino
+        const catBtn = (t) => [...document.querySelectorAll('.guide-cat')].find(b => b.textContent.trim().startsWith(t));
+        catBtn('News')?.click(); await sleep(200);
+        out.spanishNews = [...document.querySelectorAll('.guide-row .guide-name')].map(n => n.textContent);
+        catBtn('Movies')?.click(); await sleep(200);
+        out.spanishMovies = [...document.querySelectorAll('.guide-row .guide-name')].map(n => n.textContent);
+        // L flips languages (t128: ★ Favorites rides first in the cycle):
+        // Spanish → ★ Favorites → All → English (English drops the empty
+        // Movies page, so the view lands back on News)
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true, cancelable: true })); await sleep(250);
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true, cancelable: true })); await sleep(250);
+        out.l1 = (document.querySelector('.guide-lang.active')?.textContent.trim() || '').startsWith('All');
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true, cancelable: true })); await sleep(250);
+        out.l2 = { active: (document.querySelector('.guide-lang.active')?.textContent.trim() || '').startsWith('English'),
+          rows: [...document.querySelectorAll('.guide-row .guide-name')].map(n => n.textContent) };
+        // pick one (English News page → News One) → the TV takes it
+        document.querySelector('.guide-row')?.click();
+        await sleep(2500);
+        out.tvTookIt = s.tv.stats().kind === 'video' && s.tv.surfaceInfo().srcSet === true;
+        s.tv.stop();
+        return out;
+      });
+      R.checks.t127GuideLangs = { ...lg,
+        ok: lg.open && lg.pills.length === 4 && lg.pills.some(p => p.startsWith('★ Favorites')) && lg.pills.some(p => p.startsWith('All')) && lg.pills.some(p => p.startsWith('English')) && lg.pills.some(p => p.startsWith('Spanish'))
+          && lg.spanishNews.length === 1 && lg.spanishNews[0] === 'Rando Cast'
+          && lg.spanishMovies.length === 1 && lg.spanishMovies[0] === 'Cine Latino'
+          && !lg.catsAfter.some(c => c.startsWith('Kids'))
+          && lg.l1 && lg.l2.active && lg.l2.rows.length === 1 && lg.l2.rows[0] === 'News One' && lg.tvTookIt };
+    }
+
+    // ── (h) t128: FAVORITE channels + the UI trim (My Media out; invites one home) ──
+    {
+      const fv = await page.evaluate(async () => {
+        const w = window, s = w.__VB.scene, ctx = w.__VB.mainCtx;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = {};
+        try { await ctx.reloadLibrary?.(); } catch {}
+        await sleep(600);
+        out.noMediaTab = !document.querySelector('[data-tab="media"]');
+        s.debugTeleport(0, -8); await sleep(250);
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+        await sleep(400);
+        // star the first row (the English News page from t127 → News One) —
+        // settle-retry: a re-render right after open can eat the first click
+        out.starExists = !!document.querySelector('.guide-row [data-star]');
+        for (let i = 0; i < 4 && !document.querySelector('.guide-row [data-star].on'); i++) {
+          document.querySelector('.guide-row [data-star]')?.click();
+          await sleep(200);
+        }
+        await sleep(200);
+        const starBtn = document.querySelector('.guide-row [data-star]');
+        out.starred = starBtn?.classList.contains('on') && starBtn?.textContent === '★';
+        out.favPill = (document.querySelector('.guide-lang.fav')?.textContent.trim() || '');
+        // the Favorites page → just News One
+        document.querySelector('.guide-lang.fav')?.click(); await sleep(250);
+        out.favRows = [...document.querySelectorAll('.guide-row .guide-name')].map(n => n.textContent);
+        // F unstars (page empties, hint shows) — F again brings it back (lastToggled fallback)
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true, cancelable: true })); await sleep(300);
+        out.afterFoff = { rows: document.querySelectorAll('.guide-row').length,
+          hint: (document.querySelector('#guide-body .hint')?.textContent || '').includes('☆') };
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true, cancelable: true })); await sleep(300);
+        out.afterFon = { rows: document.querySelectorAll('.guide-row').length,
+          starOn: document.querySelector('.guide-row [data-star]')?.classList.contains('on') };
+        // persistence: the prefs round-trip carries the favorites
+        const boot = await (await fetch('/api/bootstrap')).json();
+        out.bootstrapHas = (boot.prefs?.guideFavs || []).length === 1;
+        w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await sleep(150);
+        return out;
+      });
+      const uiSrc = require('node:fs').readFileSync('public/js/ui.js', 'utf8');
+      const idxSrc = require('node:fs').readFileSync('public/index.html', 'utf8');
+      R.checks.t128FavTrim = { ...fv,
+        oneInviteBox: uiSrc.split('id="invite-box"').length - 1 === 1 && uiSrc.includes('loadInvite(root);   // t128'),
+        noMediaLink: !idxSrc.includes('data-tab="media"'),
+        ok: fv.noMediaTab && fv.starExists && fv.starred && fv.favPill.startsWith('★ Favorites')
+          && fv.favRows.length === 1 && fv.favRows[0] === 'News One'
+          && fv.afterFoff.rows === 0 && fv.afterFoff.hint
+          && fv.afterFon.rows === 1 && fv.afterFon.starOn
+          && fv.bootstrapHas
+          && uiSrc.split('id="invite-box"').length - 1 === 1 && uiSrc.includes('loadInvite(root);   // t128')
+          && !idxSrc.includes('data-tab="media"') };
+    }
+
+    // ── (i) t130: room-aware remote + help refresh + ™© + policies presets ──
+    {
+      const r = await page.evaluate(async () => {
+        const w = window, s = w.__VB.scene, ctx = w.__VB.mainCtx;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = {};
+        // help overlay: the new keys are all documented
+        const help = document.getElementById('help-overlay');
+        const ht = help.textContent.toLowerCase();
+        out.helpUpdated = ht.includes('tv guide') && ht.includes('theater') && ht.includes('favorites')
+          && ht.includes('simple mode') && ht.includes('jukebox');
+        // sidebar: the brand line is in (all three marks, TRADEMARKS.md spellings),
+        // the source-status chip is out
+        const tmEl = document.querySelector('.sidebar-tm');
+        const tmTxt = tmEl?.textContent || '';
+        out.tmIn = !!tmEl && !document.querySelector('#sidebar-source')
+          && tmTxt.includes('Home Binger™') && tmTxt.includes('The CordCut Co-op™') && tmTxt.includes('TCC™')
+          && tmTxt.includes('© 2026 BluJ Productions');
+        // ── the remote in the STORE (jukebox playing) ──
+        s.debugTeleport(0, 4.2); await sleep(300);
+        const music = (w.__VB.state.items || []).find(i => ['album', 'radio', 'episode'].includes(i.type));
+        ctx.djDevice = 'jukebox';
+        const deck = ctx.dj.jukebox;
+        deck.queue.length = 0; deck.idx = -1; deck.repeat = 'off';
+        if (music) ctx.djAdd(music);
+        await sleep(1600);                                  // let the remote interval tick
+        out.storeRoom = ctx.playerRoom();
+        const gBtn = document.getElementById('tv-guide');
+        const rBtn = document.getElementById('tv-repeat');
+        out.guideHiddenStore = gBtn.style.display === 'none';
+        out.repeatShownStore = rBtn.style.display !== 'none';
+        // the Guide button must refuse outside the theater (owner: theater only)
+        gBtn.click(); await sleep(300);
+        out.guideBlockedStore = document.getElementById('guide-modal').classList.contains('hidden');
+        // repeat cycles the JUKEBOX deck: off → one
+        rBtn.click();
+        out.repeatCycled = deck.repeat === 'one' && rBtn.textContent === '🔂';
+        // ── the remote in the THEATER ──
+        s.jukeboxAudio.stop(); deck.queue.length = 0; deck.idx = -1; deck.repeat = 'off';
+        ctx.djDevice = 'booth';
+        s.debugTeleport(0, -8); await sleep(600);
+        out.repeatHiddenTheater = rBtn.style.display === 'none';
+        out.guideShownTheater = gBtn.style.display !== 'none';
+        return out;
+      });
+      // policies: the default-theme preset picker (fresh page = clean session)
+      const pp = await browser.newPage({ viewport: { width: 640, height: 400 } });
+      await pp.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
+      await pp.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await pp.waitForFunction(() => !!window.__VB?.mainCtx, { timeout: 45000 });
+      await pp.waitForTimeout(700);
+      await pp.evaluate(() => document.getElementById('btn-enter')?.click());
+      await pp.waitForTimeout(800);
+      const pol = await pp.evaluate(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'include', body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) });
+        await window.__VB.state.refresh?.();
+        await sleep(300);
+        document.querySelector('.side-link[data-tab="admin"]')?.click();   // JS click — visibility irrelevant
+        await sleep(500);
+        document.querySelector('[data-sub="policies"]')?.click();
+        await sleep(500);
+        const preset = document.getElementById('def-preset');
+        const out = { panel: !!preset, rethemeBox: !!document.getElementById('def-retheme') };
+        if (preset) {
+          out.sixOptions = preset.options.length === 6;    // Custom + the 5 named themes
+          // pick whichever preset DIFFERS from the store's current default
+          // (the built-in default already IS one of the presets)
+          const beforeWall = document.getElementById('def-wall').value;
+          for (const v of [...preset.options].map(o => o.value).filter(Boolean)) {
+            preset.value = v;
+            preset.dispatchEvent(new Event('change'));
+            await sleep(100);
+            if (document.getElementById('def-wall').value !== beforeWall) {
+              out.presetFills = true; out.presetPicked = v;
+              break;
+            }
+          }
+        }
+        document.getElementById('btn-settings-close')?.click();
+        return out;
+      });
+      await pp.close();
+      R.checks.t130Polish = { ...r, ...pol,
+        ok: r.helpUpdated && r.tmIn && r.storeRoom === 'store' && r.guideHiddenStore && r.repeatShownStore
+          && r.guideBlockedStore && r.repeatCycled && r.repeatHiddenTheater && r.guideShownTheater
+          && pol.panel && pol.sixOptions && pol.presetFills && pol.rethemeBox };
+    }
+
+    // ── (j) t132: the store's default theme actually reaches people ──
+    {
+      const NEON = { wall: '#0a0f2e', floor: '#0b0e24', shelf: '#23306b', accent: '#ff3ea5', style: 'metal' };
+      const COZY = { wall: '#5a3d24', floor: '#4a3220', shelf: '#7c5230', accent: '#ffb52e', style: 'wood' };
+      const MID  = { wall: '#101820', floor: '#0c1118', shelf: '#2a3440', accent: '#00e5ff', style: 'metal' };
+      const putCfg = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      // two fresh visitors — UNIQUE per run (the suite runs twice on the same
+      // store; a fixed name would carry last run's saved theme and break the
+      // "never personalized" assumption)
+      const t132sfx = Date.now().toString(36);
+      const [na, nb] = ['t132a' + t132sfx, 't132b' + t132sfx];
+      for (const un of [na, nb]) {
+        await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: un, password: 'pass1234' }) });
+      }
+      const la = await j(await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: na, password: 'pass1234' }) }));
+      const lb = await j(await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: nb, password: 'pass1234' }) }));
+      // 1) the store default reaches a FRESH visitor (null → configured default)
+      const before = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + lb.token));
+      const freshGotBuiltIn = before.prefs.theme.wall === NEON.wall;      // pre-change sanity
+      await putCfg({ defaults: { theme: COZY } });
+      const b2 = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + lb.token));
+      const freshGotDefault = b2.prefs.theme.wall === COZY.wall && b2.prefs.theme.accent === COZY.accent;
+      // 2) a personal theme still wins
+      await fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + la.token }, body: JSON.stringify({ theme: { accent: '#123456' } }) });
+      const pa = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + la.token));
+      const personalWins = pa.prefs.theme.accent === '#123456' && pa.prefs.theme.wall === COZY.wall;
+      // 3) re-theme everyone: saved profiles switch, followers keep following the default
+      const rt = await fetch(BASE + '/api/admin/retheme', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ theme: MID }) });
+      const rtJ = await j(rt);
+      const pa2 = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + la.token));
+      const pb2 = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + lb.token));
+      const noAuth = await fetch(BASE + '/api/admin/retheme', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ theme: MID }) });
+      // leave tidy: the store default back to the built-in Neon Night + everyone re-themed to it
+      await putCfg({ defaults: { theme: NEON } });
+      await fetch(BASE + '/api/admin/retheme', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ theme: NEON }) });
+      R.checks.t132DefaultTheme = {
+        freshGotBuiltIn, freshGotDefault, personalWins,
+        rethemeStatus: rt.status, rethemed: rtJ.rethemed,
+        personalizedSwitched: pa2.prefs.theme.accent === MID.accent && pa2.prefs.theme.wall === MID.wall,
+        followerStillDefault: pb2.prefs.theme.wall === COZY.wall,
+        noAuth: noAuth.status,
+        ok: freshGotBuiltIn && freshGotDefault && personalWins && rt.status === 200 && (rtJ.rethemed >= 1)
+          && pa2.prefs.theme.accent === MID.accent && pb2.prefs.theme.wall === COZY.wall && noAuth.status === 403
+      };
+    }
+
+    // ── (k) t133: a lock is a TRUE SYNC (writes profiles), not a mask ──
+    {
+      const NEON = { wall: '#0a0f2e', floor: '#0b0e24', shelf: '#23306b', accent: '#ff3ea5', style: 'metal' };
+      const COZY = { wall: '#5a3d24', floor: '#4a3220', shelf: '#7c5230', accent: '#ffb52e', style: 'wood' };
+      const MID  = { wall: '#101820', floor: '#0c1118', shelf: '#2a3440', accent: '#00e5ff', style: 'metal' };
+      const putCfg = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+      const sfx = Date.now().toString(36);
+      const un = 't133' + sfx;
+      await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: un, password: 'pass1234' }) });
+      const lu = await j(await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: un, password: 'pass1234' }) }));
+      // a visitor with a PERSONAL theme saved
+      await fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + lu.token }, body: JSON.stringify({ theme: { accent: '#123456' } }) });
+      const b1 = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + lu.token));
+      const hadPersonal = b1.mySavedPrefs.theme?.accent === '#123456';
+      // the owner's flow: set the house theme AND lock theming in ONE save
+      await putCfg({ defaults: { theme: COZY }, locks: { theme: true, sorting: false, shelves: false, sources: false } });
+      const b2 = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + lu.token));
+      const forced = b2.prefs.theme.wall === COZY.wall && b2.prefs.theme.accent === COZY.accent;
+      const synced = b2.mySavedPrefs.theme?.wall === COZY.wall && b2.mySavedPrefs.theme?.accent === COZY.accent;
+      // unlock — the sync must PERSIST (no snap-back to the old personal theme)
+      await putCfg({ locks: { theme: false, sorting: false, shelves: false, sources: false } });
+      const b3 = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + lu.token));
+      const persists = b3.prefs.theme.wall === COZY.wall && b3.mySavedPrefs.theme?.wall === COZY.wall;
+      // change the default UNDER the lock (no lock transition) → syncs again
+      await putCfg({ defaults: { theme: MID }, locks: { theme: true, sorting: false, shelves: false, sources: false } });
+      const b4 = await j(await fetch(BASE + '/api/bootstrap?vb_auth=' + lu.token));
+      const resynced = b4.mySavedPrefs.theme?.accent === MID.accent && b4.prefs.theme.accent === MID.accent;
+      // tidy: unlock, house theme back to the built-in, everyone re-themed to it
+      await putCfg({ defaults: { theme: NEON }, locks: { theme: false, sorting: false, shelves: false, sources: false } });
+      await fetch(BASE + '/api/admin/retheme', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ theme: NEON }) });
+      R.checks.t133LockSync = {
+        hadPersonal, forced, synced, persists, resynced,
+        ok: hadPersonal && forced && synced && persists && resynced
+      };
+    }
+
+    // leave tidy: iptv off (mock URL gone)
+    await put123({ iptv: { sections: [], url: '', unverified: false } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
+  }
+
   // 17b1c) t95: CHANGE PASSWORD — the one profile change without coverage:
   // current password required + verified, minimum length, round-trip login.
   {
@@ -4035,7 +4664,7 @@ const addonMock = http.createServer((req, res) => {
         const r = await fetch(H2 + `/api/friend/stream/${radioItem.source}/${encodeURIComponent(radioItem.key)}?token=` + code, { redirect: 'manual' });
         unsharedBlocked = r.status === 403 || r.status === 404;
       }
-      // per-user toggle (My Media) — opt out, then back in
+      // per-user source toggle (prefs-driven; the My Media panel is gone, t128) — opt out, then back in
       await fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ sources: { 'fs-1': false } }) });
       const libOff = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
       const offOk = !(libOff.items || []).some(i => i.source === 'fs-1');
@@ -4456,9 +5085,349 @@ const addonMock = http.createServer((req, res) => {
     R.checks.t90Visual = { ...R.checks.t90Visual, camOk, buildOk, ok: R.checks.t90Visual.ok && camOk && buildOk };
   }
 
+
+  // ═══ t134: THE ROOM-SEPARATION + THEME wave (owner bug list, 2026-09-14) ═══
+  // dance-hall remote haunted by the theater · stuck accent materials ·
+  // dance-door sweep-back on slow walks · shelf un-pin resurrection ·
+  // boot-time CSS theme revert · standby default idle · docked Guide in fs
+  {
+    // (a) API: the store default idle screen is the STANDBY card now
+    const tvIdle = await j(await fetch(BASE + '/api/tv'));
+    R.checks.t134IdleDefault = { mode: tvIdle.idleMode, ok: tvIdle.idleMode === 'standby' };
+
+    // (b) STAGE this wave's preconditions: plex albums (booth + remote),
+    //     iptv news (the Guide) and archive movies (the screen). The suite's
+    //     end-state config is free-only (t133's restore), and the reload below
+    //     re-fetches the library as this page's profile — so the wave owns its
+    //     setup, the same way t123 re-stages its wing.
+    await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
+      body: JSON.stringify({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'] },
+        sources: { demo: false, plex: true, jellyfin: false },
+        plex: { url: 'http://localhost:32770', token: 't', sections: ['1', '2', '4'] },
+        archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] },
+        radio: { url: 'http://127.0.0.1:32790', sections: ['oldies'] }, podcasts: { feeds: [] } }) });
+    await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
+
+    // (c) stuck accents retint + the close-then-reopen theme test
+    R.checks.t134ThemeStuck = await page.evaluate(async () => {
+      const VB = window.__VB, s = VB.scene, st = VB.state, ctx = VB.mainCtx;
+      const out = {};
+      out.idleMode = s.tv.surfaceInfo().idleMode;   // '' personal → store default = standby
+      const before = s.stuckAudit();
+      ctx.applyTheme({ accent: '#7dff5a', wall: '#1c4a2a' });   // the settings panel's path
+      await st.updatePrefs({ theme: { ...st.prefs.theme } });
+      await new Promise(r => setTimeout(r, 250));
+      const after = s.stuckAudit();
+      out.before = before; out.after = after;
+      out.css = getComputedStyle(document.documentElement).getPropertyValue('--vb-accent').trim();
+      out.retinted = ['subMouth', 'satRing', 'seatPiping', 'cones', 'slot'].every(k => after[k] === '#7dff5a');
+      out.ok = out.retinted && out.css === '#7dff5a' && out.idleMode === 'standby';
+      return out;
+    });
+
+    // (c) CLOSE + REOPEN (reload): the saved theme must survive — the 3D store
+    //     AND the DOM (t134: boot never called themeVars, so menus reverted)
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => { const g = window.__VB?.scene?.threeScene?.getObjectByName('shelves'); return !!g && g.children.some(c => c.isInstancedMesh && c.count > 30); }, { timeout: 45000 });
+    await page.waitForFunction(() => !document.getElementById('btn-enter')?.classList.contains('hidden'), { timeout: 30000 });
+    await page.evaluate(() => { document.getElementById('btn-enter').click(); });   // the scene loop idles behind the entry gate
+    await page.waitForTimeout(700);
+    R.checks.t134Staged = await page.evaluate(() => {   // the reload re-fetched the library as this profile
+      const st = window.__VB.state;
+      const albums = (st.items || []).filter(i => i.type === 'album').length;
+      const iptv = (st.items || []).filter(i => i.source === 'iptv').length;
+      const movies = (st.items || []).filter(i => i.type === 'movie').length;
+      return { albums, iptv, movies, ok: albums > 0 && iptv > 0 && movies > 0 };
+    });
+    R.checks.t134ThemePersist = await page.evaluate(() => {
+      const VB = window.__VB, s = VB.scene, st = VB.state;
+      const audit = s.stuckAudit();
+      const css = getComputedStyle(document.documentElement).getPropertyValue('--vb-accent').trim();
+      return { accent: st.prefs.theme.accent, audit, css,
+        ok: st.prefs.theme.accent === '#7dff5a' && css === '#7dff5a'
+          && ['subMouth', 'satRing', 'seatPiping', 'cones', 'slot'].every(k => audit[k] === '#7dff5a') };
+    });
+
+    // (d) door swing-latch: walk SLOWLY through both swinging doors — the
+    //     panels must never reverse mid-crossing (the "buggy walking through"
+    //     report; running used to beat the reversal)
+    R.checks.t134DoorLatch = await page.evaluate(async () => {
+      const s = window.__VB.scene;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const raf2 = () => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));   // ≥1 scene-loop tick
+      const dAng = () => (s.hallState().danceDoorAngles || [])[0] ?? 0;
+      const tAng = () => (s.theaterState().doorsAngles || [])[0] ?? 0;
+      // let the freshly-stocked page settle into a steady frame cadence first
+      await new Promise(res => { let n = 0; const tick = () => (++n >= 40) ? res() : requestAnimationFrame(tick); requestAnimationFrame(tick); });
+      // walk through slowly; capture the swing the door commits to, and count
+      // any mid-cross reversal (the "buggy walking through" report). Each step
+      // waits for REAL frames so the door state machine sees every position.
+      const cross = async (axis, from, to, fixed, read) => {
+        let sign = 0, flips = 0, maxA = 0;
+        const d = from < to ? 0.08 : -0.08;      // walks either direction
+        for (let v = from; d > 0 ? v <= to : v >= to; v += d) {
+          s.debugTeleport(axis === 'x' ? v : fixed, axis === 'x' ? fixed : v);
+          await raf2(); await sleep(60);
+          const a = read();
+          maxA = Math.max(maxA, Math.abs(a));
+          if (sign === 0 && Math.abs(a) > 0.25) sign = Math.sign(a);
+          if (sign !== 0 && Math.abs(a) > 0.15 && Math.sign(a) !== sign) flips++;
+        }
+        return { sign, flips, maxA };
+      };
+      const awayShut = async (read, ms = 12000) => {   // springs shut once we're clear
+        let last = null;
+        for (let t = 0; t < Math.ceil(ms / 120); t++) { last = read(); if (Math.abs(last) < 0.1) return { shut: true, last }; await sleep(120); }
+        return { shut: false, last };
+      };
+      const zDoor = s.danceInfo().doorCenterZ;
+      const danceIn = await cross('x', 5.0, 7.6, zDoor, dAng);
+      const danceBack = await cross('x', 7.6, 5.0, zDoor, dAng);
+      s.debugTeleport(0, 3.4);                    // clear of the doorway
+      const danceShut = await awayShut(dAng);
+      const th = await cross('z', -6.4, -9.0, 0, tAng);
+      s.debugTeleport(0, -12.5);                  // deep in the theater
+      const thShut = await awayShut(tAng);
+      s.debugTeleport(0, 4.2);
+      return { danceIn: { opened: danceIn.sign !== 0, flips: danceIn.flips, maxA: danceIn.maxA },
+        danceBack: { opened: danceBack.sign !== 0, flips: danceBack.flips, maxA: danceBack.maxA },
+        theater: { opened: th.sign !== 0, flips: th.flips, maxA: th.maxA },
+        danceShut: danceShut.shut, thShut: thShut.shut, lastDance: danceShut.last, lastTh: thShut.last,
+        ok: danceIn.sign !== 0 && danceIn.flips === 0 && danceBack.sign !== 0 && danceBack.flips === 0
+          && th.sign !== 0 && th.flips === 0 && danceShut.shut && thShut.shut };
+    });
+
+    // (e) THREE-ROOM remote: jukebox in the store, the booth rig in the dance
+    //     hall, the screen in the theater (the theater's remote used to haunt
+    //     the dance floor whenever the projector ran)
+    R.checks.t134RoomRemote = await page.evaluate(async () => {
+      const VB = window.__VB, s = VB.scene, ctx = VB.mainCtx, st = VB.state;
+      const out = {};
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const movie = (st.items || []).find(i => i.type === 'movie');
+      s.tv.playItem(movie); await sleep(600);
+      const spies = {};
+      for (const [name, obj] of [['tv', s.tv], ['juke', s.jukeboxAudio], ['booth', s.djAudio]]) {
+        const orig = obj.togglePlay.bind(obj); let n = 0;
+        obj.togglePlay = (...a) => { n++; return orig(...a); };
+        spies[name] = { orig, count: () => n, restore: () => { obj.togglePlay = orig; } };
+      }
+      const stopSpy = (() => { const ch = s.djAudio; const orig = ch.stop.bind(ch); let n = 0; ch.stop = (...a) => { n++; return orig(...a); }; return { count: () => n, restore: () => { ch.stop = orig; } }; })();
+      // in the dance hall with the projector running: NO theater remote
+      s.debugTeleport(9.5, 2.0); await sleep(700);
+      out.room = ctx.playerRoom();
+      out.hiddenInDance = document.getElementById('tv-remote').classList.contains('hidden');
+      out.noTheaterTag = !(document.getElementById('remote-room')?.textContent || '').includes('THEATER');
+      // spin the classic booth deck → the remote appears, bound to the BOOTH
+      const albums = (st.items || []).filter(i => i.type === 'album');
+      ctx.dj.booth.add(albums[0]); ctx.dj.booth.add(albums[1]); ctx.dj.booth.playAt(0);
+      await sleep(700);
+      out.shownDance = !document.getElementById('tv-remote').classList.contains('hidden');
+      out.boothTag = (document.getElementById('remote-room')?.textContent || '').includes('BOOTH');
+      out.queueBooth = document.querySelectorAll('#tv-queue [data-bqidx]').length > 0;
+      document.getElementById('tv-play').click(); await sleep(150);
+      out.danceClick = { tv: spies.tv.count(), juke: spies.juke.count(), booth: spies.booth.count() };
+      const volEl = document.getElementById('tv-vol');
+      volEl.value = '40'; volEl.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      out.boothVolTarget = s.djAudio.volumeInfo().target;
+      document.getElementById('tv-stop').click(); await sleep(150);   // mock streams blink-end + auto-advance: assert ROUTING
+      out.boothStopCalled = stopSpy.count() >= 1;
+      out.dbg = { albumN: albums.length, album0: albums[0]?.key ?? null, queueLen: ctx.dj?.booth?.queue?.length, boothStats: ctx.boothStats?.() };
+      stopSpy.restore();
+      ctx.dj.booth.queue.length = 0; ctx.dj.booth.idx = -1; ctx.boothStop();
+      // theater → the screen; store → the jukebox
+      s.debugTeleport(0, -8.5); await sleep(700);
+      out.theaterTag = (document.getElementById('remote-room')?.textContent || '').includes('THEATER');
+      document.getElementById('tv-play').click(); await sleep(150);
+      out.theaterClick = { tv: spies.tv.count(), juke: spies.juke.count() };
+      s.debugTeleport(3.5, -4.2); await sleep(700);
+      out.storeTag = (document.getElementById('remote-room')?.textContent || '').includes('JUKEBOX');
+      for (const k of Object.keys(spies)) spies[k].restore();
+      s.tv.stop(); ctx.boothStop(); ctx.jukeboxStop();
+      out.ok = out.room === 'dance' && out.hiddenInDance && out.noTheaterTag && out.shownDance
+        && out.boothTag && out.queueBooth
+        && out.danceClick.tv === 0 && out.danceClick.juke === 0 && out.danceClick.booth === 1
+        && Math.abs(out.boothVolTarget - 0.4) < 0.01 && out.boothStopCalled
+        && out.theaterTag && out.theaterClick.tv === 1 && out.storeTag;
+      return out;
+    });
+
+    // (f) shelf map un-pin STICKS (the tombstone fix — a unit set back to
+    //     Automatic used to resurrect its old pin on next load)
+    R.checks.t134ShelfUnpin = await page.evaluate(async () => {
+      const VB = window.__VB, st = VB.state, ctx = VB.mainCtx;
+      const out = {};
+      const units = ctx.shelfUnits().map(u => u.id);
+      const unit = units.includes('wall-R-0') ? 'wall-R-0' : units[0];
+      const sec = (st.sections || []).find(x => x.key && x.name === 'Movies')
+        || (st.sections || []).find(x => x.key && !/^(radio|iptv):/.test(x.key) && !x.key.includes('Album'));
+      if (!unit || !sec) return { ok: false, why: 'no unit/section' };
+      await st.updatePrefs({ shelves: { [unit]: sec.key } });
+      await st.refresh();
+      out.pinned = st.prefs.shelves?.[unit] === sec.key;
+      await st.updatePrefs({ shelves: { [unit]: '' } });   // back to Automatic
+      await st.refresh();
+      out.unpinned = !st.prefs.shelves?.[unit];
+      out.savedClean = !st.boot.mySavedPrefs?.shelves?.[unit];
+      // …and the REAL panel path (the novice-pass find: the panel's own
+      // "back to Automatic" sent the map without the key, so the server's
+      // merge re-inherited the pin and it resurrected on the next load)
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      document.getElementById('btn-menu').click(); await sleep(300);
+      document.querySelector('.side-link[data-tab="shelves"]')?.click(); await sleep(300);
+      const sel = document.querySelector(`select[data-unit="${unit}"]`);
+      const opt = sel ? [...sel.options].find(o => o.value && !/^(radio|iptv):/.test(o.value)) : null;
+      if (sel && opt) {
+        sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(500); await st.refresh();
+        out.panelPin = st.boot.mySavedPrefs?.shelves?.[unit] === opt.value;
+        sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(500); await st.refresh();
+        out.panelUnpin = st.boot.mySavedPrefs?.shelves?.[unit] === undefined;
+      }
+      document.getElementById('btn-settings-close')?.click();
+      document.getElementById('btn-sidebar-close')?.click();
+      out.ok = out.pinned && out.unpinned && out.savedClean && out.panelPin && out.panelUnpin;
+      return out;
+    });
+
+    // (g) G in TRUE full screen docks the Guide beside the video — the video
+    //     keeps its EXACT box (1:1) and slides left; Esc peels one layer at a time
+    R.checks.t134GuideDock = await page.evaluate(async () => {
+      const VB = window.__VB, s = VB.scene, st = VB.state;
+      const out = {};
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      s.debugTeleport(0, -8.5);
+      const movie = (st.items || []).find(i => i.type === 'movie');
+      s.tv.playItem(movie); await sleep(600);
+      out.entered = s.tv.enterFullscreen();
+      await sleep(150);
+      try { s.tv.mediaEl().pause(); } catch {}   // mock video blink-ends — pin it paused
+      await sleep(80);
+      const vid = document.getElementById('vb-fs-video');
+      out.vidIsVideo = vid?.tagName === 'VIDEO';
+      out.gates = {
+        modalOpen: [...document.querySelectorAll('.modal')].filter(m => !m.classList.contains('hidden')).map(m => m.id),
+        settingsHidden: document.getElementById('settings')?.classList.contains('hidden'),
+        channels: (st.items || []).filter(i => i.source === 'iptv' && i.type === 'live').length,
+        room: VB.mainCtx.playerRoom() };
+      const r0 = vid.getBoundingClientRect();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+      const expected = -0.5 * Math.min(460, innerWidth * 0.44);
+      let tx = 0;
+      for (let i = 0; i < 40; i++) {   // the slide is a transition; swiftshader frames can crawl
+        await sleep(100);
+        const m = getComputedStyle(vid).transform.match(/matrix\(1, 0, 0, 1, (-?[\d.]+), 0\)/);
+        tx = m ? parseFloat(m[1]) : 0;
+        if (Math.abs(tx - expected) < 1) break;
+      }
+      out.slideSettled = Math.abs(tx - expected) < 1;
+      const modal = document.getElementById('guide-modal');
+      out.open = modal && !modal.classList.contains('hidden');
+      out.docked = document.body.classList.contains('fs-guide');
+      const r1 = vid.getBoundingClientRect();
+      out.sameSize = Math.abs(r1.width - r0.width) < 0.5 && Math.abs(r1.height - r0.height) < 0.5;
+      out.movedLeft = r1.left < r0.left - 40;
+      const mr = modal.getBoundingClientRect();
+      out.dockRight = Math.abs(mr.right - innerWidth) < 6 && mr.width > 220 && mr.width < innerWidth * 0.5;
+      out.rows = document.querySelectorAll('.guide-row').length;
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(300);
+      out.guideClosedByEsc = modal.classList.contains('hidden');
+      out.fsStillOn = s.tv.fullscreenActive();
+      const r2 = vid.getBoundingClientRect();
+      out.videoBackCenter = Math.abs(r2.left - r0.left) < 0.5;
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(300);
+      out.fsExited = !s.tv.fullscreenActive();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+      await sleep(350);
+      out.gOverlayStillWorks = !modal.classList.contains('hidden') && !document.body.classList.contains('fs-guide');
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+      await sleep(150);
+      s.tv.stop();
+      out.ok = out.entered && out.vidIsVideo && out.open && out.docked && out.slideSettled
+        && out.sameSize && out.movedLeft && out.dockRight && out.rows > 0
+        && out.guideClosedByEsc && out.fsStillOn && out.videoBackCenter && out.fsExited && out.gOverlayStillWorks;
+      return out;
+    });
+
+    // (g2) t135: picking a channel in the docked Guide KEEPS full screen on —
+    //      switching media must not kick you out of the theater (owner report
+    //      on the 1.10.0 beta2). Esc + the ✕ chip still end it, as always.
+    R.checks.t135FsChannelSwitch = await page.evaluate(async () => {
+      const VB = window.__VB, s = VB.scene, st = VB.state;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const key = k => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: k === 'Escape' ? 'Escape' : 'Enter', bubbles: true, cancelable: true }));
+      const out = {};
+      s.debugTeleport(0, -8.5, 0, 0);
+      const movie = (st.items || []).find(i => i.type === 'movie');
+      s.tv.playItem(movie); await sleep(600);
+      out.fs = s.tv.enterFullscreen();
+      try { s.tv.mediaEl().pause(); } catch {}   // pin the mock movie
+      await sleep(150);
+      key('g'); await sleep(700);                // the docked Guide
+      out.guide = !document.getElementById('guide-modal').classList.contains('hidden');
+      key('Enter'); await sleep(1600);           // pick the channel
+      out.guideClosed = document.getElementById('guide-modal').classList.contains('hidden');
+      out.fsKept = s.tv.fullscreenActive();      // THE fix
+      const cur = s.tv.state?.playing;
+      out.channel = cur?.item?.source === 'iptv';
+      out.playing = s.tv.stats().playing;
+      key('Escape'); await sleep(350);
+      out.escExits = !s.tv.fullscreenActive();
+      out.fsAgain = s.tv.enterFullscreen(); await sleep(200);
+      document.getElementById('tv-fs-close').click(); await sleep(250);
+      out.chipExits = !s.tv.fullscreenActive();
+      s.tv.stop();
+      out.ok = out.fs && out.guide && out.guideClosed && out.fsKept && out.channel
+        && out.playing && out.escExits && out.fsAgain && out.chipExits;
+      return out;
+    });
+
+    // (h) booth set rolling, then the theater: every booth path stays zoned,
+    //     the movie's graph and volume untouched (the "sounds off" report)
+    R.checks.t134BoothZones = await page.evaluate(async () => {
+      const VB = window.__VB, s = VB.scene, st = VB.state, ctx = VB.mainCtx;
+      const out = {};
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      s.debugTeleport(0, -8.5);
+      const movie = (st.items || []).find(i => i.type === 'movie');
+      s.tv.playItem(movie); await sleep(700);
+      const before = { vol: JSON.stringify(s.tv.volumeInfo()), stats: s.tv.stats().playing };
+      const music = (st.items || []).find(i => i.type === 'album');
+      window.__VB.ui.openDj('booth');              // the panel mounts the rig — the real path
+      await sleep(250);
+      s.djPro.playItem(music); await sleep(800);   // the booth laptop's own decks
+      out.proLoaded = s.djPro.decksRef().some(d => d.item);
+      s.debugTeleport(0, -8.5); await sleep(600);  // back into the theater, set rolling
+      out.room = ctx.playerRoom();
+      out.tvStillPlaying = s.tv.stats().playing;
+      out.tvVolSame = JSON.stringify(s.tv.volumeInfo()) === before.vol;
+      out.classicBoothZoned = s.djAudio.zoneAudible({ x: 0, y: 1.6, z: -10 }) === false;
+      out.jukeZoned = s.jukeboxAudio.zoneAudible({ x: 0, y: 1.6, z: -10 }) === false;
+      s.djPro.stopAll(); s.tv.stop();
+      const djm = document.getElementById('dj-modal');   // put the panel away
+      if (djm) djm.classList.add('hidden');
+      out.ok = out.proLoaded && out.room === 'theater' && out.tvStillPlaying && out.tvVolSame
+        && out.classicBoothZoned && out.jukeZoned;
+      return out;
+    });
+
+    // leave the guest profile on the store default theme
+    await page.evaluate(async () => {
+      const VB = window.__VB, st = VB.state, ctx = VB.mainCtx;
+      const d = st.boot.defaults.theme;
+      Object.assign(st.prefs.theme, d);
+      ctx.applyTheme(d);
+      await st.updatePrefs({ theme: { ...st.prefs.theme } });
+    });
+  }
+
   // ── restore the live preview: real archive.org defaults, no mocks ──
   await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
-    body: JSON.stringify({ sources: { demo: false, plex: false, jellyfin: false }, archive: { url: '', sections: ['staff-picks', 'sci-fi-horror', 'noir', 'comedy', 'cartoons', 'westerns', 'serials'] }, radio: { url: '', sections: ['oldies', 'synthwave'] }, podcasts: { feeds: [] }, shelves: {} }) });
+    body: JSON.stringify({ local: { on: false, spots: [] }, sources: { demo: false, plex: false, jellyfin: false }, archive: { url: '', sections: ['staff-picks', 'sci-fi-horror', 'noir', 'comedy', 'cartoons', 'westerns', 'serials'] }, radio: { url: '', sections: ['oldies', 'synthwave'] }, podcasts: { feeds: [] }, shelves: {} }) });
   await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
 
   console.log(JSON.stringify(R));

@@ -182,8 +182,13 @@ export function sanitizeShelfMap(map) {
 export function writePrefs(key, incoming) {
   const current = readPrefs(key);
   const next = {
-    theme: { ...current.theme, ...(incoming.theme || {}) },
-    sorting: { ...current.sorting, ...(incoming.sorting || {}) },
+    // t132: null stays null (follow the store's default) until the visitor
+    // actually personalizes; a personal save always arrives complete (the
+    // /api/prefs route sanitizes the full merge before it gets here).
+    theme: (incoming.theme || current.theme)
+      ? { ...(current.theme || {}), ...(incoming.theme || {}) } : null,
+    sorting: (incoming.sorting || current.sorting)
+      ? { ...(current.sorting || {}), ...(incoming.sorting || {}) } : null,
     // Style-only: the visualizer COLOR always follows the theme accent —
     // one theme syncs menus, store AND visualizer per user.
     visualizer: {
@@ -204,6 +209,10 @@ export function writePrefs(key, incoming) {
     sources: incoming.sources !== undefined
       ? sanitizeSourcesPref(incoming.sources)
       : (current.sources ?? null),
+    // t128: the Guide's favorite channels (ids, bounded; kept when absent)
+    guideFavs: Array.isArray(incoming.guideFavs)
+      ? [...new Set(incoming.guideFavs.map(String).filter(x => x.length > 0 && x.length <= 100))].slice(0, 300)
+      : (current.guideFavs || []),
     updatedAt: Date.now()
   };
   setProfile(key, next);

@@ -2,10 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- t123: phones land in SIMPLE MODE (the plain list client at /m).
+     Desktop is one tap away (?desktop=1 remembers), the desktop exe is
+     never redirected, and anything without a touchscreen stays here. -->
+<script>
+(function () {
+  try {
+    if (localStorage.getItem('hb_desktop') === '1') return;
+    if (/[?&]desktop=1/.test(location.search)) { localStorage.setItem('hb_desktop', '1'); return; }
+    if (/Electron\//i.test(navigator.userAgent)) return;
+    var touch = (navigator.maxTouchPoints || 0) > 0;   // touch laptops don't match phoneUA and aren't narrow
+    var narrow = Math.min(screen.width, screen.height) <= 500;
+    var phoneUA = /iPhone|Android(?!.*TV)|Windows Phone|Pixel|Galaxy S/i.test(navigator.userAgent);
+    if (touch && (phoneUA || narrow)) location.replace('/m');
+  } catch (e) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Home Binger — Be Kind, Rewind</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230a0f2e'/><text x='32' y='42' font-size='34' text-anchor='middle' fill='%23ff3ea5' font-family='sans-serif' font-weight='900' font-style='italic'>HB</text></svg>">
-<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/style.css?v=1789342462621">
 </head>
 <body class="overlay-open">
 
@@ -58,6 +74,7 @@
   <!-- TV REMOTE — bottom bar, appears while something plays on the store TV -->
   <div id="tv-remote" class="hidden">
     <span id="remote-room">🎬 THEATER</span>
+    <button id="tv-guide" class="hud-btn" title="TV Guide — the free live TV channels (or press G in the theater)">📖</button>
     <button id="tv-stop" class="hud-btn" title="Stop — back to the idle screen">⏹</button>
     <button id="tv-prev" class="hud-btn" title="Previous">⏮</button>
     <button id="tv-skip-back" class="hud-btn" title="Back 10 seconds">⏪10</button>
@@ -93,14 +110,13 @@
     <nav id="sidebar-nav">
       <button class="side-link" data-tab="look">🎨 <span>My Theme</span><small>colors · visualizer · TV idle</small></button>
       <button class="side-link" data-tab="shelves">📼 <span>My Shelves</span><small>sorting &amp; shelf map</small></button>
-      <button class="side-link" data-tab="media">📺 <span>My Media</span><small>what stocks my shelves</small></button>
       <button class="side-link" data-tab="profile">👤 <span>My Profile</span><small>account · password · invite</small></button>
       <button class="side-link guest-only" id="nav-admin-login" data-tab="profile">🛠️ <span>Admin sign-in</span><small>manage servers · TV · users</small></button>
       <button class="side-link admin-only hidden" data-tab="admin">🛠️ <span>Admin</span><small>server · users · policies — one place</small></button>
     </nav>
     <div class="sidebar-foot">
       <button id="btn-leave-store" class="btn wide" style="margin-bottom:8px">🚪 Back to front entrance</button>
-      <div id="sidebar-source" class="source-chip">Demo Library</div>
+      <div class="sidebar-tm" title="Trademarks &amp; credits — see TRADEMARKS.md in the app folder">Home Binger™ · The CordCut Co-op™ · TCC™<br><span>© 2026 BluJ Productions. All rights reserved.</span></div>
     </div>
   </aside>
 
@@ -160,10 +176,16 @@
         <div><b>Click a case</b><span>details &amp; "Play on the store TV"</span></div>
         <div><b>Q</b><span>release / re-grab the mouse (Esc works too)</span></div>
         <div><b>Scroll</b><span>zoom in / out</span></div>
-        <div><b>☰ Menu</b><span>theme, sorting, profile, admin</span></div>
+        <div><b>☰ Menu</b><span>theme, shelves, profile, admin</span></div>
         <div><b>Admins</b><span>☰ Menu → Admin sign-in to manage the store</span></div>
+        <div><b>📖 G</b><span>TV Guide — in the THEATER: free live channels</span></div>
+        <div><b>◀ ▶</b><span>Guide: flip category pages</span></div>
+        <div><b>L</b><span>Guide: flip languages (★ Favorites rides first)</span></div>
+        <div><b>F</b><span>Guide: star / unstar the selected channel</span></div>
+        <div><b>▲ ▼</b><span>Guide: flip channels · Enter watches</span></div>
+        <div><b>🎵 Jukebox</b><span>the box by the register — click it for the music deck</span></div>
       </div>
-      <p class="help-note">On phones/tablets: left half of the screen moves, right half looks around, tap to select.</p>
+      <p class="help-note">Phones get Simple Mode automatically (a fast, clean list — "Desktop mode" at the bottom of that page brings the full 3D store).</p>
       <button id="btn-help-close" class="btn accent wide">Let's browse</button>
     </div>
   </div>
@@ -206,7 +228,8 @@
     </div>
   </div>
 
-  <script src="/js/vendor/resonance-audio.min.js?v=1789174562813"></script>
-  <script type="module" src="/js/main.js?v=1789174562813"></script>
+  <script src="/js/vendor/resonance-audio.min.js?v=1789342462621"></script>
+  <script src="/vendor/hls.min.js"></script>
+  <script type="module" src="/js/main.js?v=1789342462621"></script>
 </body>
 </html>

@@ -28,6 +28,8 @@ for (const f of ['README.md', 'LICENSE', 'CHANGELOG.md', 'START-HERE.txt', 'STAR
 fs.mkdirSync(path.join(STAGE, 'docs'), { recursive: true });
 for (const img of ['og-home-binger.png', 'store-entrance.png', 'theater.png', 'dance-hall.png'])
   fs.cpSync(path.join(ROOT, 'docs', img), path.join(STAGE, 'docs', img));
+// t135: the 1.10.0 "what's new" gallery — the bundled README links these
+fs.cpSync(path.join(ROOT, 'docs', 'whats-new'), path.join(STAGE, 'docs', 'whats-new'), { recursive: true });
 // t96: the remote-access guide + the license credits ride in the folder
 // t97: the friend-sharing how-to too (ships in 1.8.1)
 for (const doc of ['REMOTE-ACCESS.md', 'CREDITS.md', 'FRIEND-SHARING.md'])

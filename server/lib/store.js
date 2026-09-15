@@ -47,6 +47,14 @@ export const defaultConfig = () => ({
   podcasts: { feeds: [] },
   // Live radio wall via radio-browser.info: [] = none.
   radio: { url: '', sections: ['oldies', 'synthwave'] },
+  // t123: FREE LIVE TV (iptv-org, curated officially-free tier) — plays in
+  // the theater's GUIDE menu, never on the shelves. unverified = widen to
+  // every non-NSFW US channel (off by default, honestly labeled).
+  iptv: { url: '', sections: ['news', 'movies', 'series', 'kids', 'documentary', 'public'], unverified: false },
+  // t123: PER-USER LIBRARY ACCESS (the parents/kids ask). Map of sectionKey →
+  // 'all' | { users: [username,…] }. ABSENT = 'all' (existing installs keep
+  // seeing everything until the admin answers the link-time prompt).
+  libraryAccess: {},
   // t61/t62: the file grabber — MULTIPLE spots on this machine, each shelved
   // recursively. (Legacy single-path { on, path } migrates to one spot on load.)
   local: { on: false, spots: [] },
@@ -59,7 +67,7 @@ export const defaultConfig = () => ({
   //   mode: 'loop'    → built-in synthwave attraction loop (works offline)
   //   mode: 'url'     → any direct video URL (mp4/webm)
   //   mode: 'item'    → an item from the connected media server
-  tv: { enabled: true, mode: 'white', url: '', itemId: '' },   // 'white' = blank projector screen
+  tv: { enabled: true, mode: 'standby', url: '', itemId: '' },   // t134: 'standby' card is THE default idle screen (was 'white' — the owner called it)
   // Feature toggles the admin can LOCK for everyone:
   //   lockTheme   → guests/users cannot change their theme (defaults apply)
   //   lockSorting → guests/users cannot change their shelf arrangement
@@ -89,8 +97,11 @@ export const defaultConfig = () => ({
 
 // ── Default per-user preferences ─────────────────────────────────────────────
 export const defaultPrefs = () => ({
-  theme: { ...defaultConfig().defaults.theme },
-  sorting: { ...defaultConfig().defaults.sorting },
+  // t132: null = FOLLOW THE STORE'S DEFAULT (Admin → Policies). The old
+  // baked-in snapshot meant the admin's chosen default theme/sorting never
+  // reached ANYONE — not even brand-new visitors.
+  theme: null,
+  sorting: null,
   visualizer: { style: 'bars' },   // TV music visualizer — color ALWAYS follows the theme accent
   // personal shelf map (unitId → sectionKey; '' keys dropped = that unit automatic)
   shelves: {},
@@ -115,6 +126,14 @@ export function loadConfig() {
   if (config.local && config.local.path && !(Array.isArray(config.local.spots) && config.local.spots.length))
     config.local.spots = [config.local.path];
 
+  // t125: ONE-TIME recovery from the t124 admin-list bug — the Live TV group
+  // list in Admin → Media rendered as an error (the route serialized the async
+  // iptv adapter's Promise as {}), so a save collected zero checked groups and
+  // wiped iptv.sections to []. First boot of the fixed build: empty sections
+  // get the default groups back; a deliberate "all groups off" made AFTER
+  // this boot persists (the once-flag lives in config.json).
+  if (recoverIptvSections(config)) saveConfig();
+
   // t39: connection boxes start EMPTY — a legacy build shipped a literal "t"
   // as the Plex token placeholder-junk; scrub it so no masked ghost reappears
   if (config.plex?.token === 't') config.plex.token = '';
@@ -122,6 +141,12 @@ export function loadConfig() {
 
   // migrate old configs: the former 'demo' TV loop is now called 'loop'
   if (config.tv && config.tv.mode === 'demo') config.tv.mode = 'standby';
+  // t134: 'white' (blank projector screen) was the old DEFAULT, never an
+  // admin choice (the admin picker can't even save it) — every saved 'white'
+  // is the seed-time default leaking into configs. The standby card is the
+  // default idle screen now; visitors can still pick the blank projector
+  // screen as their PERSONAL idle screen anytime.
+  if (config.tv && config.tv.mode === 'white') { config.tv.mode = 'standby'; saveConfig(); }
   // migrate the single-source era → per-source toggles (one-time)
   if (!loaded.sources && loaded.source) {
     // legacy single-source configs: personal servers stay on; the removed
@@ -149,6 +174,15 @@ export function loadConfig() {
   return config;
 }
 export function getConfig() { return config ?? loadConfig(); }
+
+// t125: pure helper (unit-tested by the suite) — see the call site above.
+export function recoverIptvSections(cfg) {
+  if (!cfg?.iptv || cfg._iptvRecheck) return false;
+  cfg._iptvRecheck = true;
+  if (Array.isArray(cfg.iptv.sections) && !cfg.iptv.sections.length)
+    cfg.iptv.sections = defaultConfig().iptv.sections.slice();
+  return true;
+}
 export function saveConfig() {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }

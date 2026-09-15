@@ -2,7 +2,7 @@
 
 *From a single video-store room to a full media building. Updated every turn.*
 
-**Current phase: 1.8.1 BUILT FOR TESTING** (updated 2026-09-09) — friends' shelves are in; next up: the built-in remote-access helper (Tailscale on-ramp) + HB↔HB rung 2
+**Current phase: 1.10.0 BUILT FOR OWNER TESTING** (updated 2026-09-12) — the one box (jukebox fix + Friends Update + live TV Guide + per-user libraries + phone Simple Mode + friend invites) is in the owner's hands for real-machine review; ships after the review + the one-friend gate
 
 ---
 
@@ -712,6 +712,20 @@ in the folder; repo pack 75 files TCC-swept ×0. Awaiting owner upload.)*
       painter stall under swiftshader froze the TEXT, engine fine);
       t121 scroll loop dispatches the scroll event explicitly. **Folds
       into 1.9.0 (still not uploaded).**
+- [x] **🚀 PUBLISHED: v1.9.0 LIVE (2026-09-12)** — owner uploaded: tag
+      v1.9.0 (not pre-release) + corrected notes + byte-exact beta zip;
+      main = full 83-file source (t121 + stamp verified); update notice
+      resolves (1.8.9 clients see it, 1.9.0 doesn't nag). GOFILE BACKUP:
+      https://gofile.io/d/lXKi1qSD (both zips). CLEANUP DONE: beta zip
+      deleted from the workspace (on GitHub + gofile), bench regenerated
+      (5/5) + benchgen.cjs stashed at the workspace root, source zip
+      kept. OWNER FOLLOW-UPS FLAGGED: (1) tag v1.9.0 was created before
+      the 1.9.0 commit → points at 1.8.9 (release-page Source links
+      serve 1.8.9; main is correct) — fix: delete the tag, edit the
+      release, re-type v1.9.0 (creates on current main), paste the body
+      ONCE; (2) release body has the notes pasted twice. **NEXT UP:
+      tester feedback on 1.9.0 → Tailscale on-ramp → HB↔HB rung 2 →
+      W1 → DLC LAST.**
 - [ ] **HB↔HB rung 2** — item-level share granularity · "friend store
       offline" indicator in the UI · follower-side browse polish.
 *(DECIDED: ONE BIGGER RELEASE — t94 hardening + version notice + remote
@@ -720,7 +734,82 @@ connections all ship together as **1.8.0**; no separate 1.7.1. Owner,
 
 ## Phase W — WATCH PARTY 🍿 *(owner request 2026-09-08)*
 **ORDER (owner, 2026-09-08): remote connections come FIRST — watch party
-work starts once remote access is done.** Far-away friends can't join a
+work starts once remote access is done.** *(2026-09-12: the queue's first
+three items are now RESEARCHED — docs/RESEARCH-TAILSCALE-ONRAMP.md ·
+docs/RESEARCH-HB2HB-RUNG2.md · docs/RESEARCH-WATCHPARTY.md. Structure +
+yes/no/maybe verdicts, ZERO implementation until each doc's gate
+checklist passes — owner doctrine: "i dont guess i research.")*
+*(2026-09-12, later: TWO MORE researched — docs/RESEARCH-MOBILE-LIST.md
+(simple list UI for phones, desktop-mode toggle — all YES) and
+docs/RESEARCH-ROKU.md (no easy full path; three priced paths: AirPlay 2
+free-rider / DLNA server / native channel big-project). Also flagged
+for a future research pass: first-run SETUP WIZARD — the owner's
+"easier for non-technical people" ask.)*
+*(2026-09-12, latest: ALL open questions DECIDED ("go with your calls")
+— every research doc now carries an Owner-decisions-LOCKED section.
+RELEASE GATE (owner): nothing ships until the friend path is proven
+live with ONE REAL FRIEND. NEW: docs/RESEARCH-FREE-PROVIDERS.md —
+Scholastic NO (app dead 2025-11-04 + copyrighted), radio wall already
+runs radio-browser (upgrade = genre picker), LibriVox the star YES
+(public API, ~20k PD audiobooks), LoC + NASA YES, plus honest NOs
+(Kanopy/Hoopla/Tubi/YouTube). Provider work is additive — can slot
+between queue items.)*
+*(2026-09-12, t122 HOTFIX BUILT (awaiting owner release as v1.9.1): the
+jukebox podcasts-never-play bug — /api/play/podcast/* 404'd since
+podcasts shipped (adapter key 'podcast' vs config key 'podcasts'), and
+1.9.0's t121 picker was the first jukebox path that could reach it; plus
+the dead-first-track queue wedge. Both fixed, suite 118/118 ×2, stamp
+re-run. Books PARKED by owner ("wait before adding anything book wise");
+podcasts stay green. NEW: docs/RESEARCH-CODE-SIGNING.md — the Windows
+flagging ask: EV = NO (2024 change), SignPath = NO (license), Azure
+~$9.99/mo or Certum ~$115–167/yr = the real options, Microsoft Store =
+the only zero-warning endgame. DECIDED same day: $0 — stay unsigned,
+free MS submission per release. RELEASE PLAN UPDATED same day: the
+hotfix + Friends Update ship as ONE combined release (owner: "i want
+this hotfix and the friends update all in one") — friend gate applies
+to the whole box. NEW: docs/RESEARCH-LIVETV.md — ALLtvLive app NO (no
+LICENSE file, wrong stack), its source iptv-org YES-with-conditions
+(verified live; needs vendored hls.js for Chromium; curated
+officially-free tier ~576 US channels; dead-stream handling); ships
+GREEN-LIT same day: "Green light on live tv. Anything that we can get
+for free we can use" — and per the owner's sequencing call it rides IN
+the combined release ("what better way to let people test than with
+free tv and their own personal libraries"). Design locked: channels
+NEVER on shelves; a nostalgic GUIDE menu in the THEATER (numbered rows,
+time axis, honest LIVE cells — EPG measured: no free source covers
+FAST channels, epg.pw = cable-lineup 24/576); G-key + remote GUIDE
+button + screen-click to open; ▲/▼ channel flipping; friend gate
+covers the whole box incl. the Guide; Roku SKIPPED by owner same day.
+BUILT same day (t123, suite 123/123 ×2): the live TV Guide (iptv adapter +
+signed m3u8 proxy + vendored hls.js + theater Guide UI, channels never on
+shelves), per-user library access (link-time prompt + server-enforced
+403s), Simple Mode /m with phone redirect, and the Tailscale invite .bat
+generator — version 1.10.0, in the workspace repo awaiting the owner's
+review + the friend gate. FULL AUDIT PASSED same day (docs/QA-AUDIT-2026-09-12.md): suite
+118/118 ×2 · live journey 14/14 on real sources · security probes clean
+· live-TV simulation PROVED the proxy design (9/12 channels play; direct
+play dead) · desktop build + live update-notice + phone-viewport smoke
+all pass · zero app bugs found. ALSO IN THE BOX (researched same day):
+BUILT same day (t123, suite 123/123 ×2): the live TV Guide (iptv adapter +
+signed m3u8 proxy + vendored hls.js + theater Guide UI, channels never on
+shelves), per-user library access (link-time prompt + server-enforced
+403s), Simple Mode /m with phone redirect, and the Tailscale invite .bat
+generator — version 1.10.0, in the workspace repo awaiting the owner's
+review + the friend gate. FULL AUDIT PASSED same day (docs/QA-AUDIT-2026-09-12.md): suite
+118/118 ×2 · live journey 14/14 on real sources · security probes clean
+· live-TV simulation PROVED the m3u8-rewrite proxy design (9/12 channels
+play; direct play 0/12 — RESEARCH-LIVETV.md updated) · desktop build +
+live update-notice + phone-viewport smoke all pass · zero app bugs
+found. PER-USER LIBRARY ACCESS —
+docs/RESEARCH-PER-USER-LIBRARIES.md, the parents/kids ask; verdict YES
+from existing machinery + one real security gap to close (/api/play +
+/api/tv/stream take no view today); FLOW REDESIGNED BY OWNER: the
+"who gets this library?" prompt fires AT LINK TIME (all accounts
+default · certain-ones picker · new accounts inherit only 'all' ·
+pre-update libraries unchanged); per-LIBRARY audience map with derived
+per-user views; server-enforced; shared-TV-screen caveat recorded;
+liftable like live TV.)*
+Far-away friends can't join a
 theater night they can't reach. Watch together, w2g-style, but it's YOUR
 store. Staged honestly by size:
 - **W1 — synced theater nights (small):** the host queues a title; everyone

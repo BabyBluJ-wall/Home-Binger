@@ -12,10 +12,10 @@
 //  (The big store logo lives in room.js, above the entry door.)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1789174562813';
-import { signTexture, drawPlaceholderCover } from './textures.js?v=1789174562813';
-import { api } from '../api.js?v=1789174562813';
-import { islandSpecs } from './shelves.js?v=1789174562813';
+import { LAYOUT, TUNING } from './config.js?v=1789342462621';
+import { signTexture, drawPlaceholderCover } from './textures.js?v=1789342462621';
+import { api } from '../api.js?v=1789342462621';
+import { islandSpecs } from './shelves.js?v=1789342462621';
 
 export function buildSignage(theme) {
   const group = new THREE.Group();

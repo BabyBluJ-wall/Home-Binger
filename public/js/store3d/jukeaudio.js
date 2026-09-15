@@ -7,7 +7,7 @@
 //  the store never hears the movie — soundproofing both ways).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789174562813';
+import { LAYOUT } from './config.js?v=1789342462621';
 
 export function createJukeAudio() {
   const D = LAYOUT.room.l / 2;
@@ -40,11 +40,24 @@ export function createJukeAudio() {
   //    reloads the stream and RESUMES from the last position, a few tries
   //    with backoff. Without this, one dropped socket silently killed the
   //    song partway through — no error, no retry, just quiet.
-  let resumeTries = 0, lastNudge = 0;
+  //    t122 addition: a URL that dies BEFORE the first note (404, pulled
+  //    file, dead station) is NOT a hiccup — retrying it can't help. It now
+  //    fast-fails and tells the deck to move on, and an exhausted retry
+  //    ladder advances the queue too. Before, a dead first track wedged the
+  //    jukebox forever: 'ended' never fired, so the queue never advanced.
+  let resumeTries = 0, lastNudge = 0, started = false, deadStreak = 0, lastDeadAt = 0;
+  function noteDead() {                    // this URL will never play — advance, or rest after 3 in a row
+    const now = Date.now();
+    deadStreak = (now - lastDeadAt < 2500) ? deadStreak + 1 : 1;
+    lastDeadAt = now;
+    current = null;
+    if (deadStreak <= 3) onEndedCb?.();    // queue end / repeat guard lives in the deck's next()
+  }
   function resumeAudio() {
     if (!el || !current) return;
-    if (resumeTries >= 5) { current = null; return; }
+    if (resumeTries >= 5) { noteDead(); return; }
     resumeTries++;
+    started = false;                       // the RELOAD hasn't proven anything yet
     const at = el.currentTime || 0;
     const src = el.getAttribute('src');
     if (!src) { current = null; return; }
@@ -63,9 +76,11 @@ export function createJukeAudio() {
     el.loop = false;
     el.volume = graphedEl ? 1 : volTarget;   // t63: unity only once the node chain exists
     el.addEventListener('ended', () => { current = null; resumeTries = 0; onEndedCb?.(); });
-    el.addEventListener('playing', () => { resumeTries = 0; });
+    el.addEventListener('playing', () => { resumeTries = 0; started = true; deadStreak = 0; });
     el.addEventListener('error', () => {
-      if (current && el.getAttribute('src')) setTimeout(resumeAudio, 600 * (resumeTries + 1));
+      const wasLoading = !!el.getAttribute('src');
+      if (current && wasLoading && started) { setTimeout(resumeAudio, 600 * (resumeTries + 1)); return; }   // mid-stream hiccup → ladder
+      if (wasLoading) noteDead();          // t122: died before the first note → the URL itself is dead, don't ladder it
       else current = null;
     });
     el.addEventListener('stalled', () => {
@@ -271,13 +286,14 @@ export function createJukeAudio() {
         || ['movie', 'show', 'musicvideo'].includes(item.type)) return false;
       ensure(); graph();
       el.src = `/api/play/${item.source}/${encodeURIComponent(item.key)}?audio=1`;
+      started = false; resumeTries = 0;      // t122: a fresh load hasn't proven anything yet
       el.play().then(() => { current = item; }, () => { current = null; });
       current = item;
       return true;
     },
     stop() {
       if (el) { el.pause(); el.removeAttribute('src'); el.load(); }
-      current = null;
+      current = null; started = false; deadStreak = 0;
     },
     nowPlaying: () => current ? { title: current.title } : null,
     element: () => el,          // tests/debug: reach the raw <audio>

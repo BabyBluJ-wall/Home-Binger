@@ -17,9 +17,10 @@
 //  (or ⏹ Stop) controls it.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789174562813';
-import { signTexture, hashString } from './textures.js?v=1789174562813';
-import { computeTheaterSpeakers } from './room.js?v=1789174562813';   // 8.2 layout (shared with the room mesh)
+import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1789342462621';   // t123: live TV (HLS) on the big screen
+import { LAYOUT } from './config.js?v=1789342462621';
+import { signTexture, hashString } from './textures.js?v=1789342462621';
+import { computeTheaterSpeakers } from './room.js?v=1789342462621';   // 8.2 layout (shared with the room mesh)
 
 const TW = 512, TH = 288;   // screen canvas LOGICAL resolution (drawing code)
 const SS = 3.75;            // supersample: device canvas = TW×SS × TH×SS = 1920×1080.
@@ -103,6 +104,7 @@ export function buildTV(theme) {
 
   // ── media elements (one video + one audio, reused) ──
   let videoEl = null;
+  let hlsHandle = null;                   // t123: the live-TV hls.js session
   let audioEl = null, analyser = null, audioData = null;
   let videoFailed = false;
   // TRUE only after the <video> has PRESENTED an actual frame for the new src.
@@ -379,6 +381,7 @@ export function buildTV(theme) {
     } catch { analyser = null; /* visualizer falls back to animated bars */ }
   }
   function stopMedia() {
+    if (hlsHandle) { try { hlsHandle.destroy(); } catch {} hlsHandle = null; }   // t123: tear down any live-TV session
     exitFullscreen();                                  // detach the DOM layer if up
     if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); }
     if (audioEl) { audioEl.pause(); audioEl.removeAttribute('src'); }
@@ -416,6 +419,10 @@ export function buildTV(theme) {
     }
     fsActive = true;
     document.body.classList.add('tv-fullscreen');
+    // t134: a Guide that was already open docks beside the video instead of
+    // hiding behind it (the fs layer sits above every modal otherwise)
+    if (!document.getElementById('guide-modal')?.classList.contains('hidden'))
+      document.body.classList.add('fs-guide');
     hudShow();
     emit();
     return true;
@@ -424,6 +431,7 @@ export function buildTV(theme) {
     if (!fsActive) return;
     fsActive = false;
     document.body.classList.remove('tv-fullscreen');
+    document.body.classList.remove('fs-guide');   // t134: un-dock the Guide if it's up
     hudHide();
     const el = document.getElementById('vb-fs-video');
     // NOTE: removing a <video> from the DOM PAUSES it (spec behaviour) — that
@@ -436,7 +444,12 @@ export function buildTV(theme) {
     emit();
   }
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Escape' && fsActive) exitFullscreen();
+    if (e.code === 'Escape' && fsActive) {
+      // t134: with the Guide docked, the FIRST Esc closes the Guide — the
+      // movie stays full screen (the next Esc leaves it)
+      if (!document.getElementById('guide-modal')?.classList.contains('hidden')) return;
+      exitFullscreen();
+    }
   });
 
   // ── full-screen HUD — seek bar + transport controls. While playing it
@@ -569,7 +582,16 @@ export function buildTV(theme) {
       emit();                                               // the deck points you to the wall unit
       return false;
     }
+    // t135: switching media keeps the big screen big. stopMedia() exits fs —
+    // which is right for STOP, but a fresh playItem (picking a channel in the
+    // docked Guide, or any "play this now" while in full screen) must not
+    // kick you out of the theater. Auto-advance already preserved fs via
+    // startCurrent's `if (fsActive) enterFullscreen()`; now playItem does too
+    // (wasFs rides across stopMedia; startCurrent re-arms the layer for the
+    // new item). Esc and the ✕ chip still exit as always.
+    const wasFs = fsActive;
     stopMedia();
+    fsActive = wasFs;
     // COPY the list — callers hand us their own array (a live filter result),
     // and queue edits (play-next splices) must never mutate their copy
     if (queue?.list?.length) S.queue = { list: [...queue.list], index: queue.index ?? 0, mode: S.queue?.mode || 'off' };
@@ -598,12 +620,23 @@ export function buildTV(theme) {
       videoFailed = false;
       videoEl.muted = false;               // started from a real click → sound OK
       videoEl.volume = 1;               // t60: the gain node owns volume — no zipper steps
-      videoEl.src = `/api/play/${item.source}/${encodeURIComponent(item.key)}`;
+      // t123: HLS (live TV — and Plex tuner channels too, which are HLS as
+      // well) rides hls.js; everything else keeps the direct src path.
+      const vsrc = `/api/play/${item.source}/${encodeURIComponent(item.key)}`;
+      if (isHlsItem(item, vsrc)) {
+        hlsHandle = attachStream(videoEl, vsrc, { onError: () => { videoFailed = true; } });
+        videoEl.play().catch(() => {         // autoplay refused → retry muted (same ladder as direct)
+          videoEl.muted = true;
+          videoEl.play().catch(() => { videoFailed = true; });
+        });
+      } else {
+        videoEl.src = vsrc;
+        videoEl.play().catch(() => {         // autoplay refused → retry muted
+          videoEl.muted = true;
+          videoEl.play().catch(() => { videoFailed = true; });
+        });
+      }
       markVideoSrc();
-      videoEl.play().catch(() => {         // autoplay refused → retry muted
-        videoEl.muted = true;
-        videoEl.play().catch(() => { videoFailed = true; });
-      });
     } else if (S.playing.kind === 'audio') {
       ensureAudio();
       videoFailed = false;
@@ -1117,7 +1150,7 @@ export function buildTV(theme) {
         // webm all die with MEDIA_ERR_SRC_NOT_SUPPORTED — so tests assert the
         // direct path is BUILT and FED rather than that frames painted)
         videoAttached: !!(videoQuad && vidTex && vidTex.image === videoEl),
-        srcSet: /\/api\/play\//.test(videoEl?.src || ''),
+        srcSet: /\/api\/play\//.test(videoEl?.src || '') || !!hlsHandle,   // t123: hls feeds the element via MSE (no el.src)
         canvasAttached: screenMat.map === screenTex,   // t44: idle cards actually displayed
         letterboxBlack: barsBlack };
     },

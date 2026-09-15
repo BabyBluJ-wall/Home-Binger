@@ -8,11 +8,12 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1789174562813';
-import { api } from './api.js?v=1789174562813';
-import { initUI } from './ui.js?v=1789174562813';
-import { createScene } from './store3d/scene.js?v=1789174562813';
-import { STORE, SUPPORT } from './store3d/config.js?v=1789174562813';
+import { state } from './state.js?v=1789342462621';
+import { api } from './api.js?v=1789342462621';
+import { initUI } from './ui.js?v=1789342462621';
+import { createScene } from './store3d/scene.js?v=1789342462621';
+import { STORE, SUPPORT } from './store3d/config.js?v=1789342462621';
+import { initGuide, guideInfo, openGuide } from './guide.js?v=1789342462621';   // t123: the TV Guide
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -82,7 +83,17 @@ async function boot() {
   }
 
   const prefs = state.prefs;
+  // t132: "follow the store's default" (null) — swap in the store default
+  // before anything reads it; a personal save later makes it concrete.
+  if (!prefs.theme) prefs.theme = state.boot.defaults.theme;
+  if (!prefs.sorting) prefs.sorting = state.boot.defaults.sorting;
   let scene;
+  // t134 FIX — THE "close it and open it again" THEME BUG: boot built the 3D
+  // store with the saved theme but never told the DOM, so every menu, panel
+  // and button reverted to the Neon Night defaults on each restart while the
+  // store itself wore the right colors ("themes are still broken"). The CSS
+  // variables now follow the saved theme from the very first paint.
+  themeVars(prefs.theme);
   try {
     scene = createScene($('#scene-container'), prefs.theme);
   } catch (err) {
@@ -241,6 +252,14 @@ async function boot() {
     jukeboxSeek: (s) => scene.jukeboxAudio.seekBy(s),
     jukeboxSetVolume: (v) => scene.jukeboxAudio.setVolume(v),
     jukeboxStats: () => scene.jukeboxAudio.stats(),
+    // t134: the dance hall's remote drives the BOOTH rig (its own channel —
+    // the rooms' audio, visuals and controls are fully separated)
+    boothToggle: () => scene.djAudio.togglePlay(),
+    boothSeek: (s) => scene.djAudio.seekBy(s),
+    boothSetVolume: (v) => scene.djAudio.setVolume(v),
+    boothStop: () => scene.djAudio.stop(),
+    boothStats: () => scene.djAudio.stats(),
+    boothPro: () => scene.djPro,   // t134: the pro rig (the booth laptop's own decks)
     // which room the player stands in — the remote binds to THIS (the wall
     // line z ≈ −6.35 is the store/theater boundary)
     playerRoom: () => {
@@ -410,7 +429,17 @@ async function boot() {
     toastIt(`🎬 ${payload.format} loaded — rolling on the big screen`);
     scene.carry(null);
   };
-  scene.onJukeboxClick = () => ui.openDj('jukebox');   // t52: the DJ UI lives on the jukebox now
+  scene.onJukeboxClick = () => ui.openDj('jukebox');
+
+  // t123: the TV GUIDE — lives in the theater (G key / remote 📖 button)
+  initGuide({
+    playItem: (it) => ctx.playItem(it),
+    playerRoom: () => ctx.playerRoom(),
+    getTv: () => ctx.getTv(),
+    toast: (msg, warn) => toastIt(msg, warn)
+  });
+  ctx.guideInfo = guideInfo;
+  ctx.openGuide = openGuide;   // t123: tests + the remote path   // t52: the DJ UI lives on the jukebox now
   scene.onDjClick = () => ui.openDj('booth');                           // t52: booth runs its own deck
   scene.onStreetDoorClick = () => toastIt('🧟 Zombie warning, Stay and party');   // t52
   scene.onRecordClick = (item) => {                                      // spin a vinyl

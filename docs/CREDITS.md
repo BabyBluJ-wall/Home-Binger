@@ -74,6 +74,10 @@ is not an endorsement by them.
   for agent-assisted projects; authorship and rights remain with
   BluJ Productions as the directing party.
 
+- **hls.js v1.7.3 (Apache-2.0)** — HLS playback for the live TV Guide and
+  Simple Mode, vendored verbatim at `public/vendor/hls.min.js`
+  (license note alongside: `public/vendor/HLS-LICENSE.txt`).
+
 ## Home Binger itself
 
 © BluJ Productions · CC BY-NC-SA 4.0 (see [LICENSE](../LICENSE)).

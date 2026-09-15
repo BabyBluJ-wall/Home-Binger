@@ -1,3 +1,579 @@
+## 2026-09-13 — t133: a lock is a TRUE SYNC, not a mask
+- **Owner: "the admin theme lock works for only part of it not all of it.
+  everyone would still have to go sync their theme by changing it
+  themselves."** Exactly right: the lock only OVERLAID the house theme on
+  display — every saved profile kept its old personal theme underneath, so
+  the moment the lock came off, everyone snapped back out of sync (and
+  open sessions kept their old look until reload). Now:
+  - **Turning the theme lock ON writes the house theme into every saved
+    profile** (and changing the locked default re-writes everyone). The
+    lock genuinely syncs the store — nothing to redo, no snap-back when
+    it comes off. Same rule for the sorting lock.
+  - **"Re-theme everyone now" also fires when theming is locked** (it used
+    to skip, assuming the lock covered it — it only masked it).
+  - Note for the owner's mental model: other people's ALREADY-OPEN windows
+    still pick up a lock/default change on their next reload — there's no
+    live push (by design; no websocket infra).
+- **Suite: 129/129 ×2** (+1 t133LockSync: personal theme saved → lock+new
+  default in one save → forced AND written to the profile → unlock →
+  STAYS synced (no snap-back) → change default under lock → re-synced).
+- Env note: FOURTH recycle this window mid-turn (playwright/chrome/exe/
+  electron cache/zip list all vanished; swap unavailable in this container
+  pass — suite ran fine on RAM alone). Tailscale URL lesson recorded: the
+  exe is `tailscale-setup-1.102.4.exe` — the `-amd64` suffix belongs to
+  the MSIs (a 10-byte "Not Found" is the tell).
+
+## 2026-09-13 — t132: the Policies default theme actually reaches people now
+- **Owner: "The policy theme changer doesnt change anything. I think the
+  main theme take prio."** Right on both counts, and deeper than priority:
+  the store's default theme was baked into every visitor's preference
+  snapshot at creation (a copy of the BUILT-IN theme, not the admin's
+  configured one) — so the Policies default reached NOBODY: not existing
+  visitors (their snapshot won), not even brand-new ones (they got the
+  built-in, not the configured default). Only "Lock theming" ever surfaced
+  it. Fixed:
+  - **"Follow the store's default" is now a real state** (theme/sorting
+    null until a visitor personalizes) — new visitors get the admin's
+    CONFIGURED default from Admin → Policies; personal choices still win
+    once made. Same fix for the default SORTING.
+  - **A personal patch rides the store's look:** recoloring one wall no
+    longer snaps the rest of your theme to the built-in defaults — it
+    merges onto the store's configured default.
+  - **"Re-theme everyone now" (checked by default)** in Admin → Policies:
+    saving a CHANGED default theme also switches every saved profile —
+    including the admin's — so the store visibly changes on save. One-time:
+    visitors can still personalize afterwards. (Skipped automatically when
+    "Lock theming" is on — the lock already forces everyone.)
+- **Suite: 128/128 ×2** (+1 t132DefaultTheme: fresh visitor gets the
+  configured default, personal override wins, partial patches keep the
+  store look, re-theme switches saved profiles + admin-only 403, followers
+  keep following the default). The check itself needed the suite's
+  unique-username pattern (run-twice on the same store). Run B hit one
+  known DJ timing flake (t117 relaxOk — swiftshader family, unrelated);
+  runs A and C clean on identical bytes.
+
+## 2026-09-13 — t131: the sidebar footer is the real brand line
+- **Owner: "#3 lets make it make sense. Home Binger™ The CordCut Co-Op™ TCC™
+  are what we have so far. Make sure it lines up with that."** The sidebar's
+  bottom mark now reads the actual brand line, exactly as TRADEMARKS.md
+  records it: **Home Binger™ · The CordCut Co-op™ · TCC™** over
+  **© 2026 BluJ Productions. All rights reserved.** (TRADEMARKS.md's
+  sign-off, verbatim — the "Co-op" spelling is the recorded usage). The
+  tooltip still points at TRADEMARKS.md in the app folder. Suite assert
+  extended: all three marks + the copyright line must be present.
+
+## 2026-09-13 — t130: the Guide returns to the theater; remote fixed; help refreshed; ™©; Policies presets
+- **Owner: "adding the tv guide messed with the remote more than it should
+  have."** The remote is room-aware now: the 📖 GUIDE button appears ONLY in
+  the theater (outside it, clicking says "the Guide lives in the theater"),
+  and the repeat button belongs to the JUKEBOX again — visible at the
+  jukebox where it cycles the jukebox deck (off → one → all), hidden in the
+  theater. Owner's call, and it's right: repeat isn't needed for TV or
+  movies — the playlist feature covers those.
+- **The help menu (first-run overlay) is rewritten for everything new:**
+  G opens the Guide in the theater, ◀ ▶ flip category pages, L flips
+  languages (★ Favorites first), F stars a channel, ▲ ▼ flip channels,
+  the jukebox note, and the phone note now explains Simple Mode +
+  "Desktop mode".
+- **The sidebar's bottom status chip (the green-dot "Podcasts" line) is
+  gone — the ™© mark sits there now** (tooltip points at TRADEMARKS.md in
+  the app folder). The chip's updater and CSS retired with it.
+- **Admin → Policies can now PICK the default theme from the same presets
+  visitors get** (Video Store Classic, Neon Night, Cozy Video Store,
+  Midnight Modern, Retro Mall + "Custom") — choosing one fills the color
+  pickers and shelf style; the pickers remain for fine-tuning. The store's
+  built-in default is the Neon Night preset.
+- **Suite: 127/127 ×2** (+1 t130Polish: help content, ™© in / chip out,
+  guide button hidden in the store + refuses to open, jukebox repeat
+  cycles, both buttons flip correctly per room, policies preset select +
+  fill — verified on a fresh admin page). One probe lesson: the store's
+  default theme already IS a preset (Neon Night), so the preset test picks
+  whichever preset differs from current.
+
+## 2026-09-13 — t129: favorite channels; My Media removed; invites have ONE home
+- **Owner: "Can we also favorite channels that way we can access our favorite
+  ones faster?"** Every Guide row now has a ☆/★ — click it or press **F** on
+  the selected channel. A **★ Favorites** page rides first in the language
+  row (with its count); it shows just your stars across the categories, and
+  L cycles to it first. Favorites are saved per profile (account or device)
+  and survive reloads. If you un-star the last one while ON the Favorites
+  page, F brings it straight back.
+- **Two real bugs the suite caught while building this:** (1) the bootstrap
+  served a fixed-key prefs object — favorites would have vanished on every
+  reload; guideFavs now rides it. (2) writePrefs rebuilt prefs with a fixed
+  key whitelist — the new key was silently dropped on save; fixed at the
+  source. Plus one hardening: star clicks resolve against the Guide's own
+  snapshot, so a library reload in flight can't silently eat a click.
+- **Owner: "The 'My Media' Setting panel, Whats the use of it? If we dont
+  need it lets remove it."** It was the per-user "media mix" (each visitor
+  picking which free shelves stock THEIR view) — real, but redundant next to
+  the admin's per-user library access and one more thing to explain.
+  REMOVED: the tab, the panel, and every hint that pointed at it. Settings
+  are now My Theme · My Shelves · My Profile · Admin. (The server still
+  honors mixes users saved before — nothing changes underneath.)
+- **Owner: "Invite a friend is also in more than one spot now."** It was in
+  THREE (the LAN-address box on both the signed-in and guest profile panels,
+  plus the Tailscale card in Admin → Users). Now ONE home: Admin → Users —
+  the Tailscale invite card, with the same-Wi-Fi address box right under it.
+- **Suite: 126/126 ×2** (+1: t128FavTrim — star, Favorites page, F-off/F-on
+  with the empty-page fallback, prefs round-trip, no My Media tab, exactly
+  one invite box; panels + t127 checks updated for the new shape).
+
+## 2026-09-13 — t127: the Guide's LANGUAGE pages (owner ask)
+- **Owner: "Can we seperate the channels by laguage as well?"** The Guide now
+  separates channels by language, with real data: the iptv-org API carries no
+  language field (measured: 0 of 31,299 channels), but the directory
+  publishes one playlist grouped by language — the server joins on it
+  (tvg-id → group-title) at feed-load time, so every channel knows its
+  language(s). Measured live: the curated 848 channels span 44 languages
+  (English 416 · Spanish 147 · Danish 68 · French 67…); the unverified tier
+  spans 105. If the language playlist ever can't be fetched, the Guide just
+  offers no language row — channels are unaffected.
+- In the Guide: a LANGUAGE row above the categories — All + the top languages
+  by channel count (a language needs ≥2 channels; "+N more" expands the long
+  tail — 105 pills would be a wall). Pick one and every category page shows
+  only that language's channels; category counts update and empty categories
+  hide. Press **L** to flip through languages; the pick is remembered across
+  opens (and drops itself if a config change removes its channels).
+- Suite: +1 check (t127GuideLangs — pills, Spanish filtering, hidden
+  categories, L-cycling, pick-plays; the mock grew a language playlist + a
+  Spanish pair). The first run caught a real integration miss: /api/library's
+  item whitelist didn't carry the new `langs` field — fixed.
+  **125/125 ×2 (A + C clean; B hit one known DJ-booth sync-phase timing
+  flake outside this feature, disproved by the clean rerun).**
+- Env note: the sandbox recycled between turns — chrome/pwcore/apt libs/swap/
+  electron zip/resedit/tailscale-setup all re-fetched and re-verified
+  (electron sha256 vs the official SHASUMS ✓; tailscale-setup byte-identical
+  to the last three builds ✓).
+
+## 2026-09-13 — t126: the Guide gets category tabs (owner ask)
+- **Owner: "make the guide a bit easier to navigate… group them by category
+  but have the user click the category to see the channels it offers."**
+  The Guide now has a CATEGORY BAR — one button per category (News · Movies ·
+  Series · Kids · …) with the channel count on each; the list below shows
+  just that category's channels, numbered from 001 like a fresh page of a
+  paper guide. Click a tab or press ◀/▶ to page between categories; ▲/▼
+  still flip channels; Enter or a click watches. Opening the Guide lands on
+  the category of whatever's on the TV (or the last one browsed).
+- The stylesheet is now version-stamped like the JS (`style.css?v=…`) — new
+  Guide styles can never ride a cached CSS after an update.
+- Channel titles from the public directory are HTML-escaped in the Guide
+  (defense-in-depth; they were inserted raw before).
+- Suite: the guide check now exercises the tabs — two categories, click
+  paging, ◀/▶ wrap-around, per-page numbering, closes on pick.
+  **124/124, run twice.**
+
+## 2026-09-13 — t125: owner-test fixes — the unverified toggle no longer breaks the Guide; G frees the mouse
+- **Owner report: "turned on unverified channels and it broke, refusing to
+  show the channels I had originally."** Root cause found and proven live:
+  the Admin → Media group list for Live TV shipped the adapter's async
+  response un-awaited (serialized as `{}`), so the checkbox list rendered
+  as an error — and the next save collected ZERO checked groups and wiped
+  the Guide's sections. The channels themselves were never the problem.
+  Fixes: the route awaits (the list now renders its 12 groups,
+  live-verified); a save can never again read a failed list as "no groups
+  picked" (archive and radio got the same guard); and a ONE-TIME recovery
+  restores the default six groups on this build's first boot if they were
+  wiped — a deliberate "all groups off" still persists afterwards.
+- With the unverified tier on, the curated channels keep the FRONT rows of
+  each group — main listings before extended listings, the paper-guide way.
+  Measured live against the real directory: 848 curated channels, 2,759
+  with the toggle on.
+- **Owner report: pressing G while walking left the mouse captured** (had to
+  hit Esc before clicking a channel). Opening the Guide now releases the
+  mouse; walking was already paused while the Guide is open.
+- Suite: +1 check (t125WipeGuard) and new assertions inside the t123 checks
+  (admin group list, toggle-only save keeps sections, curated-first order,
+  Guide frees the mouse). **124/124, run twice.**
+
+## 2026-09-12 — t124: pre-ship catch — the friend invite file could never install Tailscale
+- Found while building the test zips, by checking the download link LIVE
+  (not assumed): Tailscale retired the plain `tailscale-setup-latest.msi`
+  name — MSI files are now arch-named — so the invite .bat's download step
+  would have quietly 404'd on a friend's PC. The .bat now uses the working
+  `tailscale-setup-latest-amd64.msi` alias, and if the download can't
+  happen it stops and says so in plain English ("install it free from
+  tailscale.com, then run this file again") instead of limping on.
+- The .bat's `%TEMP%` path got its missing backslash back — a JavaScript
+  escape had silently swallowed it. curl and msiexec were using the same
+  mangled path, so it happened to work anyway; now it's just correct.
+- Suite re-verified on the fixed bytes: **123/123 checks, run twice.**
+
+## 2026-09-12 — t123 BUILT: the combined release (live TV Guide + per-user libraries + Simple Mode + invites)
+- **Owner: "Go ahead and build it… i will obviously see what changed how it
+  acts. how i get the guide menu and such."** Everything built, nothing set
+  in stone. Version → **1.10.0**. Suite **123/123 ×2** (118 + five new t123
+  checks). Two real bugs found and fixed DURING the build's own testing:
+  - The iptv adapter's channels were invisible: defaultView/userView didn't
+    carry the iptv config → the addon never ran (views now carry it).
+  - **The proxy's variant gap (caught by the suite):** variant playlists
+    fetched through the signed u= path were piped verbatim, leaving their
+    relative segment URLs resolving against the wrong path — real channels
+    only played by luck (CDNs with absolute URLs). The proxy now rewrites
+    at EVERY playlist level; segments verified end-to-end (524 KB TS
+    through the proxy in 0.1 s; real "ABC News Live" playing + advancing on
+    the theater screen in the final smoke).
+- **📺 LIVE TV GUIDE** (owner-designed: channels NEVER on shelves; the
+  nostalgic paper-guide look; honest ● LIVE cells): new
+  `server/lib/adapters/iptv.js` (iptv-org, curated officially-free tier,
+  NSFW always excluded, "unverified" admin toggle off by default; 848
+  channels across 6 default groups on the real API, 1.2 s load) + the
+  **signed m3u8-rewrite proxy** (HMAC-signed segment URLs — tampered 403,
+  unsigned 403, private hosts 403 outside mock mode; no open proxy) +
+  vendored hls.js 1.7.3 (Apache-2.0, CREDITS + license file) +
+  `public/js/hlsplay.js` (one place that routes streams: HLS→hls.js,
+  Safari native, else src) + `public/js/guide.js` (numbered rows, group
+  headers, ▲/▼ flip, G key gated to the theater, remote 📖 GUIDE button,
+  offline-marking that never wedges) + TV wiring (hls on the big screen —
+  also un-breaks Plex tuner channels in Chromium, which are HLS too).
+  Admin → Media: "Live TV (the theater's Guide)" group checkboxes +
+  unverified toggle. Fresh installs: ON by default.
+- **👨‍👩‍👧 PER-USER LIBRARY ACCESS** (the link-time flow, owner-shaped):
+  `libraryAccess` config map (absent = all — upgrades change nothing);
+  server-enforced on /api/library (items+sections filtered), /api/play,
+  /api/tv/stream, /api/item, /img (403/404 for hidden libraries — dev
+  tools can't reach the stream). Admin → Media: the "who gets this
+  library?" prompt fires for every NEW section at save time (All accounts
+  default · certain-accounts picker · cancel = all). Admin → Users:
+  per-account Libraries reflection (same map). New accounts inherit only
+  'all' libraries (kid-safety default). Anonymous = everyone (v1
+  doctrine, recorded).
+- **📱 SIMPLE MODE** (`/m`): plain list client — poster grid + data-saver
+  text list, search, tap-to-play (video/audio/live via hls), optional
+  sign-in, Desktop-mode link. Phones auto-redirect from the 3D store
+  (touch + phone UA/narrow; ?desktop=1 remembers; the exe never
+  redirects). `/m` route added to the static server.
+- **🎫 FRIEND INVITES** (the Tailscale on-ramp, admin side):
+  GET /api/admin/invite/bat (validated: tskey- prefix + host shape;
+  403 without admin) generates the one-time .bat — installs Tailscale
+  via the official MSI silently, `tailscale up --authkey=… --timeout=90s`
+  (the #16086 mitigation), opens the store. The KEY is never stored —
+  only nickname+dates in db.invites. Users panel: the invite card with
+  Tailscale-IP autofind (`tailscale ip -4`), the SmartScreen note, the
+  honest tier-2 not-yet-verified warning, and revoke instructions.
+- Docs: RESEARCH-LIVETV.md updated (proxy = core, measured); QA report
+  unchanged. CREDITS + vendor license for hls.js. Cache-buster stamp
+  re-run (?v=1789241776411). Desktop exe rebuild verified (icon embedded).
+## 2026-09-12 — THE FULL AUDIT: everything tested, simulations run (owner order)
+- **Owner: "lets run all of this and gets tests and simulations done so we
+  know itll work… If it works as intended leave it. If it has a bug fix
+  it… every little thing tested that we have put in."** Full report:
+  docs/QA-AUDIT-2026-09-12.md. Headlines:
+  - **Suite 118/118 ×2** on the final code (hotfix + stamp included).
+  - **Live customer journey 14/14** against REAL upstreams (48 archive
+    films, real podcast feed, real radio, real local files): shelves →
+    carry → real 91-min film on the theater TV (video attached, seek,
+    queue seeded) → jukebox radio/podcast/local all play → posters →
+    metadata → search → theme → booth. Zero page errors.
+  - **Security probes all pass** (admin 403s, traversal blocked,
+    registry-gated, no open proxy); /api/play serving anonymous = the
+    documented open-store doctrine AND the exact gap per-user libraries
+    will close.
+  - **Live-TV simulation reversed the architecture honestly**: direct
+    play 0/12 (mirror URLs have no CORS); the m3u8-rewrite proxy PLAYED
+    9/12 (all Pluto in 0.5–3 s). RESEARCH-LIVETV.md updated — proxy is
+    the REQUIRED core, direct an optimization. This is the
+    simulate-before-build doctrine paying for itself.
+  - **Desktop build pipeline verified** (3 s, icon embedded, START
+    HERE present, hotfix included). **Update notice verified live**
+    against the real GitHub (no nag on 1.9.0). **Mobile phone-viewport
+    smoke passes** (390×844: no horizontal scroll, deck usable, 13 MB
+    heap) after proving the earlier crashes were sandbox RAM, not the
+    app (same-flags desktop control crashed identically under pressure).
+  - **Zero app bugs found** — every "failure" resolved to probe error,
+    intended design (entry-screen CPU pause), or sandbox limits. No
+    code changes were needed; nothing was touched.
+## 2026-09-12 — per-user libraries redesigned: access asked AT LINK TIME (owner flow)
+- **Owner: "Admin signs in, links libraries; when selected, asked if
+  they go to all accounts or certain ones; if certain ones, which
+  ones."** RESEARCH-PER-USER-LIBRARIES.md §2 rewritten to this flow:
+  the "who gets this library?" prompt fires the moment a library is
+  linked/enabled in Admin → Media (default = all accounts; cancel =
+  all; linking never blocked). Data model inverted to per-LIBRARY
+  audience (`libraryAccess` map; per-user views derived — no fan-out
+  writes, no drift). Safety defaults locked: absent key = all (existing
+  installs unchanged on update); NEW accounts inherit only 'all'
+  libraries — 'certain-ones' libraries stay hidden until the admin adds
+  the account (the kid-safety default). Users panel becomes the
+  audit/edit reflection reading the same map. Route enforcement
+  unchanged (403/404 on play/tv-stream/item/img for hidden sections).
+  Noted synergy: this prompt is exactly what the future Easy Start
+  wizard needs — it inherits the component for free. Zero
+  implementation this turn.
+## 2026-09-12 — per-user library access researched (the parents/kids ask)
+- **Owner: "An admin should be able to allow which libraries each
+  individual user sees. Say parents set it up and have spicy content.
+  That shouldn't show up in the kids library."** Audited against the
+  code: **YES, fully buildable from existing machinery** — new doc
+  docs/RESEARCH-PER-USER-LIBRARIES.md. Findings: per-visitor views
+  (userView) + stable section keys + the exact allowlist predicate
+  already exist (written for friend share lists); the ONE real gap is
+  that /api/play and /api/tv/stream serve anything configured with NO
+  view check — hiding content in the UI without closing that is
+  cosmetic (dev tools reach streams directly). Design: user record
+  gains sections allowlist (null = everything, backward compatible);
+  Admin → Users → per-user "Library access" checkbox list; enforcement
+  on library/play/tv-stream/item/poster routes (403/404 for hidden
+  sections). Honest caveats recorded: the theater screen itself is a
+  shared surface (per-user rules govern browse/start, not what's
+  already playing); anonymous guests see everything in v1 (kids use
+  accounts). Sequencing call: rides the combined release (independent
+  of the friend path, liftable like live TV). Zero implementation this
+  turn — research only.
+## 2026-09-12 — live TV rides IN the combined release (owner sequencing call)
+- **Owner: "We can do this small update with the friends release. What
+  better way to let people test than with free tv and their own
+  personal libraries."** My after-friends recommendation is overridden
+  and recorded: the ONE release box is now **jukebox hotfix + Friends
+  Update (on-ramp + Simple Mode + missed things) + Live TV Guide**.
+  The one-real-friend release gate applies to the entire box — the
+  friend test now also covers the Guide (open → flip → a free-TV
+  channel plays on the friend's machine; streams go direct from the
+  CDN to the friend's browser, not through the host's upload).
+- Safety valve kept: live TV is built modular — if it hits a late
+  wall (e.g., hls.js misbehaves on real hardware), it lifts back out
+  without touching the friend path.
+- First domino unchanged: the live Tier-2 Windows invite test still
+  comes before any of this is built.
+## 2026-09-12 — live TV GREEN-LIT + the theater Guide design + Roku skipped
+- **Owner: "Green light on live tv. Anything that we can get for free we
+  can use."** Live TV (iptv-org, curated officially-free tier) joins the
+  build queue — AFTER the friends path (sequencing accepted).
+- **Owner design orders (locked into docs/RESEARCH-LIVETV.md):** TV
+  channels NEVER go on the shelves; live TV opens through a nostalgic
+  GUIDE menu in the theater ("just as the tv guides used to be — this
+  project is about nostalgia"). Design recorded: numbered channel rows
+  + logos, time axis, category group headers, honest `● LIVE` cells,
+  ▲/▼ channel-flipping like a real dial, G key + remote GUIDE button +
+  screen-click to open, dead channels skip never wedge.
+- **EPG measured honestly:** iptv-org hosts NO EPG feed (their epg repo
+  is a self-run grabber tool); the free aggregator epg.pw works (epg_US
+  31 MB gz, 5,476 channels, 539k programmes) but is a CABLE-lineup
+  universe — only 24 of our 576 official-tier channels match by name;
+  dearbulut's community feed 404s; Pluto/Samsung schedule APIs are
+  unofficial platform internals (gray zone — parked). v1 Guide =
+  zero-EPG nostalgia grid; no fabricated listings ever.
+- **Roku: SKIPPED by owner** ("Roku we are skipping as you said its not
+  easily doable") — recorded at the top of docs/RESEARCH-ROKU.md; the
+  model-number ask is withdrawn.
+- **"Anything free we can use" recorded as the standing provider
+  posture** — radio genre picker effectively green-lit under it (it was
+  already recommendation #1); LoC + NASA remain YES when their turn
+  comes; LibriVox stays parked (books hold is separate).
+## 2026-09-12 — ONE combined release decided (hotfix + Friends Update) + live-TV research (ALLtvLive/iptv-org)
+- **Owner: "i want this hotfix and the friends update all in one."** The
+  standalone v1.9.1 is CANCELLED — the jukebox fix ships inside the
+  Friends Update as ONE release (Tailscale on-ramp + Mobile Simple Mode +
+  missed-things + the t122 jukebox fix). Release gate unchanged: the
+  friend path must be proven live with one real friend first — which now
+  also gates the jukebox fix (owner's call, recorded). RELEASE-NOTES
+  draft at the workspace root is PARKED — it folds into the combined
+  release notes when that ships.
+- **NEW docs/RESEARCH-LIVETV.md** (owner asked about github.com/devSahinur/
+  ALLtvLive as our live TV). Verdicts, researched live: the ALLtvLive APP
+  = NO (repo has NO LICENSE file — the README's MIT badge is a dead link;
+  wrong stack; unnecessary). The SOURCE underneath it (iptv-org public
+  API) = YES with conditions: verified live (31,219 channels /
+  17,242 streams, ~96% HLS, 1,576 non-NSFW US channels), needs vendored
+  hls.js (Apache-2.0, one 415 KB file) because HLS doesn't play natively
+  in Chromium — the gap that already cripples our Plex live TV today.
+  Clean UI = YES automatic (live channels flow into the EXISTING 'live'
+  machinery: shelf cases, LIVE panel, store TV). Curation REQUIRED: the
+  full index mixes official free feeds (ABC News Live on Disney's own
+  CORS-open CDN — verified 200) with pirate restreams; the recommended
+  default is the officially-free tier (~576 US channels from
+  Pluto/Tubi/ABC/PBS/NASA/local-news groups), NSFW excluded, with an
+  honestly-labeled "unverified" toggle for the owner. Streams die/geo-
+  block (AJ 403 from datacenter IP) → dead-channel handling per the t122
+  no-wedge doctrine. Sequencing recommendation: AFTER the friends path
+  (must not jeopardize the gate). Gate checklist in the doc; owner
+  green-light pending.
+## 2026-09-12 — code-signing decision locked ($0) + the v1.9.1 ship list
+- **Owner: "Im obviously not paying as im a broke bitch."** Home Binger
+  stays unsigned — recorded in docs/RESEARCH-CODE-SIGNING.md (§5 LOCKED:
+  no certificate at any price; free Microsoft Security-Intelligence
+  submission per release is the only accelerator; START-HERE's
+  click-through note stays; the optional build signing step stays
+  unwritten).
+- **v1.9.1 confirmed as the jukebox hotfix ONLY** — podcast 404 fix +
+  dead-track queue unwedge + cache-buster stamp + two new suite checks.
+  Small and safe on purpose. Books stay parked; podcasts stay green;
+  the missed-things ideas ride the Friends Update, not this release.
+## 2026-09-12 — t122 HOTFIX: the jukebox podcasts-never-play bug (found, fixed, proven) + books parked + SmartScreen research
+- **Owner report: "the jukebox is now broken… things wont play."** Root
+  cause found by live reproduction (real podcast feed + real radio-browser
+  stations + real local files against the shipped 1.9.0 code):
+  - **Every podcast episode 404'd.** `ADAPTERS` registers the podcasts
+    adapter as `podcast` but its CONFIG lives under `podcasts` — so
+    `sourceConfig('podcast')` returned null and `/api/play/podcast/*`
+    answered "unknown source" for EVERY episode (jukebox path, theater
+    path, posters, item detail — all dead). The bug is older than 1.9.0,
+    but t121's picker put podcasts on the jukebox for the FIRST time, so
+    1.9.0 is where the owner finally hit it. FIXED in
+    `server/lib/library.js` (one mapping line); verified serving real
+    mp3 bytes (206/200) on every route.
+  - **A dead first track wedged the whole queue.** The jukebox's error
+    handler retried a never-playable URL 5 times, then gave up silently —
+    `ended` never fired, the deck never advanced, everything after it in
+    the queue sat forever. FIXED in `public/js/store3d/jukeaudio.js`:
+    a URL that dies before its first note fast-fails and advances the
+    deck (3-strike guard so an all-dead queue rests instead of looping);
+    mid-stream hiccups keep the reload-and-resume ladder, and an
+    exhausted ladder now advances too. Verified: [dead link, good track]
+    lands on the good track and plays.
+  - Investigated and cleared along the way (sandbox artifacts, NOT app
+    bugs): an apparent element stall on proxied remote media — a bare
+    element in the same page played perfectly and a clean-page jukebox
+    played podcast + radio at real-time pace; the stall was the probe's
+    own aborted 250 MB responses starving the browser's connection pool.
+- **Suite: 118/118 ×2** (116 + two new permanent checks:
+  `t122PodcastPlay` — the play + poster routes must answer for a podcast
+  episode; `t122DeadAdvance` — a dead first track must not wedge the
+  jukebox queue). Run 2 of 3 hit the known friend-store-spawn environment
+    FATAL near the end (no check failures) — documented dead end.
+- **Cache-buster stamp re-run** (`?v=1789209399761` across public/js +
+  index.html) so browsers holding cached 1.9.0 jukeaudio.js pick up the
+  fix. Post-stamp smoke: podcast + radio play at real-time on a clean page.
+- **Owner decisions this turn:** books are PARKED ("I want to wait before
+  adding anything book wise" — LibriVox deferred, research stands);
+  podcasts stay green (owner: OK "due to some having a video version and
+  an audio version"); the missed-things sweep ideas are approved by the
+  owner. Provider order updated in RESEARCH-FREE-PROVIDERS.md.
+- **NEW docs/RESEARCH-CODE-SIGNING.md** (owner: "i kinda want windows to
+  stop flagging the program"). Headlines: the "More info → Run anyway"
+  screen is SmartScreen REPUTATION, not identity — no purchase removes
+  it day-one; EV's instant bypass was removed by Microsoft in 2024 (EV =
+  NO); SignPath's free OSS signing is INELIGIBLE (HB's CC BY-NC-SA
+  license is not OSI-approved); the two paid paths that work are Azure
+  Trusted Signing (~$9.99/mo, US individuals eligible) and Certum
+  Individual OV in Cloud (~$115–167/yr, plain signtool); the Microsoft
+  Store is the only zero-warning endgame (parked). .bat files can never
+  be signed — the invite script's click-through note is permanent unless
+  it becomes a signed exe. Owner decision OPEN: pay ~$120/yr or stay $0.
+- **RELEASE-NOTES-v1.9.1.md drafted** (workspace root, not in the zips) —
+  hotfix ready for the owner to ship whenever they choose.
+## 2026-09-12 — decisions locked + the "what did we miss" sweep + free-provider research
+- **Owner: "go with your calls"** — all recommendations are now LOCKED
+  into the research docs (each doc has an "Owner decisions — LOCKED"
+  section): Tier-2 lockdown default with trusted toggle · one one-time
+  key per friend (~30-day expiry) · plaintext key accepted · rung 2
+  admin-editor-only v1 with three worded health states · watch party
+  no-chat-in-W1, field test = owner + 3 remote friends, pause-everyone
+  ≤4 guests · mobile poster grid + data-saver list, phones default to
+  Simple Mode.
+- **RELEASE GATE SET (owner): "We wont post it till i can see that it
+  works with at least one friend"** — the friend path (invite → join →
+  browse → play) must be proven live with one real friend on real
+  hardware before ANY of this ships. Recorded in every affected doc.
+- **The missed-things sweep** (found and folded into the docs): Windows
+  SmartScreen will flag the invite .bat (mitigation + clean-box gate
+  test) · the host PC sleeping takes the store dark (admin guidance) ·
+  lost/stolen friend device revocation runbook · phone audio must
+  survive screen-lock (Media Session API, verify on real hardware) ·
+  "Add to Home Screen" PWA-lite for the app feel at $0.
+- **docs/RESEARCH-FREE-PROVIDERS.md** — the Scholastic ask + the deep
+  search. SCHOLASTIC: NO — their free app (Home Base) shut down Nov 4,
+  2025, it was a kids' game world not a media catalog, and their real
+  video products are copyrighted school subscriptions; the one legal
+  Scholastic path is a public podcast RSS (already addable today, zero
+  code). CODE AUDIT FIND: the radio wall ALREADY runs on
+  radio-browser.info — so "thousands of free stations" is an upgrade to
+  a shipped source, not a new provider. NEW YES candidates, all
+  no-payment/no-account/legal: **LibriVox** (public API verified,
+  ~20k public-domain audiobooks — the star, and the legal answer to
+  the kids-content ask), **radio genre picker** (cheapest), **LoC
+  National Screening Room** (PD films; API to live-verify), **NASA**
+  (PD with attribution + no-endorsement rules). MAYBE: NPS b-roll, TED,
+  Jamendo (API key). NO with reasons: Pond5 (account), Kanopy/Hoopla
+  (library card, no API), Tubi/Pluto/Crackle (ToS), YouTube extraction
+  (ToS).
+- No app code touched this turn — research and decisions only.
+## 2026-09-12 — research night 2: mobile simple mode + Roku
+- **Owner asks: "make this easily available on mobile by making it a
+  simple list more like how other platforms are but when desktop mode is
+  turned on it goes to the pc version? Will there be a way to easily
+  make this fully available on roku (which does not have a browser)?"**
+  Same doctrine as research night 1: structure + yes/no/maybe verdicts,
+  ZERO implementation.
+  - **docs/RESEARCH-MOBILE-LIST.md** — Simple Mode. All YES by code
+    audit: the 3D store already runs on phones (touch controls, t83
+    mobile perf), and every API a list app needs already exists
+    (library/posters/Range streams/auth) — v1 needs NO new server
+    endpoints. Per-device desktop toggle (localStorage + ?desktop=1 +
+    Electron UA guard). One honest MAYBE: direct-play format coverage
+    on iOS Safari (mkv/webm often no) → a measured "not playable on
+    this device" chip, not a broken player. Companion item flagged for
+    its own pass: a first-run SETUP WIZARD for the store side (the
+    owner's "easier than what i have been doing" ask).
+  - **docs/RESEARCH-ROKU.md** — the honest answer: NO easy full path.
+    Private channels died Feb 2022; beta channels cap at 20 users and
+    expire in 120 days (QA-only); sideloading is one-channel-at-a-time
+    personal-only. Three real paths priced: (A) AirPlay 2 from the
+    mobile web app — ~zero effort, Apple devices + AirPlay-capable
+    Roku (most Roku TVs + 4K players, OS 9.4/10+), LAN-only; (B) a
+    pure-node DLNA server + the Roku's BUILT-IN Media Player — medium
+    effort, zero friend installs, LAN-only, direct-play formats only,
+    documented OS 14.0/15 AC3-DTS audio bug on some models; (C) a
+    native BrightScript channel through Channel Store certification —
+    big effort, the only true remote-capable "install from the store"
+    path. Recommendation: ship Simple Mode first (Path A lands free),
+    prototype Path B only if TV demand is real, keep C parked.
+- No app code touched. The three earlier research docs (Tailscale
+  on-ramp · HB↔HB rung 2 · watch party) are unaffected.
+## 2026-09-12 — research night: the next three features (structure only, zero implementation)
+- **Owner directive: "Start working on the structure however dont implement
+  until we fully know that it will all work. i dont guess i research to
+  know yes no or maybe."** Three research docs written, verdicts included,
+  no production code touched:
+  - **docs/RESEARCH-TAILSCALE-ONRAMP.md** — the one-click-ish friend invite.
+    YES: pre-auth keys join with no browser login (kb/1085); friends count
+    as the owner's DEVICES on the free Personal plan (6 users / unlimited
+    user devices, 2026 pricing — no seats consumed); silent install works
+    via the **MSI** (TS_NOLAUNCH/TS_UNATTENDEDMODE/TS_ONBOARDING_FLOW —
+    the exe self-extractor is deliberately avoided per the reference
+    silent-installer project); --unattended survives reboots; revocation =
+    delete the key. MAYBE (two-tier): locking friends to ONLY the store —
+    a tagged pre-auth key + one ACL rule (must be live-verified; tagged
+    keys + ACLs are free-tier). One known hang (tailscale#16086) has a
+    documented mitigation (--timeout + service-wait).
+  - **docs/RESEARCH-HB2HB-RUNG2.md** — item-level share granularity,
+    friend-store offline indicators, browse polish. All YES by code audit:
+    entry.items[] is additive and degrades to today's section rule when
+    absent (backward compatible); fetchFriendCatalog already sees the
+    failures, it just records nothing — health = lastOkAt/lastError surfaced
+    through /api/bootstrap, amber "stale" never empties a shelf.
+  - **docs/RESEARCH-WATCHPARTY.md** — W1 synced theater nights. Transport
+    YES via SSE (EventSource is browser-native, server side is a chunked
+    response — no ws library, zero-dep doctrine intact); clock sync YES via
+    min-RTT selection (Jellyfin SyncPlay's documented algorithm); drift
+    correction YES (SpeedToSync/SkipToSync with a ~100 ms deadzone); group
+    pause on stall YES; chat MAYBE (recommend W1.1); remote guest count
+    MAYBE — direct-stream arithmetic says 2–6 on typical home upload, gate
+    is a field test with the measured number written into the docs.
+    Honest gap found: only the TV's ITEM is server-side today — queue and
+    position are client-side, so W1 needs a small new server session
+    object (the doc structures it).
+- **tests/benchgen.cjs** — the bench generator moved from the workspace
+  root into the repo's tests/ folder (versioned with the suite that
+  depends on it; rides the next source upload as file 84). Regenerates
+  the 5-song bench (22 kHz mono, b124f keeps its 2.5 s silent lead-in)
+  and self-verifies 5/5 against a verbatim copy of the app's analyzer
+  before writing.
+## 2026-09-12 — 🚀 PUBLISHED: v1.9.0 is live
+Owner uploaded and published the release: tag **v1.9.0** (not
+pre-release), the corrected release notes pasted into the body, and
+HomeBinger-1.9.0-beta.zip attached (107,563,254 B — byte-exact match to
+the build). The main branch carries the full 83-file source (t121
+markers + stamp v=1789174562813 verified via the raw GitHub endpoints),
+commit "Home Binger 1.9.0". The in-app update notice resolves against
+the live release (current 1.9.0 = latest 1.9.0 → no nag; 1.8.9 clients
+get the notice with the download link). Two follow-ups flagged for the
+owner: the v1.9.0 tag was created before the 1.9.0 commit landed (it
+points at the 1.8.9 commit — the release page's "Source code" links
+serve 1.8.9; main is correct), and the notes got pasted into the
+release body twice. Both fixed by editing the release after deleting
+the tag (re-type v1.9.0 → creates it on current main; paste the body
+once).
 ## 2026-09-12 — 1.9.0 (held): t121 — three owner notes (S-key leak, booth hover, podcasts in the jukebox)
 - **"Music goes back a beat pressing s in the dance hall with music
   playing" — FIXED.** The DJ menu's close button only HID the modal: the

@@ -6,6 +6,65 @@
 
 **The 3D Storefront for The CordCut Co-op™ (TCC™)** — a self-hosted, walkable 3D video store with a movie theater and a neon dance hall, stocked from your own Plex, Jellyfin, or any folder on your server. Free for anyone to use and modify, **not for sale**: licensed under [CC BY-NC-SA 4.0](LICENSE). Made with 💙 by **BluJ Productions** — owner-directed, owner-designed, and ear-tested by BluJ; engineered with AI assistance by [Arena.ai](https://arena.ai)'s Agent Mode (full story in [`docs/CREDITS.md`](docs/CREDITS.md)).
 
+## ✨ What's new in 1.10.0
+
+<p align="center">
+  <img src="docs/whats-new/entry-neon.png" alt="Home Binger's neon entry screen — press Enter the store to walk in" width="880">
+</p>
+
+**📺 The TV Guide — free live TV, in the theater.** Walk into the theater
+and press **G**: up comes a channel guide styled like the old paper TV
+guides — numbered channels, category pages (News · Movies · Series · Kids ·
+Documentary · Public Broadcasters…), language sections, and ☆ favorites that
+follow your account. Hundreds of **officially-free channels** (Pluto TV,
+Tubi, ABC, PBS and friends) stream through your server — nothing to pay,
+nothing to sign up for, and channels never clutter the shelves; the Guide is
+their home. In full screen the Guide **docks beside the movie** — the picture
+keeps its exact size and slides left — and flipping channels keeps the big
+screen big.
+
+<p align="center">
+  <img src="docs/whats-new/tv-guide.png" alt="The TV Guide in the theater — numbered live channels in category pages" width="430">
+  <img src="docs/whats-new/guide-fullscreen-docked.png" alt="In full screen, the Guide docks beside the movie — the picture keeps its size and slides left" width="430">
+</p>
+
+**🎫 Invite a friend — your store, over the internet.** Admin → Users now
+has an **Invite a friend** card: make a one-time key, send it over any chat,
+and their Home Binger links to your building — your shelves stream straight
+from your machine, gated to exactly what you shared. `docs/FRIEND-SHARING.md`
+is the two-minute how-to.
+
+<p align="center">
+  <img src="docs/whats-new/invite-a-friend.png" alt="Admin → Users — the Invite a friend card with its one-time key" width="430">
+</p>
+
+**👨‍👩‍👧 Per-account libraries.** Link a Plex/Jellyfin library and the store
+now asks **"who gets this library?"** — grown-ups' shelves for the parents,
+cartoons for the kids' accounts, and invites that only see what you shared.
+One building, everyone gets their own store.
+
+**📱 Simple Mode — the phone view.** Phones that visit your store get a
+clean, fast list view (big covers, one tap to play on the TV) — perfect for
+casting from the couch, no walking required. The full 3D store is one tap
+away.
+
+<p align="center">
+  <img src="docs/whats-new/simple-mode-phone.png" alt="Simple Mode on a phone — a clean list view of the store, one tap to play" width="270">
+</p>
+
+**🩹 Plus the beta shakedown pass** — every report from real Windows
+testing, fixed: themes now survive a restart everywhere (menus *and* store,
+personal *and* admin-set defaults — the theater's trim and speaker cones
+re-tint with the theme instead of staying frozen on one color); the TV
+remote belongs to the room you're standing in (jukebox in the store, DJ
+booth in the dance hall, screen in the theater); the swinging doors hold
+their arc when you walk through slowly; "My Shelves" pins stay unpinned when
+you set a shelf back to Automatic; theater sound is untouched by DJ-booth
+sessions; and the theater's idle screen is the **standby card** on a fresh
+install. The self-test suite grew to **139 checks** — all green, run twice.
+
+---
+
 ## 🏬 What's inside the building
 
 Three connected spaces under one roof:
@@ -29,11 +88,16 @@ Three connected spaces under one roof:
 </p>
 - **The theater** — behind the store's back wall: a real screening room with
   a sloped floor and its own big screen. Grab a movie off any shelf and hit
-  **"Play in the theater"**; a control bar handles stop/seek/volume/repeat.
-  The theater is soundproofed: the jukebox and the dance hall never bleed in,
-  and the movie never leaks out. Its **8.2 array** plays discrete 7.1 on
-  multichannel hardware and **HRTF binaural imaging in a headset** — fronts,
-  sides, rears and subs placed around you like a professionally tuned room.
+  **"Play in the theater"**; a control bar handles stop/seek/volume/repeat,
+  and full screen puts the movie itself up at native resolution — press **G**
+  there and the **TV Guide docks beside the picture** (flip channels without
+  leaving full screen; Esc and the ✕ chip still step out). The theater is
+  also where free live TV lives — hundreds of officially-free channels via
+  the Guide (above). The theater is soundproofed: the jukebox and the dance
+  hall never bleed in, and the movie never leaks out. Its **8.2 array** plays
+  discrete 7.1 on multichannel hardware and **HRTF binaural imaging in a
+  headset** — fronts, sides, rears and subs placed around you like a
+  professionally tuned room.
 
 <p align="center">
   <img src="docs/theater.png" alt="Home Binger — private screening room with tiered seating and 8.2 surround sound" width="880">
@@ -47,7 +111,10 @@ Three connected spaces under one roof:
   **10 surround speakers** ring the walls
   plus **subwoofers at the front of the DJ booth counter** (mouths visible,
   aimed at the floor), and neon LED bars and diffused coves riding every wall. The **DJ booth** (two turntables, mixer, laptop) opens a
-  full DJ deck: queue, fades, EQ, tempo, dead-center on the floor. Behind its swinging doors, the
+  full DJ deck: queue, fades, EQ, tempo, dead-center on the floor — and the
+  **TV remote follows you in**: in the dance hall its buttons run the booth
+  (play/pause, volume, stop), so you never have to walk back to the laptop
+  mid-set. Behind its swinging doors, the
   **DJ's Library** keeps the vinyl — click a record to spin it for the floor.
   Dance music **stays in the dance hall**: room gates keep each zone's sound
   inside its own wing.
@@ -342,6 +409,12 @@ open, and everything reconnects when it's back.
   device you sign in on. Guest settings migrate into the account on sign-up.
 - **Admins** additionally manage the media sources, the store TV, user accounts,
   and store-wide policies (including *locking* theme/sorting for everyone).
+- **Per-account libraries** — each linked library can be scoped: grown-ups'
+  shelves for the parents, cartoons for the kids' accounts, invites that see
+  only what was shared. One building; everyone gets their own store.
+- **Invites** (Admin → Users → Invite a friend) link a friend's Home Binger
+  to yours over the internet — one-time key, streamed from your machine,
+  revocable any time.
 - One user's theme/sorting **never** affects anyone else's view. Guests and
   users browse their own personal arrangement of the same shelves.
 
@@ -364,10 +437,26 @@ open, and everything reconnects when it's back.
 - **The store TV** — select any case → **"📺 Play on the store TV"** and it
   plays right there in the world, with a bottom control bar (stop · ⏪10s ·
   play/pause · 10⏩s · repeat · volume). Albums get a spectrum visualizer.
-  Admins can change the idle screen (Admin → Server): a pinned item, a
-  looping video URL, or the white projector screen.
+  The remote bar follows the room you're in: it runs the **jukebox** in the
+  store, the **DJ booth** in the dance hall, and the **screen** in the
+  theater. Admins can change the idle screen (Admin → Server): the standby
+  card (the fresh-install default), a pinned item, a looping video URL, or
+  the white projector screen.
+- **The TV Guide** (theater) — press **G** in the theater for the live-TV
+  guide: numbered channels, category and language pages, ☆ favorites,
+  ● LIVE everywhere, dead channels marked and skipped. In full screen the
+  Guide docks beside the movie — the picture keeps its exact size — and
+  picking a channel keeps you in full screen. The Guide button on the
+  remote opens it too (theater only, where it belongs).
+
+<p align="center">
+  <img src="docs/whats-new/tv-guide.png" alt="The TV Guide — numbered live channels in category pages, ● LIVE" width="430">
+</p>
+
 - **The theater** — bring a movie (or send it from any case's detail card)
-  and it plays on the big screen with the same control bar. The sloped floor
+  and it plays on the big screen with the same control bar. **Full screen**
+  promotes the movie itself to native resolution; **G** docks the Guide
+  beside it and channel flips keep the big screen big. The sloped floor
   means every seat sees over the one in front.
 - **The jukebox** (store) and **the DJ booth** (dance hall) — two separate
   devices, each running the same **DJ deck** (queue, crossfades,
@@ -383,7 +472,12 @@ open, and everything reconnects when it's back.
   Camelot numbers, a curveable crossfader with center detent, master + booth
   monitor volume, searchable playlist, Beginner/Pro modes, keyboard shortcuts
   and session save/load. Or spin a vinyl from the DJ's Library to feed the
-  booth channel. And the whole room answers the music:
+  booth channel.
+
+<p align="center">
+  <img src="docs/whats-new/jukebox-deck.png" alt="The jukebox's classic DJ deck — queue, fades, EQ, tempo" width="430">
+  <img src="docs/whats-new/dj-pro-rig.png" alt="The booth's PRO rig — two decks, crossfader, BPM + key detection, hot cues" width="430">
+</p> And the whole room answers the music:
   floor color, beam patterns, LED walls, even the DJ's
   Library sign ride the set. The moving heads **glide** between poses — an
   adaptive beat detector learns each track's own kick level (and its BPM),
