@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1789342462621';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1789342462621';
-import { buildHall } from './hall.js?v=1789342462621';
-import { buildDance } from './dance.js?v=1789342462621';
-import { buildExterior } from './exterior.js?v=1789342462621';   // the world outside the door
-import { buildSignage } from './signage.js?v=1789342462621';
-import { createDjPro } from './djpro.js?v=1789342462621';
-import { buildTV } from './tv.js?v=1789342462621';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1789342462621';
-import { PosterAtlases } from './atlas.js?v=1789342462621';
-import { createControls } from './controls.js?v=1789342462621';
-import { createJukeAudio } from './jukeaudio.js?v=1789342462621';
+import { LAYOUT, TUNING } from './config.js?v=1790065991054';
+import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1790065991054';
+import { buildHall } from './hall.js?v=1790065991054';
+import { buildDance } from './dance.js?v=1790065991054';
+import { buildExterior } from './exterior.js?v=1790065991054';   // the world outside the door
+import { buildSignage } from './signage.js?v=1790065991054';
+import { createDjPro } from './djpro.js?v=1790065991054';
+import { buildTV } from './tv.js?v=1790065991054';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1790065991054';
+import { PosterAtlases } from './atlas.js?v=1790065991054';
+import { createControls } from './controls.js?v=1790065991054';
+import { createJukeAudio } from './jukeaudio.js?v=1790065991054';
 
 export function createScene(container, theme) {
   // ── renderer ──

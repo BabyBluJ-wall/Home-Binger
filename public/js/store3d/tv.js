@@ -17,10 +17,10 @@
 //  (or ⏹ Stop) controls it.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1789342462621';   // t123: live TV (HLS) on the big screen
-import { LAYOUT } from './config.js?v=1789342462621';
-import { signTexture, hashString } from './textures.js?v=1789342462621';
-import { computeTheaterSpeakers } from './room.js?v=1789342462621';   // 8.2 layout (shared with the room mesh)
+import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1790065991054';   // t123: live TV (HLS) on the big screen
+import { LAYOUT } from './config.js?v=1790065991054';
+import { signTexture, hashString } from './textures.js?v=1790065991054';
+import { computeTheaterSpeakers } from './room.js?v=1790065991054';   // 8.2 layout (shared with the room mesh)
 
 const TW = 512, TH = 288;   // screen canvas LOGICAL resolution (drawing code)
 const SS = 3.75;            // supersample: device canvas = TW×SS × TH×SS = 1920×1080.
@@ -421,8 +421,10 @@ export function buildTV(theme) {
     document.body.classList.add('tv-fullscreen');
     // t134: a Guide that was already open docks beside the video instead of
     // hiding behind it (the fs layer sits above every modal otherwise)
-    if (!document.getElementById('guide-modal')?.classList.contains('hidden'))
+    if (!document.getElementById('guide-modal')?.classList.contains('hidden')) {
       document.body.classList.add('fs-guide');
+      window.dispatchEvent(new Event('vb-fsdock'));   // t143: guide.js re-fits the dock (no import cycle)
+    }
     hudShow();
     emit();
     return true;

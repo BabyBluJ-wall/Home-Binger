@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1789342462621';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1790065991054';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;

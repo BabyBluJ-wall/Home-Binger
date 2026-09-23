@@ -9,11 +9,18 @@
   :root { --ink:#eef1ff; --muted:#9aa3c7; --bg:#0a0f2e; --panel:rgba(16,22,52,.85); --line:#2a3354; --accent:#ff3ea5; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { margin:0; background:radial-gradient(1200px 600px at 50% -10%, #141b44 0%, var(--bg) 60%); color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { position:sticky; top:0; z-index:5; background:var(--panel); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); padding:10px 14px; display:flex; align-items:center; gap:10px; }
+  .top { position:sticky; top:0; z-index:5; background:var(--panel); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  header { padding:10px 14px; display:flex; align-items:center; gap:10px; }
   header .logo { font-weight:900; font-style:italic; letter-spacing:.5px; color:var(--accent); font-size:17px; white-space:nowrap; }
   header input { flex:1; min-width:0; padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:rgba(10,12,30,.6); color:var(--ink); font:inherit; }
   .mode-btn, .btn { border:1px solid var(--line); background:rgba(10,12,30,.6); color:var(--ink); border-radius:10px; padding:8px 12px; font:inherit; font-size:13px; cursor:pointer; }
   .btn.accent { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  /* t136: CATEGORY CHIPS — movies, music and such, separated */
+  #cats { display:flex; gap:8px; overflow-x:auto; padding:0 14px 10px; scrollbar-width:none; }
+  #cats::-webkit-scrollbar { display:none; }
+  .chip { flex:0 0 auto; border:1px solid var(--line); background:rgba(10,12,30,.6); color:var(--ink); border-radius:999px; padding:7px 13px; font:inherit; font-size:13px; cursor:pointer; white-space:nowrap; }
+  .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  .chip small { opacity:.75; margin-left:3px; }
   main { padding:14px; max-width:760px; margin:0 auto; }
   #grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:12px; }
   .cell { cursor:pointer; }
@@ -35,6 +42,21 @@
   #player video, #player img.art { flex:1; width:100%; min-height:0; object-fit:contain; background:#000; }
   #player img.art { object-fit:contain; padding:40px; }
   #player .pfoot { padding:12px 14px 22px; display:flex; gap:10px; justify-content:center; border-top:1px solid var(--line); }
+  /* t136: the MENU — ☰ finally opens one. Bottom sheet, thumb-friendly. */
+  #menu { position:fixed; inset:0; background:rgba(4,6,18,.6); z-index:30; display:none; }
+  #menu.on { display:block; }
+  #menu .mcard { position:absolute; left:0; right:0; bottom:0; background:var(--panel); backdrop-filter:blur(14px); border-top:1px solid var(--line); border-radius:18px 18px 0 0; padding:16px 16px 26px; max-width:480px; margin:0 auto; }
+  #menu .mhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  #menu .mhead b { font-size:16px; }
+  #menu .mbtn { display:block; width:100%; text-align:left; padding:13px 14px; margin-bottom:8px; border-radius:12px; border:1px solid var(--line); background:rgba(10,12,30,.6); color:var(--ink); font:inherit; font-size:14.5px; cursor:pointer; text-decoration:none; }
+  #menu .mbtn.accent { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:800; text-align:center; font-size:15.5px; }
+  #menu .mbtn small { display:block; color:var(--muted); font-size:12px; font-weight:400; margin-top:2px; }
+  #menu .mbtn.accent small { color:rgba(255,255,255,.85); }
+  #menu .mrow { display:flex; gap:8px; margin-bottom:8px; }
+  #menu .mrow .btn { flex:1; }
+  #menu .btn.sel { border-color:var(--accent); color:var(--accent); font-weight:700; }
+  #menu .muser { display:flex; align-items:center; gap:10px; }
+  #menu .muser b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* login card */
   #gate { max-width:340px; margin:12vh auto 0; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:22px; }
   #gate h1 { margin:0 0 4px; font-size:20px; }
@@ -46,14 +68,19 @@
   #gate .msg { color:#ff8a8a; font-size:12.5px; min-height:16px; margin-top:8px; }
   footer { text-align:center; padding:26px 14px 40px; color:var(--muted); font-size:12.5px; }
   footer a { color:var(--accent); }
+  footer .tm { color:var(--ink); font-size:12px; letter-spacing:.2px; margin-bottom:6px; }
+  footer .tm span { color:var(--muted); font-size:11.5px; }
 </style>
 </head>
 <body>
-<header>
-  <span class="logo">HOME BINGER</span>
-  <input id="q" type="search" placeholder="🔍 Search…" autocomplete="off">
-  <button class="mode-btn" id="mode" title="Switch between the poster grid and the low-data list">☰</button>
-</header>
+<div class="top">
+  <header>
+    <span class="logo">HOME BINGER</span>
+    <input id="q" type="search" placeholder="🔍 Search…" autocomplete="off">
+    <button class="mode-btn" id="mode" title="Menu — the 3D store, view, sign-in">☰</button>
+  </header>
+  <nav id="cats" aria-label="Categories"></nav>
+</div>
 <main>
   <div id="gate" hidden>
     <h1>Welcome to the store 🎬</h1>
@@ -83,12 +110,26 @@
   </div>
 </div>
 
+<div id="menu">
+  <div class="mcard">
+    <div class="mhead"><b>Menu</b><button class="btn" id="menu-close">✕ Close</button></div>
+    <a class="mbtn accent" id="m-store" href="/?desktop=1">🖥 Enter the 3D store<small>the full experience — shelves, theater, dance hall</small></a>
+    <div class="mrow">
+      <button class="btn" id="view-grid">🖼 Posters</button>
+      <button class="btn" id="view-list">☰ List</button>
+    </div>
+    <button class="mbtn" id="m-signin">👤 Sign in<small>carry your shelves to every device</small></button>
+    <div class="mbtn muser" id="m-user" hidden style="cursor:default"><b id="m-name"></b><button class="btn" id="m-signout">Sign out</button></div>
+    <p class="hint" style="padding:10px 4px 0">This list is the quick way to browse and play. The 3D store has everything else.</p>
+  </div>
+</div>
+
 <footer>
-  <a href="/?desktop=1">🖥 Desktop mode — the full 3D store</a><br>
-  <span>Home Binger · Simple Mode</span>
+  <div class="tm" title="Trademarks & credits — see TRADEMARKS.md in the app folder">Home Binger™ · The CordCut Co-op™ · TCC™<br><span>© 2026 BluJ Productions. All rights reserved.</span></div>
+  <span>Home Binger · Simple Mode — the full 3D store is in the ☰ menu</span>
 </footer>
 
 <script src="/vendor/hls.min.js"></script>
-<script src="/js/m.js?v=1789261059676"></script>
+<script src="/js/m.js?v=1789432600000"></script>
 </body>
 </html>

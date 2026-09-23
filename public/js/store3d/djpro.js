@@ -18,7 +18,7 @@ const djpUi = { eq: [{}, {}], trim: [1, 1], fader: [1, 1], rate: [1, 1], xf: 0.5
   pitch: 0, pitchRange: 8, xfAssign: ['a', 'b'], color: [0.5, 0.5], colorMode: ['filter', 'filter'] };   // t108
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789342462621';
+import { LAYOUT } from './config.js?v=1790065991054';
 
 const D = LAYOUT.room.l / 2;
 const AUDIO_RE = /\.(mp3|wav|ogg|oga|flac|m4a|aac|opus)$/i;
@@ -1066,7 +1066,7 @@ export function createDjPro() {
     container.innerHTML = '';
     const style = document.createElement('style');
     style.textContent = `
-      .djp{display:flex;flex-direction:column;gap:6px;font-family:system-ui;
+      .djp{position:relative;display:flex;flex-direction:column;gap:6px;font-family:system-ui;   /* t142: relative — the help/demo overlays anchor to the rig (and inherit the --djp-* vars) */
         /* t119: THE BOOTH FOLLOWS THE THEME — the panel used to be locked to a
            hardcoded neon-blue/pink palette while the rest of the store recolored.
            Every surface now derives from the app theme vars (set by main.js
@@ -1135,7 +1135,7 @@ export function createDjPro() {
       .djp-rowitem.harmonic .djp-meta{color:#00ff66}
       .djp-meta{color:var(--djp-mut);min-width:44px;text-align:right}
       .djp-hint{font-size:11px;color:var(--djp-mut)}
-      .djp-help{position:absolute;inset:0;background:var(--djp-glass);border-radius:10px;padding:18px;overflow:auto;z-index:5}
+      .djp-help{position:absolute;inset:0;background:var(--djp-glass,rgba(6,8,29,.94));border-radius:10px;padding:18px;overflow:auto;z-index:5;box-shadow:0 10px 40px rgba(0,0,0,.5)}   /* t142: was var(--djp-glass) with NO fallback — appended outside .djp the var didn't resolve and the background computed TRANSPARENT (owner: 'needs a bg') */
       .djp-kbd{background:var(--djp-onbg);border:1px solid var(--djp-line2);border-radius:4px;padding:1px 6px;font-family:monospace}
       .djp-pro{display:none}.djp.pro .djp-pro{display:flex}
       /* t108: COMPACT MODE — below 1100px (the bench, small laptops) the rig
@@ -1647,7 +1647,7 @@ export function createDjPro() {
         <span class="djp-kbd">←</span>/<span class="djp-kbd">→</span> beat jump · <span class="djp-kbd">[</span>/<span class="djp-kbd">]</span> nudge crossfader · <span class="djp-kbd">S</span> sync<br>
         <span class="djp-kbd">↑</span>/<span class="djp-kbd">↓</span> active deck channel fader</div>
         <button class="djp-btn" style="margin-top:12px" onclick="this.parentNode.remove()">Close</button>`;
-      container.appendChild(h);
+      root.appendChild(h);   // t142: inside .djp — inherits --djp-glass (container = #dj-body was OUTSIDE the var scope → transparent bg)
     }
     function demo() {
       const steps = [
@@ -1661,7 +1661,7 @@ export function createDjPro() {
       const draw = () => {
         box.innerHTML = `<b>${steps[n][0]}</b><div style="margin-top:8px">${steps[n][1]}</div>
           <button class="djp-btn" style="margin-top:12px" id="djp-next">${n < steps.length - 1 ? 'Next' : 'Done'}</button>`;
-        container.appendChild(box);
+        root.appendChild(box);   // t142: inside .djp (var scope) — was container (#dj-body): transparent bg
         box.querySelector('#djp-next').onclick = () => { n++; n < steps.length ? draw() : box.remove(); };
       };
       draw();

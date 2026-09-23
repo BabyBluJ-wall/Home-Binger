@@ -10,7 +10,7 @@
 //  • Collision: the player is a circle vs. every shelf AABB + the room walls.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1789342462621';
+import { LAYOUT, TUNING } from './config.js?v=1790065991054';
 
 const SPAWN = { x: 0, z: LAYOUT.room.l / 2 + 1.55 };   // t52: in the FRONT HALLWAY, just outside
                                                         // the store door — facing in (-z), as if you
@@ -156,7 +156,9 @@ export function createControls(camera, domElement, colliders) {
     '#sidebar:not(.hidden), #settings:not(.hidden), .modal:not(.hidden)'
   );
   document.addEventListener('keydown', (e) => {
-    const blocked = isTyping(e) || uiOpen();
+    // t143: full-screen TV freezes the player too — WASD/arrows must never
+    // walk the avatar around UNSEEN under the fullscreen video (owner's bug)
+    const blocked = isTyping(e) || uiOpen() || document.body.classList.contains('tv-fullscreen');
     if (KEYMAP[e.code] && !blocked) { state.keys.add(KEYMAP[e.code]); e.preventDefault(); }
     if (!blocked && (e.code === 'ShiftLeft' || e.code === 'ShiftRight')) state.keys.add('run');
     // Q toggles the mouse: locked → free the cursor; free → grab it again.
@@ -292,7 +294,7 @@ export function createControls(camera, domElement, colliders) {
     // movement intent — paused while any menu/form is open, so keys held
     // before a dialog appeared can't keep the player walking behind it
     let mx = 0, mz = 0;
-    if (!uiOpen()) {
+    if (!uiOpen() && !document.body.classList.contains('tv-fullscreen')) {   // t143: frozen in fs TV too
       if (state.keys.has('f')) mz -= 1;
       if (state.keys.has('b')) mz += 1;
       if (state.keys.has('l')) mx -= 1;

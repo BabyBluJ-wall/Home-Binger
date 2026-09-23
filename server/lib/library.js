@@ -31,7 +31,7 @@ const ADDONS = [
   { cfgKey: 'archive', adapter: archiveAdapter, wants: cfg => Array.isArray(cfg?.sections) && cfg.sections.length > 0 },
   { cfgKey: 'podcasts', adapter: podcastsAdapter, wants: cfg => Array.isArray(cfg?.feeds) && cfg.feeds.length > 0 },
   { cfgKey: 'radio', adapter: radioAdapter, wants: cfg => Array.isArray(cfg?.sections) && cfg.sections.length > 0 },
-  { cfgKey: 'iptv', adapter: iptvAdapter, wants: cfg => Array.isArray(cfg?.sections) && cfg.sections.length > 0 },   // t123
+  { cfgKey: 'iptv', adapter: iptvAdapter, wants: cfg => (Array.isArray(cfg?.sections) && cfg.sections.length > 0) || /^https?:\//.test(cfg?.playlistUrl || '') || (Array.isArray(cfg?.packs) && cfg.packs.length > 0) },   // t123 · t137: a channel pack alone counts too · t138: packs[] too
   { cfgKey: 'local', adapter: localAdapter,
     wants: cfg => !!(cfg?.on && (Array.isArray(cfg?.spots) ? cfg.spots.length > 0 : !!cfg?.path)) },   // t68: spots OR legacy path — fresh installs have no legacy field
 ];
@@ -43,7 +43,8 @@ function addonSignature(cfg) {
     instances: (cfg.instances || []).map(i => [i.id, i.kind, i.on !== false, i.url || '', i.token || i.apiKey || '', i.sections || []]),   // t87
     stores: (cfg.friendStores || []).map(s => [s.id, s.on !== false, s.url || '', s.token || '']),   // t97: friend stores bust the cache
     addons: ADDONS.map(a => [a.cfgKey, cfg[a.cfgKey]?.sections || [], cfg[a.cfgKey]?.feeds || [],
-      !!cfg[a.cfgKey]?.on, cfg[a.cfgKey]?.path || '', cfg[a.cfgKey]?.unverified === true])   // t51: local on/path busts the cache · t123: iptv unverified too
+      !!cfg[a.cfgKey]?.on, cfg[a.cfgKey]?.path || '', cfg[a.cfgKey]?.unverified === true,
+      a.cfgKey === 'iptv' ? (cfg[a.cfgKey]?.playlistUrl || '') + '|' + JSON.stringify(cfg[a.cfgKey]?.packs || []) : ''])   // t51: local on/path busts the cache · t123: iptv unverified · t137: the channel pack · t138: the packs list
   });
 }
 
@@ -56,7 +57,7 @@ export function defaultView(cfg) {
     archive: cfg.archive || { sections: [] }, radio: cfg.radio || { sections: [] },
     podcasts: cfg.podcasts || { feeds: [] },
     local: cfg.local || { on: false, path: '' },     // t61: file grabber root
-    iptv: cfg.iptv || { sections: [], unverified: false },    // t123: live TV wing
+    iptv: cfg.iptv || { sections: [], unverified: false, playlistUrl: '', packs: [] },    // t123: live TV wing · t137: + channel pack · t138: + packs
     // t87: extra Plex/Jellyfin connections — on + credentialed only
     instances: (cfg.instances || []).filter(i => i.on !== false && i.url && (i.token || i.apiKey)),
     stores: (cfg.friendStores || []).filter(s => s.on !== false && /^https?:\/\//.test(s.url || '') && !!s.token),   // t97

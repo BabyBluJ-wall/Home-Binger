@@ -192,6 +192,95 @@ const addonMock = http.createServer((req, res) => {
   ]);
   if (u.pathname === '/hls/master.m3u8' || u.pathname === '/hls/kids.m3u8' || u.pathname === '/hls/cine.m3u8') { res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' }); return res.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nmedia.m3u8\n'); }
   // t127: the directory's by-language playlist (channel id → group-title language)
+  // t137: an extra channel pack (.m3u) — Plex-style FAST entries
+  if (u.pathname === '/iptv/plexpack.m3u') {
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    return res.end([
+      '#EXTM3U',
+      '#EXTINF:-1 tvg-id="x1" tvg-name="The Librarians" tvg-logo="https://x/l.png" group-title="United States",The Librarians',
+      'http://127.0.0.1:32790/hls/master.m3u8',
+      '#EXTINF:-1 tvg-id="x2" tvg-name="Mock Cinema" group-title="United States",Mock Cinema',
+      'http://127.0.0.1:32790/hls/rando.m3u8',
+      '#EXTINF:-1 tvg-id="x3" tvg-name="The Librarians" group-title="United States",The Librarians',   // same name, different URL…
+      'http://127.0.0.1:32790/hls/spicy.m3u8',                                                          // …must be deduped
+      '#EXTINF:-1 tvg-name="" group-title="United States"',                                             // nameless — skipped
+      'http://127.0.0.1:32790/hls/kids.m3u8'
+    ].join('\n'));
+  }
+  // t138: two OVERLAPPING packs — cross-pack dedupe, genre canon, inheritance
+  if (u.pathname === '/iptv/plutopack.m3u') {
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    return res.end([
+      '#EXTM3U',
+      '#EXTINF:-1 tvg-name="Dup Channel" group-title="Movies",Dup Channel',
+      'http://127.0.0.1:32790/hls/master.m3u8',
+      '#EXTINF:-1 tvg-name="Pluto Only" group-title="Home + Food",Pluto Only',   // canon test: 'Home + Food' → 'Food & Home'
+      'http://127.0.0.1:32790/hls/rando.m3u8',
+      '#EXTINF:-1 tvg-name="Inherit Me" group-title="United States",Inherit Me', // no genre data (a country label, like Plex's pack)
+      'http://127.0.0.1:32790/hls/kids.m3u8'
+    ].join('\n'));
+  }
+  if (u.pathname === '/iptv/plexpack2.m3u') {
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    return res.end([
+      '#EXTM3U',
+      '#EXTINF:-1 tvg-name="Dup Channel HD" group-title="News",Dup Channel HD',  // dup of pack A's channel (HD suffix) → dropped
+      'http://127.0.0.1:32790/hls/spicy.m3u8',
+      '#EXTINF:-1 tvg-name="Inherit Me" group-title="Sports",Inherit Me',        // dup → dropped, but DONATES its genre to A's copy
+      'http://127.0.0.1:32790/hls/master.m3u8',
+      '#EXTINF:-1 tvg-name="Weird Group" group-title="Card Games",Weird Group',  // canon test: 'Card Games' → 'Entertainment'
+      'http://127.0.0.1:32790/hls/cine.m3u8'
+    ].join('\n'));
+  }
+  // t139: a BIG pack — 150 channels, real chnos/logos/genres (virtualization proof)
+  if (u.pathname === '/iptv/bigpack.m3u') {
+    const rows = ['#EXTM3U'];
+    for (let i = 0; i < 150; i++) {
+      const n = `Bulk Channel ${String(i).padStart(3, '0')}`;
+      rows.push(`#EXTINF:-1 tvg-id="big${i}" tvg-chno="${500 + i}" tvg-name="${n}" tvg-logo="https://x/l${i}.png" tvg-language="Lang ${i % 9}" group-title="${i % 2 ? 'Movies' : 'News'}",${n}`,
+        'http://127.0.0.1:32790/hls/master.m3u8');
+    }
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    return res.end(rows.join('\n'));
+  }
+  // t144: the duplicate-remover fixtures — the same channel under spacing /
+  //      naming variants across three packs, US + GB + untagged. The US and
+  //      GB feeds of the same name must stay SEPARATE; the variants must fold.
+  if (u.pathname === '/iptv/dupes_us.m3u' || u.pathname === '/iptv/dupes_gb.m3u' || u.pathname === '/iptv/dupes_misc.m3u') {
+    const sets = {
+      '/iptv/dupes_us.m3u': [['Danger TV', 'd1'], ['Newsmax 2', 'd2'], ['Estrella TV', 'd3'], ['Pluto TV Spike Outdoors', 'd4'], ['Comet', 'd5']],
+      '/iptv/dupes_gb.m3u': [['Danger TV HD', 'e1'], ['Comet', 'e2']],
+      '/iptv/dupes_misc.m3u': [['DangerTV', 'f1'], ['Newsmax2', 'f2'], ['EstrellaTV', 'f3'], ['Spike Outdoors', 'f4'], ['Comet', 'f5']],
+    };
+    const rows = ['#EXTM3U'];
+    for (const [n, id] of sets[u.pathname])
+      rows.push(`#EXTINF:-1 tvg-id="${id}" tvg-chno="100" tvg-name="${n}" tvg-logo="https://x/${id}.png" group-title="Movies",${n}`,
+        'http://127.0.0.1:32790/hls/master.m3u8');
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    return res.end(rows.join('\n'));
+  }
+  // t139: the SAME channels under DIFFERENT URLs — a "regenerated" pack (stable keys proof)
+  if (u.pathname === '/iptv/bigpack2.m3u') {
+    const rows = ['#EXTM3U'];
+    for (let i = 0; i < 150; i++) {
+      const n = `Bulk Channel ${String(i).padStart(3, '0')}`;
+      rows.push(`#EXTINF:-1 tvg-id="big${i}" tvg-chno="${500 + i}" tvg-name="${n}" tvg-logo="https://x/l${i}.png" tvg-language="Lang ${i % 9}" group-title="${i % 2 ? 'Movies' : 'News'}",${n}`,
+        'http://127.0.0.1:32790/hls/spice.m3u8');
+    }
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    return res.end(rows.join('\n'));
+  }
+  // t139: a mock XMLTV EPG — a 12-hour marathon (stale-cache-proof) + a next programme
+  if (u.pathname === '/iptv/mock-epg.xml') {
+    const z = (ms) => { const d = new Date(ms); const p = (x, n) => String(x).padStart(n, '0');
+      return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)} +0000`; };
+    const now = Date.now();
+    res.writeHead(200, { 'Content-Type': 'application/xml' });
+    return res.end(`<tv><channel id="x1"><display-name>The Librarians</display-name></channel>` +
+      `<programme channel="x1" start="${z(now - 6 * 3600e3)}" stop="${z(now + 6 * 3600e3)}"><title>Mock Marathon</title>` +
+      `<episode-num system="onscreen">S01E01</episode-num><desc>A very long mock programme.</desc></programme>` +
+      `<programme channel="x1" start="${z(now + 6 * 3600e3)}" stop="${z(now + 18 * 3600e3)}"><title>Mock Next Up</title></programme></tv>`);
+  }
   if (u.pathname === '/iptv/index.language.m3u') {
     res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
     return res.end([
@@ -235,7 +324,7 @@ const addonMock = http.createServer((req, res) => {
   // 1) plex library picker + vault filtering (t17)
   const libs = await j(await fetch(BASE + '/api/admin/libraries', { method: 'POST', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify({ source: 'plex', url: 'http://localhost:32770', token: 't' }) }));
   await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
-body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, plex: true, jellyfin: false }, plex: { url: 'http://localhost:32770', token: 't', sections: ['1', '2', '4'] },
+body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: [] }, sources: { demo: false, plex: true, jellyfin: false }, plex: { url: 'http://localhost:32770', token: 't', sections: ['1', '2', '4'] },
       archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] }, radio: { url: 'http://127.0.0.1:32790', sections: ['oldies'] },
       podcasts: { feeds: ['http://127.0.0.1:32790/feed.rss'] }, shelves: {} }) });
   const lib1 = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
@@ -376,6 +465,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     await lookPanel();
     const bodyHtml = (document.querySelector('#settings-body') || document.querySelector('#panel-body') || document.body).innerHTML;
     const themeOk = bodyHtml.includes('data-viz="pulse"') && bodyHtml.includes('data-idle="item"');
+    const noAdminTvInTheme = !bodyHtml.includes('tv-admin-body') && !/store TV defaults/i.test(bodyHtml);   // t142: the admin store-TV defaults moved to Admin → 📺 Store TV
     document.querySelector('.side-link[data-tab="shelves"]').click();
     await new Promise(r => setTimeout(r, 300));
     const shelvesHtml = (document.querySelector('#settings-body') || document.querySelector('#panel-body') || document.body).innerHTML;
@@ -384,7 +474,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     // so the dt-driven checks that follow (queue fade, sliding doors) run live.
     document.getElementById('btn-settings-close')?.click();
     await new Promise(r => setTimeout(r, 150));
-    return { tabs, tabOk, themeOk, shelvesOk, ok: tabOk && themeOk && shelvesOk };
+    return { tabs, tabOk, themeOk, shelvesOk, noAdminTvInTheme, ok: tabOk && themeOk && shelvesOk && noAdminTvInTheme };
   });
 
   // 7) queue panel moved aside: left edge, no HUD overlap, still fades near the TV
@@ -3528,8 +3618,9 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
         await sleep(200);
         const helpEl = modal.querySelector('.djp-help');
         const helpOpen = !!helpEl;
+        const bgOk = !!helpEl && getComputedStyle(helpEl).backgroundColor !== 'rgba(0, 0, 0, 0)';   // t142: the overlay's --djp-glass var didn't resolve outside .djp — the bg computed TRANSPARENT (owner: 'needs a bg')
         if (helpEl) helpEl.querySelector('button')?.click();
-        r.help = { helpOpen, helpClosed: !modal.querySelector('.djp-help'), ok: helpOpen && !modal.querySelector('.djp-help') };
+        r.help = { helpOpen, bgOk, helpClosed: !modal.querySelector('.djp-help'), ok: helpOpen && bgOk && !modal.querySelector('.djp-help') };
         p.stopAll(); p.setAutoDj(false);
         document.querySelector('#dj-modal .modal-close')?.click();
         const ok = r.mic.ok && r.rec.ok && r.set.ok && r.mode.ok && r.help.ok;
@@ -3876,7 +3967,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     const put123 = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
 
     // ── (a) the adapter: curation + NSFW exclusion + guideOnly + the proxy ──
-    await put123({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'] } });
+    await put123({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'], playlistUrl: '', packs: [] } });
     const lib123 = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
     const iptvItems = (lib123.items || []).filter(i => i.source === 'iptv');
     const a = {
@@ -3915,7 +4006,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     a.adminLibs = Array.isArray(adminLibs.libraries) && adminLibs.libraries.length === 12
       && adminLibs.libraries.some(l => l.key === 'news' && l.type === 'live');
     // t125: a toggle-only save (the owner's exact move) must NOT touch sections
-    await put123({ iptv: { unverified: true } });
+    await put123({ iptv: { unverified: true, playlistUrl: '', packs: [] } });
     const cfgT = await j(await fetch(BASE + '/api/admin/config', { headers: authH }));
     a.toggleKeptSections = Array.isArray(cfgT.config?.iptv?.sections) && cfgT.config.iptv.sections.length === 1
       && cfgT.config.iptv.sections[0] === 'news' && cfgT.config.iptv.unverified === true;
@@ -3923,7 +4014,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     const libU = await j(await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token));
     const iu = (libU.items || []).filter(i => i.source === 'iptv');
     a.unverifiedAdds = iu.length === 2 && iu[0].title === 'News One' && iu[1].title === 'Rando Cast';
-    await put123({ iptv: { unverified: false } });   // back to curated for the Guide test below
+    await put123({ iptv: { unverified: false, playlistUrl: '', packs: [] } });   // back to curated for the Guide test below
     R.checks.t123IptvAdapter = { ...a,
       ok: a.onlyNewsOne && a.guideOnly && a.sectioned && a.manifestStatus === 200 && a.rewritten
         && a.variantServed === true && a.segmentStatus === 200 && a.segmentBytes === 512
@@ -3933,7 +4024,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     // ── (b) the GUIDE in the browser: shelves clean, G-key gated, opens in
     //        the theater, numbered rows, CATEGORY TABS page between groups
     //        (t126), click plays via hls ──
-    await put123({ iptv: { sections: ['news', 'kids'] } });   // t126: two categories
+    await put123({ iptv: { sections: ['news', 'kids'], playlistUrl: '', packs: [] } });   // t126: two categories
     await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
     const g = await page.evaluate(async () => {
       const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
@@ -3966,19 +4057,22 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
       await sleep(400);
       out.opens = !document.getElementById('guide-modal').classList.contains('hidden');
       out.freedMouse = lockCalls.includes('exit');
-      // t126: the category bar — News + Kids, the list shows ONE category
-      out.cats = [...document.querySelectorAll('.guide-cat')].length;
+      // t126/t138: the GENRE bar — All · News · Kids (All is new; the provider
+      // bar stays hidden with a single source). Landing page = All.
+      out.cats = [...document.querySelectorAll('#guide-cats .guide-cat')].length;
+      document.querySelector('#guide-cats [data-cat="0"]')?.click();   // t138: the All page, deterministically
+      await sleep(200);
       const rows = [...document.querySelectorAll('.guide-row')];
       out.rows = rows.length;
-      out.numbered = rows.length === 1 && rows[0].querySelector('.guide-num')?.textContent === '001';
-      // click the Kids tab → its channels, numbering restarts at 001 (a fresh page)
-      document.querySelector('[data-cat="1"]')?.click();
+      out.numbered = rows.length === 2 && rows[0].querySelector('.guide-num')?.textContent === '001';
+      // click the Kids tab (t138: index 2 — All sits at 0 now) → its channels, numbering restarts
+      document.querySelector('#guide-cats [data-cat="2"]')?.click();
       await sleep(200);
       const kRows = [...document.querySelectorAll('.guide-row')];
       out.catSwitch = kRows.length === 1 && kRows[0].querySelector('.guide-name')?.textContent === 'Kids One'
         && kRows[0].querySelector('.guide-num')?.textContent === '001';
-      // ◀▶ keys page categories too — ArrowRight wraps Kids → News
-      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      // ◀ keys page genres too — ArrowLeft steps Kids → News (t138: All sits at 0, so Right would wrap to it)
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }));
       await sleep(200);
       // (trim: the tab template carries leading whitespace before the title)
       out.arrowCat = (document.querySelector('.guide-cat.active')?.textContent || '').trim().startsWith('News');
@@ -4000,11 +4094,11 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
       shelfExclusionAssert: sceneSrc.includes('!i.guideOnly'),
       redirectAssert: idxSrc.includes("location.replace('/m')") && idxSrc.includes('hb_desktop'),
       ok: g.shelvesClean && g.gGatedOutside && g.room === 'theater' && g.opens && g.numbered && g.tvTookIt
-        && g.freedMouse === true && g.cats === 2 && g.catSwitch && g.arrowCat && g.closed
+        && g.freedMouse === true && g.cats === 3 && g.rows === 2 && g.catSwitch && g.arrowCat && g.closed   // t138: + the All page
         && sceneSrc.includes('!i.guideOnly') && idxSrc.includes("location.replace('/m')") };
 
     // t126: back to the single-category config the access checks below expect
-    await put123({ iptv: { sections: ['news'] } });
+    await put123({ iptv: { sections: ['news'], playlistUrl: '', packs: [] } });
     await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
 
     // ── (c) PER-USER LIBRARY ACCESS: link-time map, derived views, 403s ──
@@ -4054,19 +4148,45 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
       const mHtml = await (await fetch(BASE + '/m')).text();
       const serves = mHtml.includes('Simple Mode') && mHtml.includes('/js/m.js');
       // the list actually renders + the data-saver toggle works
+      // t136: the ☰ is a MENU now (owner: "the menu button doesnt work. Id
+      // like the access to the actual store in there") — categories separated,
+      // the 3D store front and center, view + sign-in inside.
       const mm = await mp.evaluate(async () => {
         const out = {};
-        await new Promise(r => setTimeout(r, 1200));
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        await sleep(1200);
         out.gridCells = document.querySelectorAll('#grid .cell, #list .row').length;
-        const modeBtn = document.getElementById('mode');
-        if (modeBtn) { modeBtn.click(); await new Promise(r => setTimeout(r, 300)); }
+        // categories: chips exist and ANY category chip filters to its own
+        // count (self-consistent — the suite re-stages configs around this
+        // page, and the staged library may hold no movies at all)
+        const chips = [...document.querySelectorAll('.chip')];
+        out.chips = chips.length;
+        out.movieFilter = true;
+        const catChip = chips.find(c => c.dataset.cat !== 'all');
+        out.catPicked = catChip?.dataset.cat || null;
+        if (catChip) {
+          const chipCount = Number(catChip.querySelector('small')?.textContent || 0);
+          catChip.click(); await sleep(400);
+          out.movieFilter = document.querySelectorAll('#grid .cell').length === chipCount;
+        }
+        // ☰ opens the menu; the 3D store leads it; list view from inside
+        document.getElementById('mode').click(); await sleep(300);
+        out.menuOpens = document.getElementById('menu').classList.contains('on');
+        out.storeLink = document.getElementById('m-store')?.getAttribute('href') === '/?desktop=1';
+        document.getElementById('view-list').click(); await sleep(300);
         out.toggled = !!document.getElementById('list') && !document.getElementById('list').hidden;
-        out.desktopLink = !!document.querySelector('footer a[href="/?desktop=1"]');
+        out.menuClosed = !document.getElementById('menu').classList.contains('on');
+        // t136b: the footer carries the ™ block now (owner's call) — the 3D
+        // store link lives in the ☰ menu only
+        out.storeInMenu = !!document.querySelector('#m-store[href="/?desktop=1"]');
+        const ft = document.querySelector('footer')?.textContent || '';
+        out.tmFooter = ft.includes('\u2122') && ft.includes('BluJ Productions');
         return out;
       });
       await mp.close();
       R.checks.t123SimpleMode = { redirected, serves, ...mm,
-        ok: redirected && serves && mm.gridCells > 0 && mm.toggled && mm.desktopLink };
+        ok: redirected && serves && mm.gridCells > 0 && mm.chips >= 2 && mm.movieFilter
+          && mm.menuOpens && mm.storeLink && mm.toggled && mm.menuClosed && mm.storeInMenu && mm.tmFooter };
     }
 
     // ── (e) INVITES: the .bat is generated, validated, recorded ──
@@ -4098,7 +4218,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     {
       const { pathToFileURL } = require('node:url');
       const { recoverIptvSections } = await import(pathToFileURL(require('node:path').resolve('server/lib/store.js')).href);
-      const mk = (sections, flag) => { const c = { iptv: { url: '', sections, unverified: false } }; if (flag) c._iptvRecheck = true; return c; };
+      const mk = (sections, flag) => { const c = { iptv: { url: '', sections, unverified: false, playlistUrl: '', packs: [] } }; if (flag) c._iptvRecheck = true; return c; };
       const wiped = mk([]);       const healed = recoverIptvSections(wiped);       // wiped → the default six return
       const again = mk([], true); const reflagged = recoverIptvSections(again);    // once-flagged → a deliberate off STAYS off
       const kept  = mk(['news']); recoverIptvSections(kept);                       // non-empty → untouched
@@ -4117,7 +4237,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
 
     // ── (g) t127: the Guide's LANGUAGE pages ──
     {
-      await put123({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news', 'kids', 'movies'], unverified: true } });
+      await put123({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news', 'kids', 'movies'], unverified: true, playlistUrl: '', packs: [] } });
       await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
       const lg = await page.evaluate(async () => {
         const w = window, s = w.__VB.scene, ctx = w.__VB.mainCtx;
@@ -4141,8 +4261,9 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
         catBtn('Movies')?.click(); await sleep(200);
         out.spanishMovies = [...document.querySelectorAll('.guide-row .guide-name')].map(n => n.textContent);
         // L flips languages (t128: ★ Favorites rides first in the cycle):
-        // Spanish → ★ Favorites → All → English (English drops the empty
-        // Movies page, so the view lands back on News)
+        // Spanish → ★ Favorites → All → English (t138: English drops the
+        // empty Movies page, so the view falls back to the ALL page — both
+        // English channels, News One first)
         w.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true, cancelable: true })); await sleep(250);
         w.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true, cancelable: true })); await sleep(250);
         out.l1 = (document.querySelector('.guide-lang.active')?.textContent.trim() || '').startsWith('All');
@@ -4161,7 +4282,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
           && lg.spanishNews.length === 1 && lg.spanishNews[0] === 'Rando Cast'
           && lg.spanishMovies.length === 1 && lg.spanishMovies[0] === 'Cine Latino'
           && !lg.catsAfter.some(c => c.startsWith('Kids'))
-          && lg.l1 && lg.l2.active && lg.l2.rows.length === 1 && lg.l2.rows[0] === 'News One' && lg.tvTookIt };
+          && lg.l1 && lg.l2.active && lg.l2.rows.length === 2 && lg.l2.rows[0] === 'News One' && lg.tvTookIt };   // t138: the All page (News One + Kids One)
     }
 
     // ── (h) t128: FAVORITE channels + the UI trim (My Media out; invites one home) ──
@@ -4197,9 +4318,9 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
         w.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true, cancelable: true })); await sleep(300);
         out.afterFon = { rows: document.querySelectorAll('.guide-row').length,
           starOn: document.querySelector('.guide-row [data-star]')?.classList.contains('on') };
-        // persistence: the prefs round-trip carries the favorites
-        const boot = await (await fetch('/api/bootstrap')).json();
-        out.bootstrapHas = (boot.prefs?.guideFavs || []).length === 1;
+        // persistence: the starred id (checked node-side below — an in-page
+        // bootstrap read starves on slow boxes behind the 3D frames)
+        out.favId = (document.querySelector('#guide-rows .guide-row [data-star]')?.dataset.star) || null;
         w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         await sleep(150);
         return out;
@@ -4213,9 +4334,18 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
           && fv.favRows.length === 1 && fv.favRows[0] === 'News One'
           && fv.afterFoff.rows === 0 && fv.afterFoff.hint
           && fv.afterFon.rows === 1 && fv.afterFon.starOn
-          && fv.bootstrapHas
           && uiSrc.split('id="invite-box"').length - 1 === 1 && uiSrc.includes('loadInvite(root);   // t128')
           && !idxSrc.includes('data-tab="media"') };
+    // t128: the prefs round-trip carries the favorites — read server-side with
+    // retries (an in-page bootstrap read starves behind 3D frames on slow boxes)
+    let bootHas = false;
+    for (let bi = 0; bi < 6 && !bootHas; bi++) {
+      await new Promise(r => setTimeout(r, 400));
+      const bootN = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+      bootHas = (bootN.prefs?.guideFavs || []).includes(fv.favId);
+    }
+    R.checks.t128FavTrim.bootstrapHas = bootHas;
+    R.checks.t128FavTrim.ok = R.checks.t128FavTrim.ok && bootHas;
     }
 
     // ── (i) t130: room-aware remote + help refresh + ™© + policies presets ──
@@ -4390,7 +4520,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     }
 
     // leave tidy: iptv off (mock URL gone)
-    await put123({ iptv: { sections: [], url: '', unverified: false } });
+    await put123({ iptv: { sections: [], url: '', unverified: false, playlistUrl: '', packs: [] } });
     await fetch(BASE + '/api/library?refresh=1', { headers: authH });
     await page.evaluate(async () => { try { await window.__VB.mainCtx?.reloadLibrary?.(); } catch {} });
   }
@@ -5101,7 +5231,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     //     re-fetches the library as this page's profile — so the wave owns its
     //     setup, the same way t123 re-stages its wing.
     await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
-      body: JSON.stringify({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'] },
+      body: JSON.stringify({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'], playlistUrl: '', packs: [] },
         sources: { demo: false, plex: true, jellyfin: false },
         plex: { url: 'http://localhost:32770', token: 't', sections: ['1', '2', '4'] },
         archive: { url: 'http://127.0.0.1:32790', sections: ['staff-picks'] },
@@ -5212,29 +5342,22 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
         obj.togglePlay = (...a) => { n++; return orig(...a); };
         spies[name] = { orig, count: () => n, restore: () => { obj.togglePlay = orig; } };
       }
-      const stopSpy = (() => { const ch = s.djAudio; const orig = ch.stop.bind(ch); let n = 0; ch.stop = (...a) => { n++; return orig(...a); }; return { count: () => n, restore: () => { ch.stop = orig; } }; })();
-      // in the dance hall with the projector running: NO theater remote
+      // in the dance hall with the projector running: NO remote AT ALL —
+      // t143 (owner's call: "the pc is what controls it") — the booth remote
+      // is gone; the dance hall is driven from the PC's booth panel only.
       s.debugTeleport(9.5, 2.0); await sleep(700);
       out.room = ctx.playerRoom();
       out.hiddenInDance = document.getElementById('tv-remote').classList.contains('hidden');
       out.noTheaterTag = !(document.getElementById('remote-room')?.textContent || '').includes('THEATER');
-      // spin the classic booth deck → the remote appears, bound to the BOOTH
+      // spin the classic booth deck → the booth PLAYS but the bar stays gone
       const albums = (st.items || []).filter(i => i.type === 'album');
       ctx.dj.booth.add(albums[0]); ctx.dj.booth.add(albums[1]); ctx.dj.booth.playAt(0);
       await sleep(700);
-      out.shownDance = !document.getElementById('tv-remote').classList.contains('hidden');
-      out.boothTag = (document.getElementById('remote-room')?.textContent || '').includes('BOOTH');
-      out.queueBooth = document.querySelectorAll('#tv-queue [data-bqidx]').length > 0;
-      document.getElementById('tv-play').click(); await sleep(150);
-      out.danceClick = { tv: spies.tv.count(), juke: spies.juke.count(), booth: spies.booth.count() };
-      const volEl = document.getElementById('tv-vol');
-      volEl.value = '40'; volEl.dispatchEvent(new Event('input', { bubbles: true }));
-      await sleep(200);
-      out.boothVolTarget = s.djAudio.volumeInfo().target;
-      document.getElementById('tv-stop').click(); await sleep(150);   // mock streams blink-end + auto-advance: assert ROUTING
-      out.boothStopCalled = stopSpy.count() >= 1;
-      out.dbg = { albumN: albums.length, album0: albums[0]?.key ?? null, queueLen: ctx.dj?.booth?.queue?.length, boothStats: ctx.boothStats?.() };
-      stopSpy.restore();
+      out.stillHiddenInDance = document.getElementById('tv-remote').classList.contains('hidden');
+      out.noBoothTag = !(document.getElementById('remote-room')?.textContent || '').includes('BOOTH');
+      out.queueGoneInDance = document.querySelectorAll('#tv-queue [data-bqidx]').length === 0;
+      out.boothPlays = !!(ctx.boothStats?.() || {}).playing;
+      out.noReach = spies.tv.count() === 0 && spies.juke.count() === 0 && spies.booth.count() === 0;
       ctx.dj.booth.queue.length = 0; ctx.dj.booth.idx = -1; ctx.boothStop();
       // theater → the screen; store → the jukebox
       s.debugTeleport(0, -8.5); await sleep(700);
@@ -5245,10 +5368,8 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
       out.storeTag = (document.getElementById('remote-room')?.textContent || '').includes('JUKEBOX');
       for (const k of Object.keys(spies)) spies[k].restore();
       s.tv.stop(); ctx.boothStop(); ctx.jukeboxStop();
-      out.ok = out.room === 'dance' && out.hiddenInDance && out.noTheaterTag && out.shownDance
-        && out.boothTag && out.queueBooth
-        && out.danceClick.tv === 0 && out.danceClick.juke === 0 && out.danceClick.booth === 1
-        && Math.abs(out.boothVolTarget - 0.4) < 0.01 && out.boothStopCalled
+      out.ok = out.room === 'dance' && out.hiddenInDance && out.noTheaterTag && out.stillHiddenInDance
+        && out.noBoothTag && out.queueGoneInDance && out.boothPlays && out.noReach
         && out.theaterTag && out.theaterClick.tv === 1 && out.storeTag;
       return out;
     });
@@ -5296,7 +5417,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     //     keeps its EXACT box (1:1) and slides left; Esc peels one layer at a time
     R.checks.t134GuideDock = await page.evaluate(async () => {
       const VB = window.__VB, s = VB.scene, st = VB.state;
-      const out = {};
+      const out = { variant: window.__GUIDE_VARIANT || 'classic' };
       const sleep = ms => new Promise(r => setTimeout(r, ms));
       s.debugTeleport(0, -8.5);
       const movie = (st.items || []).find(i => i.type === 'movie');
@@ -5313,16 +5434,141 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
         channels: (st.items || []).filter(i => i.source === 'iptv' && i.type === 'live').length,
         room: VB.mainCtx.playerRoom() };
       const r0 = vid.getBoundingClientRect();
+      out.fullW = Math.round(r0.width);
       document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+      // t139g/t139h: the layout depends on the variant — poll until the video settles
+      if (out.variant === 'hybrid') {
+        // t139h (the owner's pick): the video keeps its EXACT size and slides
+        // left of the right dock (classic mechanics) while the dock carries
+        // the new layout; t143: the footer owns the info in fs — no card.
+        const dockW = Math.min(760, innerWidth * 0.46);
+        const expected = -0.5 * dockW;
+        let tx = 0;
+        for (let i = 0; i < 60; i++) {
+          await sleep(100);
+          const m = getComputedStyle(vid).transform.match(/matrix\(1, 0, 0, 1, (-?[\d.]+), 0\)/);
+          tx = m ? parseFloat(m[1]) : 0;
+          if (Math.abs(tx - expected) < 1) break;
+        }
+        out.slideSettled = Math.abs(tx - expected) < 1;
+        out.tx = Math.round(tx);
+        const modal = document.getElementById('guide-modal');
+        out.open = modal && !modal.classList.contains('hidden');
+        out.docked = document.body.classList.contains('fs-guide');
+        const r1 = vid.getBoundingClientRect();
+        out.sameSize = Math.abs(r1.width - r0.width) < 0.5 && Math.abs(r1.height - r0.height) < 0.5;   // never squeezed
+        out.movedLeft = r1.left < r0.left - 40;
+        const mr = modal.getBoundingClientRect();
+        out.dockRight = Math.abs(mr.right - innerWidth) < 6 && mr.width > 220 && mr.width < innerWidth * 0.5;
+        out.dockW = Math.round(mr.width);
+        // t143: fs keeps the video pristine — NO floating synopsis card; the
+        // dock footer carries the info (+ ▶ Watch). The card's new home is
+        // the THEATER guide (asserted in t143Ultrawide below).
+        const synEl = document.getElementById('guide-syn');
+        out.synHiddenInFs = getComputedStyle(synEl).display === 'none';
+        const footEl = document.getElementById('guide-foot');
+        out.footShownInFs = getComputedStyle(footEl).display !== 'none' && footEl.textContent.trim().length > 0;
+        out.footWatch = !!footEl.querySelector('[data-footwatch]');
+        out.dockPadZero = getComputedStyle(modal).padding === '0px';   // t143: padding cut
+        out.hudStandsDown = getComputedStyle(document.getElementById('tv-fs-bottom')).pointerEvents === 'none';   // t141: the video HUD's control bars must NOT cover the syn card's buttons while the Guide is open
+        out.rows = document.querySelectorAll('.guide-row').length;
+        out.sameElement = document.getElementById('vb-fs-video') === vid;
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+        await sleep(300);
+        out.guideClosedByEsc = modal.classList.contains('hidden');
+        out.fsStillOn = s.tv.fullscreenActive();
+        let backC = null;
+        for (let i = 0; i < 60; i++) {   // t139h: the slide-back is ANIMATED (the transition rides on tv-fullscreen itself, so closing still eases) — poll until it settles
+          await sleep(100);
+          const r = vid.getBoundingClientRect();
+          if (Math.abs(r.left - r0.left) < 0.5) { backC = r; break; }
+        }
+        out.videoBackCenter = !!backC;
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+        await sleep(300);
+        out.fsExited = !s.tv.fullscreenActive();
+        // windowed (the THEATER): the drawer floats in from the right with
+        // NO SHADE on the rest of the view — the wall keeps playing bright
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+        await sleep(450);
+        const modal2 = document.getElementById('guide-modal');
+        out.gOverlayStillWorks = !modal2.classList.contains('hidden') && !document.body.classList.contains('fs-guide');
+        const cs2 = getComputedStyle(modal2);
+        out.noShade = (cs2.backgroundColor === 'rgba(0, 0, 0, 0)' || cs2.backgroundColor === 'transparent')
+          && (cs2.backdropFilter === 'none' || cs2.backdropFilter === '');
+        const card = modal2.querySelector('.guide-card');
+        let cr = card.getBoundingClientRect();
+        for (let i = 0; i < 40 && Math.abs(cr.right - innerWidth) > 6; i++) {   // t139h: the drawer's slide-in is animated — poll until it sits flush right
+          await sleep(100);
+          cr = card.getBoundingClientRect();
+        }
+        out.drawerRight = Math.abs(cr.right - innerWidth) < 6;
+        out.drawerW = Math.round(cr.width);
+        out.drawerFullH = cr.height > innerHeight * 0.9;
+        out.nextCells = document.querySelectorAll('#guide-rows .guide-next').length;   // the new layout's NEXT cells
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+        await sleep(150);
+        s.tv.stop();
+        out.ok = out.entered && out.vidIsVideo && out.open && out.docked && out.slideSettled && out.sameElement
+          && out.sameSize && out.movedLeft && out.dockRight && out.rows > 0
+          && out.synHiddenInFs && out.footShownInFs && out.footWatch && out.dockPadZero && out.hudStandsDown
+          && out.guideClosedByEsc && out.fsStillOn && out.videoBackCenter && out.fsExited && out.gOverlayStillWorks
+          && out.noShade && out.drawerRight && out.drawerW > 500 && out.drawerFullH && out.nextCells > 0;
+        return out;
+      }
+      if (out.variant === 'showcase') {
+        const wantW = Math.max(280, Math.min(innerWidth * 0.24, 420));
+        out.wide = innerWidth > 1100;   // t139g: the synopsis rail is a wide-screen feature (laptops get the footer)
+        let mini = null;
+        for (let i = 0; i < 60; i++) { await sleep(100); const r = vid.getBoundingClientRect();
+          if (Math.abs(r.width - wantW) < 10) { mini = r; break; } }
+        out.squeezed = !!mini;
+        out.mini = mini ? { w: Math.round(mini.width), h: Math.round(mini.height), top: Math.round(mini.top), rightGap: Math.round(innerWidth - mini.right) } : null;
+        out.ratio = mini ? Math.abs(mini.width / mini.height - 16 / 9) < 0.02 : false;
+        const modal = document.getElementById('guide-modal');
+        out.open = modal && !modal.classList.contains('hidden');
+        out.docked = document.body.classList.contains('fs-guide');
+        const mr = modal.getBoundingClientRect();
+        out.guideLeft = Math.round(mr.left);
+        out.guideW = Math.round(mr.width);
+        out.synShown = getComputedStyle(document.getElementById('guide-syn')).display !== 'none';
+        out.rows = document.querySelectorAll('.guide-row').length;
+        out.sameElement = document.getElementById('vb-fs-video') === vid;
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+        await sleep(300);
+        out.guideClosedByEsc = modal.classList.contains('hidden');
+        out.fsStillOn = s.tv.fullscreenActive();
+        let back = null;
+        for (let i = 0; i < 60; i++) { await sleep(100); const r = vid.getBoundingClientRect(); if (r.width > innerWidth * 0.98) { back = r; break; } }
+        out.videoBackFull = !!back;
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+        await sleep(300);
+        out.fsExited = !s.tv.fullscreenActive();
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+        await sleep(350);
+        out.gOverlayStillWorks = !modal.classList.contains('hidden') && !document.body.classList.contains('fs-guide');
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+        await sleep(150);
+        s.tv.stop();
+        out.ok = out.entered && out.vidIsVideo && out.open && out.docked && out.squeezed && out.ratio && out.sameElement
+          && !!out.mini && out.mini.top === 24 && out.mini.rightGap === 24
+          && out.guideLeft === 0 && Math.abs(out.guideW - innerWidth * 0.68) < 40
+          && (!out.wide || out.synShown) && out.rows > 0
+          && out.guideClosedByEsc && out.fsStillOn && out.videoBackFull && out.fsExited && out.gOverlayStillWorks;
+        return out;
+      }
+      // classic: the video keeps its exact size and slides left of the right dock
       const expected = -0.5 * Math.min(460, innerWidth * 0.44);
       let tx = 0;
-      for (let i = 0; i < 40; i++) {   // the slide is a transition; swiftshader frames can crawl
+      for (let i = 0; i < 60; i++) {
         await sleep(100);
         const m = getComputedStyle(vid).transform.match(/matrix\(1, 0, 0, 1, (-?[\d.]+), 0\)/);
         tx = m ? parseFloat(m[1]) : 0;
         if (Math.abs(tx - expected) < 1) break;
       }
       out.slideSettled = Math.abs(tx - expected) < 1;
+      out.tx = Math.round(tx);
+      out.sameElement = document.getElementById('vb-fs-video') === vid;
       const modal = document.getElementById('guide-modal');
       out.open = modal && !modal.classList.contains('hidden');
       out.docked = document.body.classList.contains('fs-guide');
@@ -5347,7 +5593,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
       document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
       await sleep(150);
       s.tv.stop();
-      out.ok = out.entered && out.vidIsVideo && out.open && out.docked && out.slideSettled
+      out.ok = out.entered && out.vidIsVideo && out.open && out.docked && out.slideSettled && out.sameElement
         && out.sameSize && out.movedLeft && out.dockRight && out.rows > 0
         && out.guideClosedByEsc && out.fsStillOn && out.videoBackCenter && out.fsExited && out.gOverlayStillWorks;
       return out;
@@ -5370,19 +5616,23 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
       key('g'); await sleep(700);                // the docked Guide
       out.guide = !document.getElementById('guide-modal').classList.contains('hidden');
       key('Enter'); await sleep(1600);           // pick the channel
-      out.guideClosed = document.getElementById('guide-modal').classList.contains('hidden');
-      out.fsKept = s.tv.fullscreenActive();      // THE fix
+      // t145: FULL-SCREEN SURFING — the dock STAYS UP (owner's call); Esc
+      // peels one layer at a time: guide first, then full screen.
+      out.guideStays = !document.getElementById('guide-modal').classList.contains('hidden');
+      out.fsKept = s.tv.fullscreenActive();      // THE fix (t135)
       const cur = s.tv.state?.playing;
       out.channel = cur?.item?.source === 'iptv';
       out.playing = s.tv.stats().playing;
+      key('Escape'); await sleep(350);
+      out.escPeelsGuide = document.getElementById('guide-modal').classList.contains('hidden') && s.tv.fullscreenActive();
       key('Escape'); await sleep(350);
       out.escExits = !s.tv.fullscreenActive();
       out.fsAgain = s.tv.enterFullscreen(); await sleep(200);
       document.getElementById('tv-fs-close').click(); await sleep(250);
       out.chipExits = !s.tv.fullscreenActive();
       s.tv.stop();
-      out.ok = out.fs && out.guide && out.guideClosed && out.fsKept && out.channel
-        && out.playing && out.escExits && out.fsAgain && out.chipExits;
+      out.ok = out.fs && out.guide && out.guideStays && out.fsKept && out.channel
+        && out.playing && out.escPeelsGuide && out.escExits && out.fsAgain && out.chipExits;
       return out;
     });
 
@@ -5425,9 +5675,701 @@ body: JSON.stringify({ iptv: { sections: [], url: '' }, sources: { demo: false, 
     });
   }
 
+  // ── t137/t138: EXTRA CHANNEL PACKS — provider pages in the Guide ──
+  {
+    const putPk = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    const libOf = () => fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token).then(j);
+
+    // t137 (packs form): one pack rides the Guide as the 'Plex Free' provider page
+    await putPk({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'], playlistUrl: '', packs: [{ label: 'Plex Free', url: 'http://127.0.0.1:32790/iptv/plexpack.m3u' }] } });
+    const lib137 = await libOf();
+    const plex = (lib137.items || []).filter(i => i.provider === 'Plex Free');
+    const librarians = plex.find(i => i.title === 'The Librarians');
+    const manifest = librarians ? await fetch(`${BASE}/api/play/iptv/${librarians.key}`) : null;
+    const manifestText = manifest ? await manifest.text() : '';
+    R.checks.t137ChannelPack = {
+      n: plex.length,
+      deduped: plex.filter(i => i.title === 'The Librarians').length === 1,
+      guideOnly: plex.length > 0 && plex.every(i => i.guideOnly === true),
+      section: (librarians || {}).sectionTitle,
+      manifestStatus: manifest?.status,
+      rewritten: manifestText.includes('/api/play/iptv/'),
+      ok: plex.length === 2 && plex.filter(i => i.title === 'The Librarians').length === 1
+        && plex.every(i => i.guideOnly === true) && librarians?.sectionTitle === 'Plex Free'
+        && manifest?.status === 200 && manifestText.includes('/api/play/iptv/')
+    };
+
+    // t138Migration: a legacy single-playlist save (a beta6 admin tab) folds into the pack list
+    await putPk({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'], playlistUrl: 'http://127.0.0.1:32790/iptv/plexpack.m3u' } });
+    const cfgMig = await j(await fetch(BASE + '/api/admin/config', { headers: authH }));
+    const libMig = await libOf();
+    const migPlex = (libMig.items || []).filter(i => i.provider === 'Plex Free');
+    R.checks.t138Migration = {
+      foldedLabel: cfgMig.config?.iptv?.packs?.[0]?.label,
+      foldedUrl: cfgMig.config?.iptv?.packs?.[0]?.url,
+      n: migPlex.length,
+      ok: cfgMig.config?.iptv?.packs?.[0]?.label === 'Plex Free'
+        && cfgMig.config?.iptv?.packs?.[0]?.url === 'http://127.0.0.1:32790/iptv/plexpack.m3u' && migPlex.length === 2
+    };
+
+    // a pack ALONE (no directory groups) still stocks the Guide
+    await putPk({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'Plex Free', url: 'http://127.0.0.1:32790/iptv/plexpack.m3u' }] } });
+    const lib137b = await libOf();
+    const plexB = (lib137b.items || []).filter(i => i.provider === 'Plex Free');
+    R.checks.t137PackAlone = { n: plexB.length, ok: plexB.length === 2 };
+
+    // t138: TWO packs + the directory — cross-pack dedupe, genre canon, inheritance
+    await putPk({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'], playlistUrl: '', packs: [
+      { label: 'Pluto TV', url: 'http://127.0.0.1:32790/iptv/plutopack.m3u' },
+      { label: 'Plex Free', url: 'http://127.0.0.1:32790/iptv/plexpack2.m3u' }
+    ] } });
+    const lib138 = await libOf();
+    const live138 = (lib138.items || []).filter(i => i.type === 'live');
+    const byTitle = Object.fromEntries(live138.map(i => [i.title, i]));
+    const provCounts = {};
+    for (const i of live138) provCounts[i.provider] = (provCounts[i.provider] || 0) + 1;
+    R.checks.t138MultiPack = {
+      n: live138.length,                          // 5: Directory 1 + Pluto TV 3 + Plex Free 1 (2 dupes dropped)
+      provCounts,
+      dupes: live138.filter(i => /Dup Channel/.test(i.title)).map(i => i.title),
+      dupKept: byTitle['Dup Channel']?.provider === 'Pluto TV' && byTitle['Dup Channel']?.genre === 'Movies',
+      inherited: byTitle['Inherit Me']?.provider === 'Pluto TV' && byTitle['Inherit Me']?.genre === 'Sports',
+      canon: byTitle['Pluto Only']?.genre === 'Food & Home' && byTitle['Weird Group']?.genre === 'Entertainment',
+      directory: byTitle['News One']?.provider === 'Directory' && byTitle['News One']?.genre === 'News',
+      ok: live138.length === 5 && provCounts['Pluto TV'] === 3 && provCounts['Plex Free'] === 1 && provCounts['Directory'] === 1
+        && byTitle['Dup Channel']?.provider === 'Pluto TV' && byTitle['Dup Channel']?.genre === 'Movies'
+        && byTitle['Inherit Me']?.genre === 'Sports' && byTitle['Inherit Me']?.provider === 'Pluto TV'
+        && byTitle['Pluto Only']?.genre === 'Food & Home' && byTitle['Weird Group']?.genre === 'Entertainment'
+        && byTitle['News One']?.provider === 'Directory' && byTitle['News One']?.genre === 'News'
+    };
+
+    // the Guide DOM: genre bar + provider bar + the AND filter, in the real UI
+    const g138 = await page.evaluate(async () => {
+      const w = window, s = w.__VB.scene, ctx = w.__VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(600);
+      s.debugTeleport(0, -8.5); await sleep(250);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(450);
+      const out = {};
+      out.open = !document.getElementById('guide-modal').classList.contains('hidden');
+      // t139f: bars start TIDY (All + 3 options + "+N more") — capture that, then expand
+      out.catsTidy = [...document.querySelectorAll('#guide-cats [data-cat]')].length;
+      out.catsMoreBtn = document.querySelector('#guide-cats [data-morebar]')?.textContent.trim() || null;
+      document.querySelector('#guide-cats [data-morebar]')?.click(); await sleep(200);
+      document.querySelector('#guide-prov [data-morebar]')?.click(); await sleep(200);
+      out.genres = [...document.querySelectorAll('#guide-cats .guide-cat')].map(b => b.textContent.trim());
+      out.provs = [...document.querySelectorAll('#guide-prov .guide-cat')].map(b => b.textContent.trim());
+      out.provBarShown = out.provs.length >= 3;
+      out.tags = [...document.querySelectorAll('#guide-body .guide-row .guide-prov')].length > 0;
+      const gen = (t) => [...document.querySelectorAll('#guide-cats .guide-cat')].find(b => b.textContent.trim().startsWith(t));
+      const prv = (t) => [...document.querySelectorAll('#guide-prov .guide-cat')].find(b => b.textContent.trim().startsWith(t));
+      gen('Movies')?.click(); await sleep(200);
+      prv('Pluto TV')?.click(); await sleep(250);
+      out.andRows = [...document.querySelectorAll('#guide-body .guide-row .guide-name')].map(n => n.textContent);
+      out.andTag = document.querySelector('#guide-body .guide-row .guide-prov')?.textContent;
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return out;
+    });
+    R.checks.t138GuideDom = { ...g138,
+      ok: g138.open && g138.provBarShown && g138.tags
+        && g138.catsTidy === 4 && g138.catsMoreBtn === '+2 more'   // t139f: tidy by default
+        && g138.genres.some(t => t.startsWith('All')) && g138.genres.some(t => t.startsWith('News')) && g138.genres.some(t => t.startsWith('Food & Home'))
+        && g138.provs.some(t => t.startsWith('All providers')) && g138.provs.some(t => t.startsWith('Pluto TV')) && g138.provs.some(t => t.startsWith('Directory'))
+        && g138.andRows.length === 1 && g138.andRows[0] === 'Dup Channel' && g138.andTag === 'Pluto TV' };
+
+    // restore the t123 state (news only, no packs) — the final restore below re-stages real defaults
+    await putPk({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: ['news'], playlistUrl: '', packs: [] } });
+    await libOf();
+  }
+
+  // ── t139: the Guide REBUILD — virtualization, program data, stable keys ──
+  {
+    const putT = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    const libT = () => fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token).then(j);
+
+    // (a) VIRTUALIZATION — 150 channels, only the visible window in the DOM
+    await putT({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'BulkTV', url: 'http://127.0.0.1:32790/iptv/bigpack.m3u' }] } });
+    const libV = await libT();
+    const bulk = (libV.items || []).filter(i => i.provider === 'BulkTV');
+    const v1 = await page.evaluate(async (n) => {
+      const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(500);
+      s.debugTeleport(0, -8.5); await sleep(250);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(500);
+      document.querySelector('#guide-cats [data-cat="0"]')?.click();   // the ALL page, deterministically
+      await sleep(300);
+      const out = {};
+      const gi = ctx.guideInfo?.() || {};
+      out.channels = gi.channels;
+      out.rowH = document.querySelector('#guide-rows .guide-row')?.offsetHeight || 52;   // t139g: variant-agnostic
+      out.renderedTop = document.querySelectorAll('#guide-rows .guide-row').length;
+      out.spacer = document.getElementById('guide-spacer').style.height;
+      // scroll to the very bottom — the window follows, the DOM stays small
+      const body = document.getElementById('guide-body');
+      body.scrollTop = body.scrollHeight;
+      let last = null;
+      for (let i = 0; i < 60; i++) {   // rAF render on a slow box (up to 15s)
+        await sleep(250);
+        const names = [...document.querySelectorAll('#guide-rows .guide-name')].map(n => n.textContent);
+        if (names.includes(`Bulk Channel ${String(n - 1).padStart(3, '0')}`)) { last = names; break; }
+      }
+      out.renderedBottom = document.querySelectorAll('#guide-rows .guide-row').length;
+      out.lastVisible = last ? last[last.length - 1] : null;
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return out;
+    }, bulk.length);
+    R.checks.t139Virtual = { ...v1, n: bulk.length,
+      ok: bulk.length === 150 && v1.channels === 150 && v1.renderedTop <= 60 && v1.renderedBottom <= 60
+        && v1.spacer === `${150 * (v1.rowH || 52)}px` && v1.lastVisible === 'Bulk Channel 149' };
+
+    // (b) STABLE KEYS — the pack "regenerates" (new URLs), favorites survive
+    const keyV1 = bulk.find(i => i.title === 'Bulk Channel 000')?.key;
+    const starStep = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(400);
+      s.debugTeleport(0, -8.5); await sleep(200);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(400);
+      // star the first row (the settle-retry pattern from t128)
+      for (let i = 0; i < 4 && !document.querySelector('#guide-rows .guide-row [data-star].on'); i++) {
+        document.querySelector('#guide-rows .guide-row [data-star]')?.click();
+        await sleep(200);
+      }
+      const on = !!document.querySelector('#guide-rows .guide-row [data-star].on');
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return on;
+    });
+    // the regenerated pack: same names+ids, different stream URLs
+    await putT({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'BulkTV', url: 'http://127.0.0.1:32790/iptv/bigpack2.m3u' }] } });
+    const libS = await libT();
+    const bulk2 = (libS.items || []).filter(i => i.provider === 'BulkTV');
+    const keyV2 = bulk2.find(i => i.title === 'Bulk Channel 000')?.key;
+    const starAfter = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(400);
+      s.debugTeleport(0, -8.5); await sleep(200);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(400);
+      const row = document.querySelector('#guide-rows .guide-row');
+      const out = { starred: row?.querySelector('[data-star]')?.classList.contains('on'),
+        title: row?.querySelector('.guide-name')?.textContent };
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return out;
+    });
+    R.checks.t139StableKeys = { keyV1, keyV2, starredBefore: starStep, starredAfter: starAfter.starred, titleAfter: starAfter.title,
+      ok: bulk2.length === 150 && keyV1 && keyV1 === keyV2 && starStep === true && starAfter.starred === true && starAfter.title === 'Bulk Channel 000' };
+
+    // (c) EPG — real program data per channel (a mock XMLTV with a marathon window)
+    await putT({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'MockTV', url: 'http://127.0.0.1:32790/iptv/plexpack.m3u', epg: 'http://127.0.0.1:32790/iptv/mock-epg.xml' }] } });
+    const libE = await libT();
+    const mockCh = (libE.items || []).find(i => i.provider === 'MockTV' && i.title === 'The Librarians');
+    const epgSnap = await j(await fetch(BASE + '/api/iptv/epg'));
+    const e = epgSnap.epg?.[mockCh?.key];
+    const eRow = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(400);
+      s.debugTeleport(0, -8.5); await sleep(200);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      let out = null;
+      for (let i = 0; i < 30; i++) {   // the program data lands via a quiet fetch — poll for it
+        await sleep(200);
+        const row = [...document.querySelectorAll('#guide-rows .guide-row')].find(r => r.querySelector('.guide-name')?.textContent === 'The Librarians');
+        if (row?.querySelector('.guide-epg')) {
+          w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));   // select The Librarians
+          await sleep(250);
+          out = { epgLine: row.querySelector('.guide-epg').textContent,
+            prog: !!row.querySelector('.guide-prog b'),
+            foot: document.getElementById('guide-foot').textContent.slice(0, 120) };
+          break;
+        }
+      }
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return out || { epgLine: null, prog: false, foot: '' };
+    });
+    R.checks.t139EPG = { hasKey: !!e, nowTitle: e?.now?.t, ep: e?.now?.ep, sane: e ? e.now.e > e.now.s : false,
+      nextTitle: e?.next?.t, rowLine: eRow.epgLine, rowProg: eRow.prog, foot: eRow.foot,
+      ok: !!e && e.now.t === 'Mock Marathon' && e.now.ep === 'S01E01' && e.now.e > e.now.s
+        && e.next?.t === 'Mock Next Up'
+        && /Mock Marathon/.test(eRow.epgLine || '') && eRow.prog === true && /Mock Marathon/.test(eRow.foot || '') };
+
+    // (c3) t140: TIME TRAVEL — the future-schedule bar. The mock marathon airs
+    //      until now+6h, then "Mock Next Up" — so +2h must still show the
+    //      marathon (with a time range, no progress bar) and +7h must show
+    //      Mock Next Up. Then back to Now: progress bars return.
+    const tt = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const key = k => w.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+      const rowOf = () => [...document.querySelectorAll('#guide-rows .guide-row')].find(r => r.querySelector('.guide-name')?.textContent === 'The Librarians');
+      const out = {};
+      s.debugTeleport(0, -8.5); await sleep(200);
+      key('g'); await sleep(600);
+      key('ArrowDown'); await sleep(300);   // select The Librarians (the EPG channel) — the footer/synopsis track the SELECTION
+      out.barPills = [...document.querySelectorAll('#guide-time [data-time]')].length;   // ▶ Now + 8 hours
+      out.nowLabel = document.querySelector('#guide-time [data-time="0"]')?.textContent;
+      // the API slice at +2h (the server side of time travel)
+      const snap2 = await (await fetch('/api/iptv/epg?at=' + (Date.now() + 2 * 3600e3))).json();
+      out.at2api = Object.values(snap2.epg || {})[0]?.now?.t;
+      // click the +2h chip → rows show the at-time programme with its time range
+      const chips = [...document.querySelectorAll('#guide-time [data-time]')];
+      out.chip2 = chips[2]?.textContent;
+      chips[2]?.click();
+      for (let i = 0; i < 40; i++) { await sleep(150);
+        const row = rowOf();
+        if (row && /–/.test(row.querySelector('.guide-epg')?.textContent || '') && !row.querySelector('.guide-prog b')) {
+          out.rowAt2 = row.querySelector('.guide-epg').textContent; break; } }
+      out.footAt2 = document.getElementById('guide-foot')?.textContent.slice(0, 140);
+      out.atInfo = ctx.guideInfo?.()?.at;
+      // far future (+7h): "Mock Next Up" airs
+      [...document.querySelectorAll('#guide-time [data-time]')][7]?.click();
+      for (let i = 0; i < 40; i++) { await sleep(150);
+        const row = rowOf();
+        if (row && /Mock Next Up/.test(row.querySelector('.guide-epg')?.textContent || '')) {
+          out.rowAt7 = row.querySelector('.guide-epg').textContent; break; } }
+      // back to ▶ Now: the marathon + its live progress bar return
+      [...document.querySelectorAll('#guide-time [data-time]')][0]?.click();
+      for (let i = 0; i < 40; i++) { await sleep(150);
+        const row = rowOf();
+        if (row?.querySelector('.guide-prog b')) { out.backAtNow = row.querySelector('.guide-epg').textContent; break; } }
+      out.backAt = ctx.guideInfo?.()?.at;
+      key('Escape');
+      return out;
+    });
+    R.checks.t140TimeTravel = { ...tt,
+      ok: tt.barPills === 9 && /Now/.test(tt.nowLabel || '')
+        && tt.at2api === 'Mock Marathon'
+        && /Mock Marathon/.test(tt.rowAt2 || '') && /–/.test(tt.rowAt2 || '')
+        && /At /.test(tt.footAt2 || '') && /Mock Marathon/.test(tt.footAt2 || '')
+        && tt.atInfo > 0
+        && /Mock Next Up/.test(tt.rowAt7 || '')
+        && /Mock Marathon/.test(tt.backAtNow || '') && tt.backAt === 0 };
+
+    // (c4) t143: ULTRAWIDE 2560×1080 (the owner's actual screen) — full
+    //      screen TILES like two monitors: the dock fits the space the 16:9
+    //      picture leaves (video 0..1920 · guide 1920..2560, nothing under
+    //      anything), padding is cut, the footer + ▶ Watch ride the dock,
+    //      movement is frozen under the video, and the synopsis card lives
+    //      in the THEATER guide now — shows, ✕ closes it, reopen brings it.
+    {
+      const uw = { };
+      const uwPage = await browser.newPage({ viewport: { width: 2560, height: 1080 } });
+      try {
+        await uwPage.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
+        await uwPage.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await uwPage.waitForFunction(() => { const g = window.__VB?.scene?.threeScene?.getObjectByName('shelves'); return !!g && g.children.some(c => c.isInstancedMesh && c.count > 30); }, { timeout: 60000 });
+        await uwPage.waitForTimeout(600);
+        // theater → play a movie → true full screen → open the Guide
+        await uwPage.evaluate(() => {
+          const VB = window.__VB, st = VB.state;
+          VB.scene.debugTeleport(0, -8.5);
+          const movie = (st.items || []).find(i => i.type === 'movie');
+          VB.scene.tv.playItem(movie);
+        });
+        await uwPage.waitForTimeout(600);
+        uw.entered = await uwPage.evaluate(() => window.__VB.scene.tv.enterFullscreen());
+        await uwPage.waitForTimeout(200);
+        await uwPage.evaluate(() => { try { window.__VB.scene.tv.mediaEl().pause(); } catch {} });   // pin paused (kit rule)
+        await uwPage.evaluate(() => window.document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true })));
+        // the slide is a .28s transition — poll until it settles past 100px
+        await uwPage.waitForFunction(() => {
+          const m = getComputedStyle(document.getElementById('vb-fs-video')).transform.match(/matrix\(1, 0, 0, 1, (-?[\d.]+), 0\)/);
+          return m && Math.abs(parseFloat(m[1])) > 100;
+        }, { timeout: 15000 });
+        Object.assign(uw, await uwPage.evaluate(() => {
+          const modal = document.getElementById('guide-modal');
+          const vid = document.getElementById('vb-fs-video');
+          const vw = innerWidth, vh = innerHeight;
+          const ar = (vid.videoWidth && vid.videoHeight) ? vid.videoWidth / vid.videoHeight : 16 / 9;   // mock movie → fallback
+          const picW = Math.min(vw, vh * ar);
+          const m = getComputedStyle(vid).transform.match(/matrix\(1, 0, 0, 1, (-?[\d.]+), 0\)/);
+          const tx = m ? parseFloat(m[1]) : 0;
+          const picLeft = (vw - picW) / 2 + tx, picRight = (vw + picW) / 2 + tx;
+          const mr = modal.getBoundingClientRect();
+          const foot = document.getElementById('guide-foot');
+          return {
+            dockVar: getComputedStyle(document.body).getPropertyValue('--fs-dock-w').trim(),
+            picW: Math.round(picW), picLeft: Math.round(picLeft), picRight: Math.round(picRight),
+            dockLeft: Math.round(mr.left), dockW: Math.round(mr.width),
+            tiles: Math.abs(picRight - mr.left) < 8, fullyOnscreen: picLeft > -2,
+            modalPad: getComputedStyle(modal).padding,
+            rowH: document.querySelector('.guide-row') ? Math.round(document.querySelector('.guide-row').getBoundingClientRect().height) : 0,
+            footShown: getComputedStyle(foot).display !== 'none' && foot.textContent.trim().length > 0,
+            footWatch: !!foot.querySelector('[data-footwatch]'),
+            synHidden: getComputedStyle(document.getElementById('guide-syn')).display === 'none'
+          };
+        }));
+        // movement frozen under the fullscreen video (REAL keys)
+        const p0 = await uwPage.evaluate(() => window.__VB.scene.debugPose());
+        await uwPage.keyboard.down('w'); await uwPage.waitForTimeout(400); await uwPage.keyboard.up('w');
+        const p1 = await uwPage.evaluate(() => window.__VB.scene.debugPose());
+        uw.moveDelta = +Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(3);
+        uw.keysClean = await uwPage.evaluate(() => window.__VB.scene.controls.state.keys.size === 0);
+        // leave fs, back to the THEATER: the synopsis card's new home
+        await uwPage.evaluate(() => { window.document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })); });
+        await uwPage.waitForTimeout(400);
+        await uwPage.evaluate(() => window.__VB.scene.tv.exitFullscreen());
+        await uwPage.waitForTimeout(400);
+        await uwPage.evaluate(() => window.document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true })));
+        await uwPage.waitForTimeout(900);
+        Object.assign(uw, await uwPage.evaluate(() => {
+          const syn = document.getElementById('guide-syn');
+          return { synTheater: getComputedStyle(syn).display !== 'none' && !!syn.querySelector('.syn-close') && !!syn.querySelector('[data-synwatch]') };
+        }));
+        await uwPage.evaluate(() => document.querySelector('#guide-syn .syn-close')?.click());
+        await uwPage.waitForTimeout(200);
+        Object.assign(uw, await uwPage.evaluate(() => {
+          const syn = document.getElementById('guide-syn');
+          return { synClosed: syn.classList.contains('closed') && getComputedStyle(syn).display === 'none' };
+        }));
+        // reopen the guide → the card returns (fresh session)
+        await uwPage.evaluate(() => window.document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true })));
+        await uwPage.waitForTimeout(300);
+        await uwPage.evaluate(() => window.document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true })));
+        await uwPage.waitForTimeout(900);
+        Object.assign(uw, await uwPage.evaluate(() => {
+          const syn = document.getElementById('guide-syn');
+          return { synBack: getComputedStyle(syn).display !== 'none' && !!syn.querySelector('.syn-close') };
+        }));
+      } catch (e) { uw.fatal = String(e.message || e).slice(0, 120); }
+      finally { await uwPage.close().catch(() => {}); }
+      R.checks.t143Ultrawide = { ...uw, ok: !uw.fatal && uw.entered === true
+        && uw.dockVar === '640px' && uw.picW === 1920 && uw.tiles === true && uw.fullyOnscreen === true
+        && uw.dockLeft === 1920 && uw.dockW >= 630 && uw.modalPad === '0px' && uw.rowH === 56
+        && uw.footShown === true && uw.footWatch === true && uw.synHidden === true
+        && uw.moveDelta === 0 && uw.keysClean === true
+        && uw.synTheater === true && uw.synClosed === true && uw.synBack === true };
+    }
+
+    // (c5) t144: the AUTO DUPLICATE REMOVER — the same channel rides several
+    //      services under slightly different names ("Danger TV" / "DangerTV",
+    //      "Pluto TV Spike Outdoors" / "Spike Outdoors"); v2 normalizes them
+    //      away, keeps regional feeds (US ≠ GB) separate, and /api/library
+    //      reports how many it hid. Then: the FIND MORE CHANNELS panel —
+    //      verified per-country packs (tidy 7 + more/less), worldwide bundles,
+    //      the iptv-org pointer, and the live dedupe count.
+    {
+      await putT({ iptv: { url: '', sections: [], playlistUrl: '', packs: [
+        { label: 'DupeUS', url: 'http://127.0.0.1:32790/iptv/dupes_us.m3u' },
+        { label: 'DupeGB', url: 'http://127.0.0.1:32790/iptv/dupes_gb.m3u' },
+        { label: 'DupeMisc', url: 'http://127.0.0.1:32790/iptv/dupes_misc.m3u' },
+      ] } });
+      await libT();
+      const libD = await (await fetch(BASE + '/api/library', { headers: { 'content-type': 'application/json', ...authH } })).json();
+      const lv = libD.items.filter(i => i.source === 'iptv');
+      const titles = lv.map(i => i.title);
+      const dd = {
+        live: lv.length, dedupe: libD.liveDedupe,
+        danger: titles.filter(t => t === 'Danger TV').length,
+        dangerHD: titles.filter(t => t === 'Danger TV HD').length,
+        comet: titles.filter(t => t === 'Comet').length,
+        survivors: [...new Set(lv.map(i => i.provider))].sort(),
+        dupesMiscLeft: lv.filter(i => i.provider === 'DupeMisc').length
+      };
+      R.checks.t144Dedupe = { ...dd, ok: dd.live === 7 && dd.dedupe === 5
+        && dd.danger === 1 && dd.dangerHD === 1 && dd.comet === 2
+        && dd.dupesMiscLeft === 0 && dd.survivors.join() === 'DupeGB,DupeUS' };
+
+      // the panel (second page, signed in as admin — the main page stays guest)
+      const mp = { };
+      const morePage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      try {
+        await morePage.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
+        await morePage.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await morePage.evaluate(async () => { await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) }); });
+        await morePage.reload({ waitUntil: 'domcontentloaded' });
+        await morePage.waitForSelector('#btn-enter:not(.hidden)', { timeout: 90000 });
+        await morePage.click('#btn-enter', { force: true });
+        await morePage.waitForFunction(() => { const g = window.__VB?.scene?.threeScene?.getObjectByName('shelves'); return !!g && g.children.some(c => c.isInstancedMesh && c.count > 30); }, { timeout: 60000 });
+        await morePage.waitForTimeout(1500);
+        Object.assign(mp, await morePage.evaluate(async () => {
+          const out = {};
+          document.getElementById('btn-menu')?.click();
+          await new Promise(r => setTimeout(r, 600));
+          document.querySelector('.side-link[data-tab="admin"]')?.click();
+          await new Promise(r => setTimeout(r, 1300));
+          const box = document.getElementById('iptv-more-countries');
+          out.countriesBlock = !!box;
+          out.chips = box ? box.querySelectorAll('[data-country]').length : 0;
+          out.moreBtn = box?.querySelector('[data-ccmore]')?.textContent || null;
+          out.worldwide = [...document.querySelectorAll('[data-world]')].length;
+          out.whereHint = /iptv-org/.test(document.getElementById('admin-sub-body')?.textContent || '');
+          // expand → every country + a way back
+          box?.querySelector('[data-ccmore]')?.click();
+          await new Promise(r => setTimeout(r, 250));
+          out.chipsExpanded = box.querySelectorAll('[data-country]').length;
+          out.lessBtn = box.querySelector('[data-ccmore]')?.textContent || null;
+          // Canada → its three packs land in the draft list
+          box.querySelector('[data-country="ca"]')?.click();
+          await new Promise(r => setTimeout(r, 350));
+          out.canadaPacks = [...document.querySelectorAll('#iptv-packs [data-pk-url]')].map(i => i.value).filter(u => /ca\.m3u/.test(u)).length;
+          out.canadaIsPlutoSamsungPlex = [...document.querySelectorAll('#iptv-packs [data-pk-url]')].map(i => i.value).filter(u => /ca\.m3u/.test(u))
+            .filter(u => /plutotv_ca|samsungtvplus_ca|plex_ca/.test(u)).length;
+          // the live duplicate-remover count (the mock dupes are staged → 5)
+          await new Promise(r => setTimeout(r, 500));
+          out.dedupeBadge = document.getElementById('iptv-dedupe-live')?.textContent || '';
+          return out;
+        }));
+      } catch (e) { mp.fatal = String(e.message || e).slice(0, 120); }
+      finally { await morePage.close().catch(() => {}); }
+      R.checks.t144MoreTv = { ...mp, ok: !mp.fatal && mp.countriesBlock === true && mp.chips === 7
+        && /\+12 more/.test(mp.moreBtn || '') && mp.worldwide === 4 && mp.whereHint === true
+        && mp.chipsExpanded === 19 && /Less/.test(mp.lessBtn || '')
+        && mp.canadaPacks === 3 && mp.canadaIsPlutoSamsungPlex === 3
+        && /5 duplicate channels hidden/.test(mp.dedupeBadge || '') };
+    }
+
+    // (c6) t145: the theater card takes its own clicks (it sat UNDER the
+    //      guide's invisible full-viewport backdrop — every click closed the
+    //      guide instead) + FULL-SCREEN SURFING: picking a channel keeps the
+    //      docked Guide up (the owner's two-monitor flow).
+    {
+      const gs = { };
+      const gsPage = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+      try {
+        await gsPage.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
+        await gsPage.goto(BASE, { waitUntil: 'domcontentloaded' });
+        // enter the store like a real user — the z-100 #loading gate would
+        // otherwise steal every elementFromPoint hit (cardAboveModal)
+        await gsPage.waitForSelector('#btn-enter:not(.hidden)', { timeout: 90000 });
+        await gsPage.click('#btn-enter', { force: true });
+        await gsPage.waitForFunction(() => { const g = window.__VB?.scene?.threeScene?.getObjectByName('shelves'); return !!g && g.children.some(c => c.isInstancedMesh && c.count > 30); }, { timeout: 60000 });
+        await gsPage.waitForTimeout(800);
+        Object.assign(gs, await gsPage.evaluate(async () => {
+          const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+          const out = {};
+          // spy: prove the tune without trusting stream health in the sandbox
+          out.tuned = [];
+          const origPlay = ctx.playItem.bind(ctx);
+          ctx.playItem = (it) => { out.tuned.push(it?.title); return origPlay(it); };
+          // ── THEATER: the card takes its own clicks ──
+          s.debugTeleport(0, -8.5); await sleep(300);
+          w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+          await sleep(900);
+          const syn = document.getElementById('guide-syn');
+          out.cardShown = getComputedStyle(syn).display !== 'none';
+          const sr = syn.getBoundingClientRect();
+          const hit = document.elementFromPoint(sr.left + sr.width / 2, sr.top + 40);
+          out.cardAboveModal = !!hit?.closest?.('#guide-syn');          // t145: NOT the invisible modal backdrop
+          // a click on the card BODY must not close the guide
+          syn.querySelector('.syn-card').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          await sleep(250);
+          out.cardClickKeepsGuide = !document.getElementById('guide-modal').classList.contains('hidden');
+          // ✕ closes the CARD, not the guide
+          syn.querySelector('.syn-close')?.click();
+          await sleep(250);
+          out.closeBtnHidesCard = getComputedStyle(syn).display === 'none' && syn.classList.contains('closed');
+          out.closeBtnKeepsGuide = !document.getElementById('guide-modal').classList.contains('hidden');
+          // windowed tune still closes the guide (regression guard)
+          const row = document.querySelector('#guide-rows .guide-row');
+          out.rowTitle = row?.querySelector('.guide-name')?.textContent || null;
+          row?.click();
+          await sleep(400);
+          out.windowedTuneCloses = document.getElementById('guide-modal').classList.contains('hidden');
+          out.windowedTuned = out.tuned[out.tuned.length - 1] === out.rowTitle;
+          // ── FULL SCREEN: picking a channel keeps the dock up ──
+          const movie = (VB.state.items || []).find(i => i.type === 'movie');
+          origPlay(movie); await sleep(700);
+          out.entered = s.tv.enterFullscreen();
+          await sleep(200);
+          try { s.tv.mediaEl().pause(); } catch {}
+          w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+          await sleep(900);
+          out.fsDocked = document.body.classList.contains('fs-guide') && !document.getElementById('guide-modal').classList.contains('hidden');
+          const frow = document.querySelector('#guide-rows .guide-row');
+          out.fsRowTitle = frow?.querySelector('.guide-name')?.textContent || null;
+          frow?.click();
+          await sleep(500);
+          out.fsTuneKeepsGuide = !document.getElementById('guide-modal').classList.contains('hidden') && document.body.classList.contains('fs-guide');
+          out.fsTuned = out.tuned[out.tuned.length - 1] === out.fsRowTitle;
+          // Esc peels the guide, Esc exits fs — the layer order still holds.
+          // (body dispatch: the fs-exit listener sits below window — a
+          // window-targeted keydown never reaches it)
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+          await sleep(350);
+          out.escPeelsGuide = document.getElementById('guide-modal').classList.contains('hidden') && s.tv.fullscreenActive();
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+          await sleep(350);
+          out.escExitsFs = !s.tv.fullscreenActive();
+          ctx.playItem = origPlay;
+          s.tv.stop();
+          return out;
+        }));
+        // absorb the offline-flip timers (playSel's 12s channel-flip guard)
+        await gsPage.waitForTimeout(13500);
+      } catch (e) { gs.fatal = String(e.message || e).slice(0, 120); }
+      finally { await gsPage.close().catch(() => {}); }
+      R.checks.t145GuideSurf = { ...gs, ok: !gs.fatal && gs.cardShown === true && gs.cardAboveModal === true
+        && gs.cardClickKeepsGuide === true && gs.closeBtnHidesCard === true && gs.closeBtnKeepsGuide === true
+        && gs.windowedTuneCloses === true && gs.windowedTuned === true
+        && gs.entered === true && gs.fsDocked === true && gs.fsTuneKeepsGuide === true && gs.fsTuned === true
+        && gs.escPeelsGuide === true && gs.escExitsFs === true };
+    }
+
+    // (d) t139c: More/Less — a collapsed bar always shows its way back.
+    //     Windowed: the language bar's +N more → − Less round-trip.
+    await putT({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'BulkTV', url: 'http://127.0.0.1:32790/iptv/bigpack.m3u' }] } });
+    await libT();
+    const c1 = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(500);
+      s.debugTeleport(0, -8.5); await sleep(250);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(500);
+      const out = {};
+      const more = document.querySelector('#guide-langs [data-more]');
+      out.moreText = more?.textContent.trim() || null;
+      more?.click(); await sleep(300);
+      out.lessAfterMore = !!document.querySelector('#guide-langs [data-less]');
+      out.pillsExpanded = document.querySelectorAll('#guide-langs .guide-lang:not(.more)').length;
+      document.querySelector('#guide-langs [data-less]')?.click(); await sleep(300);
+      out.moreBack = !!document.querySelector('#guide-langs [data-more]');
+      out.pillsCollapsed = document.querySelectorAll('#guide-langs .guide-lang:not(.more)').length;
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return out;
+    });
+    R.checks.t139cMoreLess = { ...c1,
+      ok: c1.moreText === '+6 more' && c1.lessAfterMore && c1.pillsExpanded === 11 && c1.moreBack && c1.pillsCollapsed === 5 };   // t139f: ★Fav+All+3 langs tidy
+
+    // (e) t139d/t139f: docked (full screen) the bars are TIDY (3 options +
+    //     "+N more"), every option reachable, and − Less restores the tidy
+    //     state — the channel list stays long (the owner's ask).
+    await putT({ iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [
+      { label: 'BulkTV', url: 'http://127.0.0.1:32790/iptv/bigpack.m3u' },
+      { label: 'Pluto TV', url: 'http://127.0.0.1:32790/iptv/plutopack.m3u' },
+      { label: 'Plex Free', url: 'http://127.0.0.1:32790/iptv/plexpack2.m3u' },
+      { label: 'Plex Two', url: 'http://127.0.0.1:32790/iptv/plexpack.m3u' }] } });
+    await libT();
+    const d1 = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, st = VB.state, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(500);
+      s.debugTeleport(0, -8.5); await sleep(250);
+      const movie = (st.items || []).find(i => i.type === 'movie');
+      s.tv.playItem(movie); await sleep(600);
+      s.tv.enterFullscreen(); await sleep(250);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }));
+      await sleep(600);
+      const out = {};
+      out.docked = document.body.classList.contains('fs-guide');
+      // tidy genre bar: All + 3 genres + "+2 more"
+      const cbar = document.getElementById('guide-cats');
+      out.catsTidy = [...cbar.querySelectorAll('[data-cat]')].length;
+      out.catsMore = cbar.querySelector('[data-morebar]')?.textContent.trim() || null;
+      // expand: everything wrapped, on screen, in bounds
+      cbar.querySelector('[data-morebar]')?.click(); await sleep(300);
+      const cats = [...cbar.querySelectorAll('[data-cat]')];
+      out.catsAll = cats.length;
+      out.catsNoOverflow = cbar.scrollWidth <= cbar.clientWidth + 1;
+      out.catsWrapped = cats.some(pp => pp.offsetTop !== cats[0].offsetTop);
+      out.catsInBounds = cats.every(pp => pp.getBoundingClientRect().right <= cbar.getBoundingClientRect().right + 1);
+      out.catsLess = !!cbar.querySelector('[data-less]');
+      // the LAST genre clicks and filters
+      const last = cats[cats.length - 1];
+      out.lastGenre = last?.textContent.trim();
+      last?.click(); await sleep(300);
+      out.lastActive = last?.classList.contains('active');
+      out.lastTotal = (ctx.guideInfo?.().total) || 0;
+      // − Less: tidy again, and the ACTIVE genre stays visible
+      cbar.querySelector('[data-less]')?.click(); await sleep(300);
+      const tidyAfter = [...cbar.querySelectorAll('[data-cat]')];
+      out.tidyBack = tidyAfter.length;
+      out.activeStaysVisible = tidyAfter.some(pp => pp.textContent.trim().startsWith('Food & Home') && pp.classList.contains('active'));
+      tidyAfter[0]?.click(); await sleep(300);            // back to All
+      out.allTotal = (ctx.guideInfo?.().total) || 0;
+      // language bar in the dock: 3 langs + "+N more" → all → − Less → a long-tail language clicks
+      const lbar = document.getElementById('guide-langs');
+      out.langTidy = [...lbar.querySelectorAll('[data-lang]')].length;
+      out.langMore = lbar.querySelector('[data-more]')?.textContent.trim() || null;
+      lbar.querySelector('[data-more]')?.click(); await sleep(300);
+      out.langLess = !!lbar.querySelector('[data-less]');
+      const lang3 = [...lbar.querySelectorAll('[data-lang]')].find(pp => pp.textContent.trim().startsWith('Lang 3'));
+      lang3?.click(); await sleep(300);
+      const lbar2 = document.getElementById('guide-langs');
+      out.lang3Active = [...lbar2.querySelectorAll('[data-lang]')].some(pp => pp.dataset.lang === 'Lang 3' && pp.classList.contains('active'));
+      out.lang3Total = (ctx.guideInfo?.().total) || 0;
+      [...lbar2.querySelectorAll('[data-lang]')].find(pp => pp.dataset.lang === 'all')?.click(); await sleep(300);
+      // tidy provider bar: All providers + 3 + "+1 more"; Pluto clicks straight from tidy
+      const pbar = document.getElementById('guide-prov');
+      out.provTidy = [...pbar.querySelectorAll('[data-prov]')].length;
+      out.provMore = pbar.querySelector('[data-morebar]')?.textContent.trim() || null;
+      const pluto = [...pbar.querySelectorAll('[data-prov]')].find(pp => pp.textContent.trim().startsWith('Pluto'));
+      pluto?.click(); await sleep(300);
+      const pbar2 = document.getElementById('guide-prov');
+      out.provActive = [...pbar2.querySelectorAll('[data-prov]')].some(pp => pp.dataset.prov === 'Pluto TV' && pp.classList.contains('active'));
+      out.provTotal = (ctx.guideInfo?.().total) || 0;
+      out.provAllPluto = [...document.querySelectorAll('#guide-rows .guide-prov')].every(t => t.textContent === 'Pluto TV');
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await sleep(300);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await sleep(300);
+      s.tv.stop();
+      return out;
+    });
+    R.checks.t139dDockOptions = { ...d1,
+      ok: d1.docked
+        && d1.catsTidy === 4 && d1.catsMore === '+2 more'
+        && d1.catsAll === 6 && d1.catsNoOverflow && d1.catsWrapped && d1.catsInBounds && d1.catsLess
+        && /Food & Home/.test(d1.lastGenre || '') && d1.lastActive && d1.lastTotal === 1
+        && d1.tidyBack === 5 && d1.activeStaysVisible
+        && d1.allTotal === 156
+        && d1.langTidy === 5 && d1.langMore === '+6 more' && d1.langLess && d1.lang3Active && d1.lang3Total === 17
+        && d1.provTidy === 4 && d1.provMore === '+1 more' && d1.provActive && d1.provTotal === 3 && d1.provAllPluto };
+  }
+
+  // ── t142: the admin store-TV defaults now live in Admin → 📺 Store TV ──
+  // (runs LAST: it signs the page in as the admin + reloads — nothing follows it)
+  {
+    // NB: NEVER location.reload() inside page.evaluate — the protocol response
+    // races context destruction and the evaluate can HANG forever (learned live).
+    await page.evaluate(async () => {
+      await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'BabyBluJ', password: 'BluJNetwork' }) });
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForSelector('#btn-enter:not(.hidden)', { timeout: 60000 }).catch(() => {});
+    await page.click('#btn-enter', { force: true }).catch(() => {});
+    await page.waitForFunction(() => { const g = window.__VB?.scene?.threeScene?.getObjectByName('shelves'); return !!g && g.children.some(c => c.isInstancedMesh && c.count > 30); }, { timeout: 60000 }).catch(() => {});
+    await page.waitForTimeout(2500);
+    R.checks.t142AdminStoreTv = await page.evaluate(async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = { admin: window.__VB.state.isAdmin() };
+      document.getElementById('btn-settings')?.click();
+      await sleep(500);
+      [...document.querySelectorAll('[data-tab]')].find(b => b.dataset.tab === 'admin')?.click();
+      await sleep(700);
+      out.subs = [...document.querySelectorAll('.admin-sub')].map(b => b.dataset.sub);
+      [...document.querySelectorAll('.admin-sub')].find(b => b.dataset.sub === 'tv')?.click();
+      await sleep(1200);
+      const body = document.getElementById('admin-sub-body');
+      out.toggle = !!document.getElementById('tv-enabled');
+      out.idleCards = !!body && /Idle screen/.test(body.textContent) && /Standby card/.test(body.textContent);
+      // My Theme: pointer note for admins, no embedded admin block
+      [...document.querySelectorAll('[data-tab]')].find(b => b.dataset.tab === 'look')?.click();
+      await sleep(600);
+      const look = document.getElementById('settings-body');
+      out.pointerNote = /Admin → 📺 Store TV/.test(look?.textContent || '');
+      out.noDetailsBlock = !document.getElementById('tv-admin-body');
+      document.getElementById('btn-settings-close')?.click();
+      out.ok = out.admin && out.subs.includes('tv') && out.subs.length === 4 && out.toggle && out.idleCards && out.pointerNote && out.noDetailsBlock;
+      return out;
+    });
+  }
+
   // ── restore the live preview: real archive.org defaults, no mocks ──
   await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
-    body: JSON.stringify({ local: { on: false, spots: [] }, sources: { demo: false, plex: false, jellyfin: false }, archive: { url: '', sections: ['staff-picks', 'sci-fi-horror', 'noir', 'comedy', 'cartoons', 'westerns', 'serials'] }, radio: { url: '', sections: ['oldies', 'synthwave'] }, podcasts: { feeds: [] }, shelves: {} }) });
+    body: JSON.stringify({ local: { on: false, spots: [] }, iptv: { url: '', sections: [], playlistUrl: '', packs: [] }, sources: { demo: false, plex: false, jellyfin: false }, archive: { url: '', sections: ['staff-picks', 'sci-fi-horror', 'noir', 'comedy', 'cartoons', 'westerns', 'serials'] }, radio: { url: '', sections: ['oldies', 'synthwave'] }, podcasts: { feeds: [] }, shelves: {} }) });
   await fetch(BASE + '/api/library?refresh=1&vb_auth=' + login.token);
 
   console.log(JSON.stringify(R));

@@ -50,7 +50,7 @@ export const defaultConfig = () => ({
   // t123: FREE LIVE TV (iptv-org, curated officially-free tier) — plays in
   // the theater's GUIDE menu, never on the shelves. unverified = widen to
   // every non-NSFW US channel (off by default, honestly labeled).
-  iptv: { url: '', sections: ['news', 'movies', 'series', 'kids', 'documentary', 'public'], unverified: false },
+  iptv: { url: '', sections: ['news', 'movies', 'series', 'kids', 'documentary', 'public'], unverified: false, playlistUrl: '', packs: [] },   // t137: extra channel pack · t138: packs[] = provider pages (Pluto, Samsung, Tubi, Roku, Plex…)
   // t123: PER-USER LIBRARY ACCESS (the parents/kids ask). Map of sectionKey →
   // 'all' | { users: [username,…] }. ABSENT = 'all' (existing installs keep
   // seeing everything until the admin answers the link-time prompt).

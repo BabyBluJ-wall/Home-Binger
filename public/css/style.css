@@ -420,22 +420,84 @@ body.tv-fullscreen #vb-fs-video {
   position: fixed; inset: 0; width: 100vw; height: 100vh;
   object-fit: contain; background: #000; z-index: 80;
 }
-/* ── t134: G in full screen docks the TV Guide on the right — the video
-   keeps its EXACT size (1:1, object-fit never rescales) and slides left
-   to make room; closing the Guide slides it back to center ── */
+/* ── t139h (the owner's pick — best of both): in full screen the video keeps
+   its EXACT size and slides left of the dock — the classic mechanics from
+   t139b. The stream is only ever MOVED, never stopped, reloaded, resized,
+   or cropped. The dock carries the NEW layout: NOW & NEXT rows plus a
+   floating SYNOPSIS card bottom-left, in front of the TV — like an AR
+   overlay seen through meta glasses. ── */
+body.tv-fullscreen #vb-fs-video { transition: transform .28s ease; }
 body.tv-fullscreen.fs-guide #vb-fs-video {
-  transform: translateX(calc(-0.5 * min(460px, 44vw)));
-  transition: transform .28s ease;
+  transform: translateX(calc(-0.5 * var(--fs-dock-w, min(760px, 46vw))));
 }
 body.tv-fullscreen.fs-guide #guide-modal {
-  left: auto; right: 0; width: min(460px, 44vw);
-  padding: 14px; z-index: 95; justify-content: flex-end;
-  background: linear-gradient(to left, rgba(3,7,22,.86), rgba(3,7,22,.6));
+  left: auto; right: 0; width: var(--fs-dock-w, min(760px, 46vw));   /* t143: guide.js fits it to the space the video picture leaves */
+  padding: 0; z-index: 95; justify-content: flex-end;
+  background: linear-gradient(to left, rgba(6,10,24,.94), rgba(6,10,24,.55));
 }
 body.tv-fullscreen.fs-guide #guide-modal .guide-card {
-  width: 100%; max-height: none; height: 100%;
+  width: 100%; max-height: none; height: 100%; border-radius: 18px 0 0 18px;
 }
-body.tv-fullscreen.fs-guide #guide-modal .guide-hint { display: none; }   /* no room in the dock */
+/* t143: the dock footer owns fs mode — the video stays pristine, no floating card */
+/* t139h: the synopsis — a floating glass card bottom-left, IN FRONT of the
+   playing video (z above it, below the dock). guide.js moves it to sit
+   directly under <body> so no ancestor filter can trap its fixed position. */
+#guide-syn { display: none; }
+/* t143 (owner's call): the synopsis card lives in the THEATER (windowed)
+   guide now — full screen keeps the video pristine; the dock footer carries
+   the info (+ ▶ Watch) there. In the theater it floats over the view like
+   an AR overlay; its ✕ dismisses it until the guide opens again. */
+body.tv-fullscreen #guide-syn { display: none !important; }   /* never in fs */
+body.guide-open:not(.tv-fullscreen) #guide-syn {
+  /* t145: z-61 — the guide modal is a FULL-VIEWPORT layer at z-60; at z-55
+     the card was visible through the transparent backdrop but every click
+     landed on the invisible modal and CLOSED the guide. Above it now. */
+  display: block; position: fixed; left: 24px; bottom: 24px; z-index: 61;
+  width: min(420px, calc(100vw - min(760px, 96vw) - 72px));
+  max-height: min(560px, calc(100vh - 48px));
+  overflow-y: auto; scrollbar-width: thin;
+  border-radius: 14px; border: 1px solid rgba(255,255,255,.12);
+  background: rgba(9,13,28,.88);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 18px 50px rgba(0,0,0,.55);
+  animation: syn-in .25s cubic-bezier(.25, 1, .5, 1);
+}
+#guide-syn.closed { display: none !important; }   /* t143: ✕ dismissed */
+/* t145: when the settings panel or the side menu owns the screen, the card
+   steps aside (overlay-open alone can't be used — the body carries it from
+   the loading gate until the store is entered). */
+body:has(#settings:not(.hidden)) #guide-syn,
+body:has(#sidebar:not(.hidden)) #guide-syn { display: none !important; }
+@keyframes syn-in { from { transform: translateY(14px); opacity: 0; } }
+@media (max-width: 1100px) {   /* laptops: no room for the card — the footer takes over */
+  body.guide-open:not(.tv-fullscreen) #guide-syn { display: none; }
+}
+/* t139g: the synopsis card */
+.syn-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; position: relative; }   /* t141 glass · t143 relative for the ✕ */
+.syn-close { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border: 0; border-radius: 8px;
+  background: rgba(255,255,255,.1); color: #fff; font-size: 13px; line-height: 1; cursor: pointer; }
+.syn-close:hover { background: rgba(255,255,255,.22); }
+.syn-logo { width: 56px; height: 38px; object-fit: contain; border-radius: 6px; background: rgba(255,255,255,.08); }
+.syn-chan { display: flex; flex-direction: column; gap: 2px; }
+.syn-name { font-weight: 700; font-size: 15px; }
+.syn-meta { font-size: 11px; opacity: .65; text-transform: uppercase; letter-spacing: .06em; }
+.syn-now { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.1); }
+.syn-label { font-size: 10px; letter-spacing: .14em; color: var(--vb-accent, #ff3ea5); font-weight: 700; }
+.syn-title { font-size: 14.5px; font-weight: 700; line-height: 1.25; }
+.syn-ep { font-size: 12px; opacity: .8; }
+.syn-rate { font-size: 10.5px; border: 1px solid var(--vb-line, #2a3354); border-radius: 4px; padding: 1px 6px; width: max-content; opacity: .85; }
+.syn-time { font-size: 11.5px; opacity: .7; }
+.guide-prog.big { width: 100%; flex-basis: 100%; height: 4px; }
+.syn-desc { margin: 0; font-size: 12px; line-height: 1.5; opacity: .8; }
+.syn-nextbtn { border: 1px solid var(--vb-line, #2a3354); background: transparent; color: inherit;
+  border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.syn-nextbtn:hover { border-color: var(--vb-accent, #ff3ea5); }
+.syn-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 10px; }
+.syn-btn { border: 1px solid var(--vb-line, #2a3354); background: rgba(255,255,255,.06); color: inherit;
+  border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.syn-btn:hover { border-color: var(--vb-accent, #ff3ea5); }
+.syn-btn.primary { background: var(--vb-accent, #ff3ea5); border-color: var(--vb-accent, #ff3ea5); color: #fff; }
+.syn-btn.on { color: #ffd23f; border-color: #ffd23f; }
 /* ── full-screen HUD: progress bar + controls; fades out when idle ── */
 #tv-fs-hud { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
 #tv-fs-hud.hidden { display: none; }
@@ -470,6 +532,15 @@ body.tv-fullscreen.fhud-idle #tv-fs-top, body.tv-fullscreen.fhud-idle #tv-fs-bot
 body.tv-fullscreen.fhud-idle #tv-fs-top { transform: translateY(-8px); }
 body.tv-fullscreen.fhud-idle #tv-fs-bottom { transform: translateY(8px); }
 body.tv-fullscreen.fhud-idle { cursor: none; }
+/* t141: while the full-screen GUIDE is open, the video HUD's bars stand down.
+   They live at z-90 — ABOVE the synopsis card — and their full-width bottom
+   bar sat exactly on the card's Watch/Favorite/Back buttons, eating every
+   click (and the idle timer added cursor:none the moment you paused). The
+   video itself is never touched — the bars return the instant the guide
+   closes. The guide carries its own ✕ / Esc / ⤢ Back to video. */
+body.tv-fullscreen.fs-guide #tv-fs-top,
+body.tv-fullscreen.fs-guide #tv-fs-bottom { opacity: 0; pointer-events: none; }
+body.tv-fullscreen.fs-guide { cursor: auto; }
 #btn-tv-full.active { color: var(--vb-accent, #ffd23f); border-color: var(--vb-accent, #ffd23f); }
 
 /* ── sidebar shelf search ── */
@@ -578,34 +649,119 @@ body.tv-fullscreen.fhud-idle { cursor: none; }
 input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: var(--vb-accent, #ffd23f); }
 a { color: var(--vb-accent, #ffd23f); }
 
-/* ═══════════════ t123: THE TV GUIDE (theater overlay) ═══════════════ */
-.guide-card { width: min(680px, 94vw); max-height: 84vh; display: flex; flex-direction: column; }
-.guide-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.guide-head h2 { margin: 0; font-size: 20px; letter-spacing: 1px; }
-.guide-hint { flex: 1; font-size: 11.5px; opacity: .65; }
-#guide-body { overflow-y: auto; border: 1px solid var(--vb-line, #2a3354); border-radius: 10px; padding: 6px; }
-.guide-group { margin-bottom: 10px; }
-.guide-group-title {
-  position: sticky; top: 0; z-index: 1;
-  background: var(--vb-panel, rgba(10,12,30,.92));
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
-  color: var(--vb-accent, #ff3ea5);
-  padding: 6px 8px 4px; border-bottom: 1px solid var(--vb-line, #2a3354);
+/* ═══════════════ t123: THE TV GUIDE — t139h: the owner's pick ═══════════ */
+/* windowed (the THEATER): the NEW layout inside the OLD drawer fashion — a
+   glass drawer floats in from the right. NO SHADE on the rest of the view:
+   nothing dims, blurs, or covers the 3D wall or the theater screen — they
+   keep playing bright behind the glass, like reading the guide through
+   meta glasses (click outside the drawer to take them off). */
+#guide-modal {
+  justify-content: flex-end; align-items: stretch; padding: 0;
+  background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
 }
-.guide-group-title small { float: right; opacity: .6; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.guide-card {
+  width: min(760px, 96vw); height: 100%; max-height: none;
+  display: flex; flex-direction: column;
+  border-radius: 18px 0 0 18px; border: 1px solid rgba(255,255,255,.12); border-right: none;
+  background: rgba(9,13,28,.82);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25);
+  box-shadow: -24px 0 70px rgba(0,0,0,.55);
+  animation: guide-in .22s cubic-bezier(.25, 1, .5, 1);
+  overflow: hidden;
+}
+@keyframes guide-in { from { transform: translateX(48px); opacity: 0; } }
+.guide-head { display: flex; align-items: center; gap: 10px; margin: 10px 10px 6px; }   /* t143: tighter */
+.guide-head h2 { margin: 0; font-size: 19px; letter-spacing: 1px; white-space: nowrap; }
+.guide-hint { flex: 1; font-size: 10.5px; opacity: .55; }
+.guide-searchrow { margin: 0 10px 6px; }   /* t143 */
+#guide-search {
+  width: 100%; box-sizing: border-box;
+  background: rgba(255,255,255,.07); color: inherit;
+  border: 1px solid var(--vb-line, #2a3354); border-radius: 999px;
+  padding: 8px 16px; font: inherit; font-size: 13.5px; outline: none;
+}
+#guide-search:focus { border-color: var(--vb-accent, #ff3ea5); box-shadow: 0 0 0 2px color-mix(in srgb, var(--vb-accent, #ff3ea5) 22%, transparent); }
+#guide-search::-webkit-search-cancel-button { filter: invert(.7); }
+.guide-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 10px 6px; }   /* t143 */
+#guide-langs { margin: 0 10px 6px; }   /* t143 */
+/* t140: the TIME BAR — the paper guide's time edge: ▶ Now · 1 PM · … · +8h.
+   Click an hour (or press T) and every row shows what's on THEN. */
+#guide-time { margin: 0 10px 6px; }   /* t143 */
+.guide-cat.time { font-variant-numeric: tabular-nums; }
+.guide-cat.time.active { box-shadow: 0 0 10px color-mix(in srgb, var(--vb-accent, #ff3ea5) 55%, transparent); }
+/* t139: the virtualized channel list — absolute rows inside a tall spacer */
+#guide-body { position: relative; flex: 1; min-height: 220px; overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--vb-line, #2a3354); border-radius: 12px; margin: 0 10px;   /* t143 */
+  background: rgba(0,0,0,.22); scrollbar-width: thin; }
+#guide-spacer { width: 1px; }
+#guide-rows { position: absolute; inset: 0 0 auto 0; }
+#guide-rows .hint { position: absolute; }
 .guide-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 8px; border-radius: 8px; cursor: pointer;
+  position: absolute; left: 0; right: 0; height: 56px; box-sizing: border-box;   /* t143: 60 → 56 (ROW_H must match) */
+  display: grid; align-items: center; gap: 8px;
+  grid-template-columns: 3ch 44px minmax(80px, 150px) minmax(0, 1fr) minmax(96px, 22%) auto auto;
+  padding: 3px 8px; cursor: pointer;
 }
 .guide-row:hover, .guide-row.sel { background: var(--vb-accent, #ff3ea5); color: #fff; }
-.guide-row.sel .guide-num { color: #fff; }
+.guide-row.sel .guide-num, .guide-row:hover .guide-num { color: #fff; }
+.guide-row.isoff { opacity: .55; }
 .guide-num {
   font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700;
   font-size: 13px; opacity: .8; min-width: 3ch; text-align: right;
 }
-.guide-name { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.guide-logo { flex: 0 0 auto; width: 44px; height: 30px; object-fit: contain; border-radius: 4px; background: rgba(255,255,255,.06); }
+.guide-mid { min-width: 0; }
+.guide-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.guide-now { min-width: 0; }
+.guide-epg { font-size: 11px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+.guide-epg i { font-style: normal; opacity: .8; }
+.guide-epg.live { opacity: .85; letter-spacing: .5px; }
+.guide-prog { flex: 0 0 42px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.16); overflow: hidden; }
+.guide-prog b { display: block; height: 100%; background: linear-gradient(90deg, var(--vb-accent, #ff3ea5), #00f0ff); box-shadow: 0 0 6px var(--vb-accent, #ff3ea5); }
+.guide-left { font-style: normal; font-size: 10px; opacity: .65; white-space: nowrap; }
+/* t139g: the NEXT cell — click to preview details in the synopsis, never tunes */
+.guide-next { display: flex; flex-direction: column; gap: 1px; font-size: 11px; opacity: .6; line-height: 1.25; min-width: 0; cursor: pointer; }
+.guide-next span, .guide-next { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.guide-next small { font-size: 10px; opacity: .7; }
+.guide-next:hover { opacity: 1; text-decoration: underline; }
+.guide-next.dim { opacity: .25; }
+.guide-row.sel .guide-prog, .guide-row:hover .guide-prog { background: rgba(0,0,0,.3); }
+.guide-row.sel .guide-prog b { background: #fff; box-shadow: 0 0 6px #fff; }
 .guide-cell { font-size: 11px; letter-spacing: .5px; opacity: .85; white-space: nowrap; }
 .guide-cell.off { opacity: .5; text-decoration: line-through; }
+/* t139h: compact rows on narrow screens (small laptops, the 640px suite):
+   NOW slides under the name, NEXT stays clickable on the right, and the
+   provider tag folds away (the tidy provider bar already covers it) */
+@media (max-width: 1100px) {
+  .guide-row {
+    grid-template-columns: 3ch 44px minmax(0, 1fr) minmax(72px, 24vw) auto;
+    grid-template-rows: 1fr 1fr; gap: 2px 8px; padding: 4px 8px;
+  }
+  .guide-num, .guide-logo { grid-row: 1 / span 2; }
+  .guide-mid { grid-column: 3; grid-row: 1; align-self: end; }
+  .guide-now { grid-column: 3; grid-row: 2; align-self: start; }
+  .guide-next { grid-column: 4; grid-row: 1 / span 2; }
+  .guide-prov { display: none; }
+  .guide-star { grid-column: 5; grid-row: 1 / span 2; }
+}
+/* …and when the full-screen DOCK itself gets this narrow, the NEXT cell
+   folds away too — num + logo + name/now + ☆ always fit */
+@media (max-width: 900px) {
+  body.tv-fullscreen.fs-guide .guide-row { grid-template-columns: 3ch 44px minmax(0, 1fr) auto; }
+  body.tv-fullscreen.fs-guide .guide-next { display: none; }
+  body.tv-fullscreen.fs-guide .guide-star { grid-column: 4; grid-row: 1 / span 2; }
+}
+/* t139: the footer — the selected channel's now → next */
+#guide-foot {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 6px 10px 10px; padding: 7px 10px; min-height: 32px; box-sizing: border-box;   /* t143 */
+  border: 1px solid var(--vb-line, #2a3354); border-radius: 10px;
+  background: rgba(255,255,255,.05); font-size: 12px;
+}
+#guide-foot .fchan { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+#guide-foot .foot-watch { flex: 0 0 auto; margin-left: 8px; padding: 5px 12px; font-size: 12px; }   /* t143: Watch rides the footer (fs's only tune button besides Enter/click) */
+#guide-foot .fnow { opacity: .8; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#guide-foot .next { opacity: .85; }
 /* t126: the category bar — click a category (or ◀/▶) to page through the guide */
 .guide-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .guide-cat {
@@ -617,8 +773,16 @@ a { color: var(--vb-accent, #ffd23f); }
 .guide-cat:hover { border-color: var(--vb-accent, #ff3ea5); }
 .guide-cat.active { background: var(--vb-accent, #ff3ea5); border-color: var(--vb-accent, #ff3ea5); color: #fff; }
 .guide-cat.active small { opacity: .8; }
+.guide-cat.dim { opacity: .45; }
 /* t127: the language row — pick a language and every category page shows only that language's channels */
 .guide-langs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+#guide-prov { margin: 0 16px 8px; }
+.guide-row .guide-prov {
+  flex: 0 0 auto; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
+  color: #9fb4c8; background: rgba(255,255,255,.07);
+}
+.guide-row.sel .guide-prov, .guide-row:hover .guide-prov { color: #fff; background: rgba(0,0,0,.28); }
 .guide-lang {
   border: 1px solid var(--vb-line, #2a3354); background: transparent; color: inherit;
   border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 700;

@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1789342462621';
-import { createCaseView } from './store3d/caseview.js?v=1789342462621';   // the 3D case in the item modal
-import { state } from './state.js?v=1789342462621';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1789342462621';
-import { placeholderDataUrl } from './store3d/textures.js?v=1789342462621';
+import { api } from './api.js?v=1790065991054';
+import { createCaseView } from './store3d/caseview.js?v=1790065991054';   // the 3D case in the item modal
+import { state } from './state.js?v=1790065991054';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1790065991054';
+import { placeholderDataUrl } from './store3d/textures.js?v=1790065991054';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -184,10 +184,7 @@ export function initUI(ctx) {
         <div class="hint">Yours only — everyone else's store TV keeps their own idle screen.</div>
       </div>
       ${state.isAdmin() ? `
-      <details style="margin-top:18px">
-        <summary style="cursor:pointer;font-weight:600;color:var(--vb-accent,#ffd23f)">🛠️ Admin · store TV defaults</summary>
-        <div id="tv-admin-body" style="margin-top:12px"></div>
-      </details>` : ''}
+      <div class="hint" style="margin:14px 0 0">🛠️ The <b>store TV's defaults</b> (idle screen for everyone, power, pinned title) now live in <b>Admin → 📺 Store TV</b>.</div>` : ''}
     `;
     const bindColor = (key, input) => {
       input.oninput = () => {
@@ -249,8 +246,7 @@ export function initUI(ctx) {
       ctx.reloadTv();
       toast('Idle title saved — it loops on the TV whenever nothing is playing');
     };
-    // admin store-TV defaults live inside the theme panel now
-    if (state.isAdmin()) panelTV(root.querySelector('#tv-admin-body'));
+    // t142: the admin store-TV defaults moved to Admin → 📺 Store TV (they used to mount here)
     root.querySelector('#theme-reset').onclick = () => {
       const d = state.boot.defaults.theme;
       Object.assign(state.prefs.theme, d);
@@ -526,7 +522,7 @@ export function initUI(ctx) {
 
   // ═══════════════ ADMIN · ALL IN ONE PLACE (t82: server + users + policies under one tab) ═══════════════
   function panelAdmin(root) {
-    const SUBS = [['server', '🛰️ Server'], ['users', '🧑‍💼 Users'], ['policies', '🔒 Policies']];
+    const SUBS = [['server', '🛰️ Server'], ['tv', '📺 Store TV'], ['users', '🧑‍💼 Users'], ['policies', '🔒 Policies']];   /* t142: the store-TV defaults moved here from My Theme (owner ask) */
     let sub = panelAdmin.current || 'server';
     root.innerHTML = `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
@@ -537,7 +533,7 @@ export function initUI(ctx) {
     const draw = () => {
       root.querySelectorAll('.admin-sub').forEach(b => b.style.opacity = b.dataset.sub === sub ? '' : '.55');
       body.innerHTML = '';
-      ({ server: panelServer, users: panelUsers, policies: panelPolicies }[sub] || panelServer)(body);
+      ({ server: panelServer, tv: panelTV, users: panelUsers, policies: panelPolicies }[sub] || panelServer)(body);
     };
     root.querySelectorAll('.admin-sub').forEach(b => b.onclick = () => { sub = b.dataset.sub; panelAdmin.current = sub; draw(); });
     draw();
@@ -686,6 +682,25 @@ export function initUI(ctx) {
         <div class="t-sub">widens the Guide beyond the curated tier — includes streams nobody has vouched for</div></div>
         <label class="switch"><input type="checkbox" id="iptv-unverified" ${adminCfg.iptv?.unverified ? 'checked' : ''}><span class="track"></span></label>
       </div>
+      <div class="section-title" style="margin-top:14px">📦 Extra channel packs — more free live TV</div>
+      <div class="hint" style="margin:-4px 0 8px">Each pack arrives in the Guide as its own <b>provider page</b>
+        (Pluto TV, Samsung TV Plus, Tubi, The Roku Channel, Plex Free…) and every channel also folds into the
+        Guide's <b>genre pages</b> (News · Movies · Kids · Sports…). <b>Duplicate channels are removed
+        automatically</b><span id="iptv-dedupe-live"></span> — the same channel rides several services; the first pack in the list wins (use ↑ to
+        raise its priority), and a dropped twin still donates its genre. One click each:</div>
+      <div id="iptv-pack-presets" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <div id="iptv-packs"></div>
+      <button class="btn" type="button" id="iptv-pack-add" style="margin-top:8px">＋ Add a pack (any .m3u playlist URL)</button>
+
+      <div class="section-title" style="margin-top:16px">🧭 Find more channels</div>
+      <div class="hint" style="margin:-4px 0 8px">More <b>free, verified</b> packs — same idea as the presets above: one click adds them
+        to the list, then <b>Save</b> stocks the Guide. Country packs keep their <b>regional feeds</b> (a US channel and its
+        UK twin stay side by side), and duplicates are still removed automatically within a country.</div>
+      <div id="iptv-more-countries" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <div class="hint" style="margin:2px 0 4px"><b>Anywhere else:</b> the public <b>iptv-org</b> directory
+        (<b>github.com/iptv-org/iptv</b>) publishes thousands of free channels as .m3u playlists — by country, by
+        category, one big index. Copy any playlist URL and paste it under <b>＋ Add a pack</b> above. Your own TV
+        provider may publish one too. Rule of thumb: only add playlists you have the right to watch.</div>
 
       <div class="section-title" style="margin-top:14px">🎙️ Podcast rack (RSS)</div>
       <div id="podcast-feeds" class="lib-list"></div>
@@ -825,6 +840,131 @@ export function initUI(ctx) {
     loadStaticLibs('archive', '#archive-libraries', adminCfg.archive?.sections);
     loadStaticLibs('radio', '#radio-libraries', adminCfg.radio?.sections);
     loadStaticLibs('iptv', '#iptv-libraries', adminCfg.iptv?.sections);   // t123: the Guide's groups
+    // t138: EXTRA CHANNEL PACKS — provider rows with presets + priority order
+    const PACK_PRESETS = [
+      { label: 'Pluto TV', url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_us.m3u' },
+      { label: 'Samsung TV Plus', url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_us.m3u' },
+      { label: 'Tubi', url: 'https://raw.githubusercontent.com/BuddyChewChew/tubi-scraper/refs/heads/main/tubi_playlist.m3u' },
+      { label: 'The Roku Channel', url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/roku_all.m3u' },
+      { label: 'Plex Free', url: 'https://raw.githubusercontent.com/BuddyChewChew/plex/main/playlists/plex_us.m3u' },
+    ];
+    const legacyPack = adminCfg.iptv?.playlistUrl ? [{ label: 'Plex Free', url: adminCfg.iptv.playlistUrl }] : [];
+    let packDrafts = [
+      ...(Array.isArray(adminCfg.iptv?.packs) ? adminCfg.iptv.packs : []),
+      ...(!(adminCfg.iptv?.packs || []).length ? legacyPack : [])     // t137 configs fold in as pack #1
+    ].map(p => ({ label: String(p.label || ''), url: String(p.url || '') }));
+    const renderPacks = () => {
+      const box = root.querySelector('#iptv-packs');
+      box.innerHTML = packDrafts.map((p, i) => `
+        <div class="row" data-pk="${i}" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+          <input type="text" data-pk-label placeholder="Provider name (e.g. Pluto TV)" value="${esc(p.label)}" style="width:190px" maxlength="24">
+          <input type="url" data-pk-url placeholder="https://…/playlist.m3u" value="${esc(p.url)}" style="flex:1;min-width:220px">
+          <button type="button" class="hud-btn" data-pk-up title="Raise duplicate priority">↑</button>
+          <button type="button" class="hud-btn" data-pk-down title="Lower duplicate priority">↓</button>
+          <button type="button" class="hud-btn" data-pk-del title="Remove this pack">✕</button>
+        </div>`).join('') || '<div class="hint" style="margin:0 0 6px">No packs yet — click a preset above (or ＋ Add a pack).</div>';
+      box.querySelectorAll('[data-pk-label]').forEach(el => el.oninput = () => { packDrafts[+el.closest('[data-pk]').dataset.pk].label = el.value; });
+      box.querySelectorAll('[data-pk-url]').forEach(el => el.oninput = () => { packDrafts[+el.closest('[data-pk]').dataset.pk].url = el.value; });
+      box.querySelectorAll('[data-pk-up]').forEach(el => el.onclick = () => { const i = +el.closest('[data-pk]').dataset.pk; if (i > 0) { [packDrafts[i-1], packDrafts[i]] = [packDrafts[i], packDrafts[i-1]]; renderPacks(); } });
+      box.querySelectorAll('[data-pk-down]').forEach(el => el.onclick = () => { const i = +el.closest('[data-pk]').dataset.pk; if (i < packDrafts.length - 1) { [packDrafts[i+1], packDrafts[i]] = [packDrafts[i], packDrafts[i+1]]; renderPacks(); } });
+      box.querySelectorAll('[data-pk-del]').forEach(el => el.onclick = () => { packDrafts.splice(+el.closest('[data-pk]').dataset.pk, 1); renderPacks(); });
+    };
+    renderPacks();
+    const pkAdd = root.querySelector('#iptv-pack-add');
+    if (pkAdd) pkAdd.onclick = () => { packDrafts.push({ label: '', url: '' }); renderPacks(); };
+    const pkPresets = root.querySelector('#iptv-pack-presets');
+    if (pkPresets) {
+      pkPresets.innerHTML = PACK_PRESETS.map(p => `<button type="button" class="btn" data-preset="${esc(p.url)}">＋ ${esc(p.label)}</button>`).join('');
+      pkPresets.onclick = (e) => {
+        const b = e.target.closest('[data-preset]');
+        if (!b) return;
+        const pre = PACK_PRESETS.find(p => p.url === b.dataset.preset);
+        if (packDrafts.some(p => p.url === pre.url)) return toast(`${pre.label} is already in the list`, true);
+        packDrafts.push({ ...pre });
+        renderPacks();
+        toast(`${pre.label} added — Save to stock the Guide`);
+      };
+    }
+    // ── t144: FIND MORE CHANNELS — verified per-country mirrors (tidy row:
+    //    7 chips + "+N more", the owner's see-more/see-less pattern) plus the
+    //    worldwide bundles, and the live duplicate-remover count.
+    const PACK_COUNTRIES = [
+      { cc: 'gb', flag: '🇬🇧', name: 'United Kingdom', svcs: ['pluto', 'samsung', 'plex'] },
+      { cc: 'ca', flag: '🇨🇦', name: 'Canada', svcs: ['pluto', 'samsung', 'plex'] },
+      { cc: 'de', flag: '🇩🇪', name: 'Germany', svcs: ['pluto', 'samsung', 'plex'] },
+      { cc: 'fr', flag: '🇫🇷', name: 'France', svcs: ['pluto', 'samsung', 'plex'] },
+      { cc: 'es', flag: '🇪🇸', name: 'Spain', svcs: ['pluto', 'samsung', 'plex'] },
+      { cc: 'it', flag: '🇮🇹', name: 'Italy', svcs: ['pluto', 'samsung', 'plex'] },
+      { cc: 'au', flag: '🇦🇺', name: 'Australia', svcs: ['plex'] },
+      { cc: 'nz', flag: '🇳🇿', name: 'New Zealand', svcs: ['plex'] },
+      { cc: 'mx', flag: '🇲🇽', name: 'Mexico', svcs: ['pluto', 'plex'] },
+      { cc: 'br', flag: '🇧🇷', name: 'Brazil', svcs: ['pluto'] },
+      { cc: 'ar', flag: '🇦🇷', name: 'Argentina', svcs: ['pluto'] },
+      { cc: 'cl', flag: '🇨🇱', name: 'Chile', svcs: ['pluto'] },
+      { cc: 'at', flag: '🇦🇹', name: 'Austria', svcs: ['samsung'] },
+      { cc: 'ch', flag: '🇨🇭', name: 'Switzerland', svcs: ['samsung'] },
+      { cc: 'dk', flag: '🇩🇰', name: 'Denmark', svcs: ['pluto'] },
+      { cc: 'no', flag: '🇳🇴', name: 'Norway', svcs: ['pluto'] },
+      { cc: 'se', flag: '🇸🇪', name: 'Sweden', svcs: ['pluto'] },
+      { cc: 'in', flag: '🇮🇳', name: 'India', svcs: ['samsung'] },
+      { cc: 'kr', flag: '🇰🇷', name: 'South Korea', svcs: ['samsung'] },
+    ];
+    const CC_SVC = {
+      pluto: c => ({ label: `Pluto TV ${c.name}`, url: `https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_${c.cc}.m3u` }),
+      samsung: c => ({ label: `Samsung TV Plus ${c.name}`, url: `https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_${c.cc}.m3u` }),
+      plex: c => ({ label: `Plex ${c.name}`, url: `https://raw.githubusercontent.com/BuddyChewChew/plex/main/playlists/plex_${c.cc}.m3u` }),
+    };
+    const WORLDWIDE = [
+      { label: '🌐 Pluto worldwide', url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_all.m3u' },
+      { label: '🌐 Samsung worldwide', url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_all.m3u' },
+      { label: '🌐 Plex worldwide', url: 'https://raw.githubusercontent.com/BuddyChewChew/plex/main/playlists/plex_all.m3u' },
+      { label: '🌐 Roku worldwide', url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/roku_all.m3u' },
+    ];
+    const moreBox = root.querySelector('#iptv-more-countries');
+    if (moreBox) {
+      let expanded = false;
+      const addPacks = (list, label) => {
+        const fresh = list.filter(p => p.url && !packDrafts.some(d => d.url === p.url));
+        if (!fresh.length) return toast(`${label}: already in the list`, true);
+        packDrafts.push(...fresh); renderPacks();
+        toast(`${label}: ${fresh.length} pack${fresh.length > 1 ? 's' : ''} added — Save to stock the Guide`);
+      };
+      const renderCountries = () => {
+        const shown = expanded ? PACK_COUNTRIES : PACK_COUNTRIES.slice(0, 7);
+        const hidden = PACK_COUNTRIES.length - 7;
+        moreBox.innerHTML = shown.map(c => {
+          const n = c.svcs.length;
+          return `<button type="button" class="btn" data-country="${c.cc}" title="Add ${c.svcs.map(x => ({ pluto: 'Pluto TV', samsung: 'Samsung TV Plus', plex: 'Plex' })[x]).join(' + ')} for ${c.name}">${c.flag} ${c.name}${n > 1 ? ` <small>×${n}</small>` : ''}</button>`;
+        }).join('') + (hidden > 0
+          ? (expanded ? `<button type="button" class="btn" data-ccmore="less">− Less</button>`
+                      : `<button type="button" class="btn" data-ccmore="more">+${hidden} more</button>`) : '');
+      };
+      renderCountries();
+      moreBox.onclick = (e) => {
+        const more = e.target.closest('[data-ccmore]');
+        if (more) { expanded = more.dataset.ccmore === 'more'; renderCountries(); return; }
+        const b = e.target.closest('[data-country]');
+        if (!b) return;
+        const c = PACK_COUNTRIES.find(x => x.cc === b.dataset.country);
+        if (c) addPacks(c.svcs.map(svc => CC_SVC[svc](c)), c.name);
+      };
+      const wwBox = document.createElement('div');
+      wwBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px';
+      wwBox.innerHTML = WORLDWIDE.map(w => `<button type="button" class="btn" data-world="${esc(w.url)}">${esc(w.label)}</button>`).join('');
+      moreBox.after(wwBox);
+      wwBox.onclick = (e) => {
+        const b = e.target.closest('[data-world]');
+        if (!b) return;
+        const w = WORLDWIDE.find(x => x.url === b.dataset.world);
+        if (w) addPacks([w], w.label.replace('🌐 ', ''));
+      };
+    }
+    // t144: prove the duplicate remover is working — show its live count
+    fetch('/api/library').then(r => r.json()).then(d => {
+      const n = d.liveDedupe || 0;
+      const el = root.querySelector('#iptv-dedupe-live');
+      if (el && n > 0) el.textContent = ` (${n} duplicate channels hidden right now)`;
+    }).catch(() => {});
     if (adminCfg.plex.url) loadLibs('plex').catch(() => {});
     if (adminCfg.jellyfin.url) loadLibs('jellyfin').catch(() => {});
     // ── t87: EXTRA INSTANCES — unlimited Plex/Jellyfin connections ──
@@ -1040,7 +1180,13 @@ export function initUI(ctx) {
       archive: { sections: keptSections('#archive-libraries', adminCfg.archive?.sections) },   // t125: wipe-guarded
       radio: { sections: keptSections('#radio-libraries', adminCfg.radio?.sections) },         // t125: wipe-guarded
       iptv: { sections: keptSections('#iptv-libraries', adminCfg.iptv?.sections),              // t125: wipe-guarded
-        unverified: !!(root.querySelector('#iptv-unverified')?.checked) },   // t123: the Guide
+        unverified: !!(root.querySelector('#iptv-unverified')?.checked),   // t123: the Guide
+        url: adminCfg.iptv?.url || '',                                     // t137: carry the base (partial-update safe)
+        playlistUrl: '',                                                   // t138: superseded by packs (cleared so the legacy fold can't double it)
+        packs: packDrafts
+          .map(p => ({ label: p.label.trim(), url: p.url.trim() }))
+          .filter(p => p.url.startsWith('http://') || p.url.startsWith('https://'))
+          .map((p, i) => ({ label: p.label.slice(0, 24) || `Pack ${i + 1}`, url: p.url.slice(0, 500) })) },   // t138: the provider packs
       podcasts: { feeds: podcastList },
       local: { on: !!(root.querySelector('#local-on')?.checked),
         spots: [...root.querySelectorAll('.local-path')].map(el => el.value.trim()).filter(Boolean) },   // t62: multi-spot grabber
@@ -1113,6 +1259,15 @@ export function initUI(ctx) {
         toast('Saved — restocking the shelves…');
         closeSettings();
         await ctx.reloadLibrary();
+        // t138: pack feedback — what the Guide actually stocked, by provider
+        try {
+          const provs = {};
+          for (const it of (state.items || [])) if (it.source === 'iptv' && it.type === 'live') {
+            const pn = it.provider || 'Directory'; provs[pn] = (provs[pn] || 0) + 1;
+          }
+          const names = Object.entries(provs).sort((a, b) => b[1] - a[1]);
+          if (names.length) toast(`Live TV: ${names.reduce((n, x) => n + x[1], 0)} channels — ${names.map(x => `${x[0]} ${x[1]}`).join(' · ')}`);
+        } catch {}
         // t123: the owner's link-time flow — every NEW library gets its
         // "who gets this?" question the moment it's linked. Cancel/All = everyone.
         const fresh = (state.sections || []).map(s => s.key).filter(k => !beforeKeys.has(k));
@@ -1955,71 +2110,37 @@ export function initUI(ctx) {
     };
     const REPEAT_UI = { off: '➡️', all: '🔁', one: '🔂' };
     const REPEAT_NAME = { off: 'Repeat off', all: 'Repeat playlist', one: 'Repeat one' };
-    // ONE remote, THREE systems (t134): the buttons bind to whichever room
-    // you're standing in when you press them — the jukebox in the store, the
-    // booth rig in the dance hall, the big screen in the theater. (t47 bound
-    // store AND dance to the jukebox; t134 gives the dance hall its own booth
-    // remote after the theater's remote kept haunting the dance floor.)
-    // The "booth" is whichever system is live: the PRO RIG (the laptop's own
-    // decks) when it has vinyl loaded, else the classic booth channel.
-    const proDecks = () => { try { return ctx.boothPro?.()?.decksRef?.() || []; } catch { return []; } };
-    const boothMode = () => proDecks().some(dk => dk.item) ? 'pro' : 'classic';
-    const proPlaying = () => proDecks().some(dk => dk.el && !dk.el.paused);
-    const proToggle = () => {
-      const decks = proDecks();
-      if (!decks.length) return;
-      if (proPlaying()) decks.forEach(dk => { try { dk.el?.pause(); } catch {} });
-      else decks.forEach(dk => { if (dk.el && dk.item) { try { dk.el.play().catch(() => {}); } catch {} } });
-    };
-    const proSeek = (s) => proDecks().forEach(dk => {
-      if (dk.el && !dk.el.paused && isFinite(dk.el.duration)) {
-        try { dk.el.currentTime = Math.max(0, Math.min(dk.el.duration, dk.el.currentTime + s)); } catch {}
-      }
-    });
+    // ONE remote, TWO systems: the screen in the theater, the jukebox in the
+    // store. t143 (owner's call): the booth remote is GONE — the dance hall
+    // is controlled from the PC's own booth panel; the bar never shows there.
     const roomSystem = () => {
       const room = ctx.playerRoom?.() || 'store';
       if (room === 'theater') return 'theater';
-      if (room === 'dance') return 'booth';
       return 'jukebox';
     };
-    const deckFor = () => roomSystem() === 'booth' ? ctx.dj?.booth : ctx.dj?.jukebox;
     $('#tv-play').onclick = () => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.togglePlay();
-      else if (s === 'booth' && boothMode() === 'pro') proToggle();
-      else if (s === 'booth') ctx.boothToggle?.();
       else ctx.jukeboxToggle?.();
     };
     $('#tv-prev').onclick = () => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.step(-1);
-      else if (s === 'booth') {
-        if (boothMode() === 'pro') toast('The booth\u2019s set list lives on the laptop — skip from the pro rig');
-        else deckFor()?.prev();
-      }
       else stepJuke(-1);
     };
     $('#tv-next').onclick = () => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.step(1);
-      else if (s === 'booth') {
-        if (boothMode() === 'pro') toast('The booth\u2019s set list lives on the laptop — skip from the pro rig');
-        else deckFor()?.next();
-      }
       else stepJuke(1);
     };
     $('#tv-skip-back').onclick = () => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.seekBy(-10);
-      else if (s === 'booth' && boothMode() === 'pro') proSeek(-10);
-      else if (s === 'booth') ctx.boothSeek?.(-10);
       else ctx.jukeboxSeek?.(-10);
     };
     $('#tv-skip-fwd').onclick = () => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.seekBy(10);
-      else if (s === 'booth' && boothMode() === 'pro') proSeek(10);
-      else if (s === 'booth') ctx.boothSeek?.(10);
       else ctx.jukeboxSeek?.(10);
     };
     $('#tv-stop').onclick = () => {
@@ -2030,14 +2151,11 @@ export function initUI(ctx) {
         toast('Playback stopped — the projector returns to its idle screen.');
         return;
       }
-      if (s === 'booth') { ctx.boothPro?.()?.stopAll?.(); ctx.boothStop?.(); toast('Booth stopped.'); return; }
       ctx.jukeboxStop?.(); toast('Jukebox stopped.');
     };
     $('#tv-vol').oninput = (e) => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.setVolume(e.target.value / 100);
-      else if (s === 'booth' && boothMode() === 'pro') ctx.boothPro?.()?.setMaster?.(e.target.value / 100);
-      else if (s === 'booth') ctx.boothSetVolume?.(e.target.value / 100);
       else ctx.jukeboxSetVolume?.(e.target.value / 100);
     };
     // ⛶ true full-screen — the raw video at native resolution (movies only)
@@ -2054,13 +2172,13 @@ export function initUI(ctx) {
     const repeatBtn = $('#tv-repeat');
     if (repeatBtn) {
       repeatBtn.onclick = () => {
-        const deck = deckFor(); if (!deck) return;
+        const deck = ctx.dj?.jukebox; if (!deck) return;
         const cur = deck.repeat || 'off';
         const next = cur === 'off' ? 'one' : cur === 'one' ? 'all' : 'off';
         deck.repeat = next;
         repeatBtn.textContent = REPEAT_UI[next];
         repeatBtn.title = REPEAT_NAME[next];
-        toast(`${deck === ctx.dj?.booth ? 'Booth' : 'Jukebox'}: ${REPEAT_NAME[next].toLowerCase()}`);
+        toast(`Jukebox: ${REPEAT_NAME[next].toLowerCase()}`);
       };
     }
     const queueEl = $('#tv-queue');
@@ -2089,33 +2207,7 @@ export function initUI(ctx) {
     };
     // t134: the dance hall's remote shows the BOOTH's set list (same card,
     // booth queue instead of the TV's)
-    const renderBoothQueue = () => {
-      if (!queueEl) return;
-      const deck = ctx.dj?.booth;
-      const q = deck?.state?.();
-      const show = !!(q && q.queue.length > 1 && (ctx.boothStats?.() || {}).playing);
-      queueEl.classList.toggle('hidden', !show);
-      if (!show) { queueEl.innerHTML = ''; return; }
-      const rows = [];
-      const cur = q.idx;
-      const start = Math.max(0, cur - 1);
-      const end = Math.min(q.queue.length, start + 5);
-      if (start > 0) rows.push(`<div class="q-title">ON DECK · ${q.queue.length} tracks</div>`);
-      for (let i = start; i < end; i++) {
-        const item = q.queue[i];
-        if (!item) continue;
-        rows.push(`<div class="q-row ${i === cur ? 'current' : ''}" data-bqidx="${i}">
-          <span>${i === cur ? '▶' : i === cur + 1 ? '⏭' : '·'}</span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.title)}</span>
-          <small>${esc(item.type || '')}</small>
-        </div>`);
-      }
-      if (q.queue.length > end) rows.push(`<div class="q-title">+${q.queue.length - end} more</div>`);
-      queueEl.innerHTML = rows.join('');
-    };
     queueEl?.addEventListener('click', (e) => {
-      const bq = e.target.closest('[data-bqidx]');
-      if (bq) { ctx.dj?.booth?.playAt(+bq.dataset.bqidx); return; }   // t134: booth rows
       const row = e.target.closest('[data-qidx]');
       if (!row) return;
       tvApi()?.playAt(+row.dataset.qidx);
@@ -2124,25 +2216,25 @@ export function initUI(ctx) {
       const tv = tvApi();
       if (!tv) return;
       updateShelfPager();                 // works while browsing, playing or not
-      // ── room-aware remote (t134): jukebox in the store, the booth rig in
-      //    the dance hall, the screen in the theater. The dance hall used to
-      //    fall through to the THEATER branch, so the movie's remote haunted
-      //    the dance floor whenever the projector ran.
+      // ── room-aware remote: the screen in the theater, the jukebox in the
+      //    store — and NOTHING in the dance hall (t143, owner's call: the PC
+      //    panel is the booth's remote).
       const room = ctx.playerRoom?.() || 'store';
-      const sys = room === 'theater' ? 'theater' : room === 'dance' ? 'booth' : 'jukebox';
+      if (room === 'dance') { remote.classList.add('hidden'); queueEl?.classList.add('hidden'); return; }
+      const sys = room === 'theater' ? 'theater' : 'jukebox';
       remote.dataset.room = room;
       const roomTag = $('#remote-room');
-      if (roomTag) roomTag.textContent = sys === 'theater' ? '🎬 THEATER' : sys === 'booth' ? '🎧 BOOTH' : '🎵 JUKEBOX';
+      if (roomTag) roomTag.textContent = sys === 'theater' ? '🎬 THEATER' : '🎵 JUKEBOX';
       // t130: the Guide button is THEATER-only; repeat belongs to the decks.
       // (Runs before the show/hide early-return so the bar never shows a
       // button that belongs to the other room.)
       const gBtn = $('#tv-guide');
       if (gBtn) gBtn.style.display = sys === 'theater' ? '' : 'none';
       if (repeatBtn) {
-        if (sys === 'theater' || (sys === 'booth' && boothMode() === 'pro')) repeatBtn.style.display = 'none';
+        if (sys === 'theater') repeatBtn.style.display = 'none';
         else {
           repeatBtn.style.display = '';
-          const r = (sys === 'booth' ? ctx.dj?.booth : ctx.dj?.jukebox)?.repeat || 'off';
+          const r = ctx.dj?.jukebox?.repeat || 'off';
           repeatBtn.textContent = REPEAT_UI[r];
           repeatBtn.title = REPEAT_NAME[r];
         }
@@ -2151,22 +2243,6 @@ export function initUI(ctx) {
       if (sys === 'theater') {
         st = tv.stats();
         show = st.playing && st.kind !== 'card';
-      } else if (sys === 'booth' && boothMode() === 'pro') {
-        const decks = proDecks();
-        const live = decks.find(dk => dk.el && !dk.el.paused) || decks.find(dk => dk.el && dk.item) || {};
-        const el = live.el;
-        st = {
-          playing: proPlaying(),
-          paused: !proPlaying(),
-          time: el && isFinite(el.currentTime) ? el.currentTime : 0,
-          duration: el && isFinite(el.duration) ? el.duration : 0,
-          volume: ctx.boothPro?.()?.masterValue?.() ?? 0.8,
-          title: live.item?.title || null
-        };
-        show = !!st.playing;
-      } else if (sys === 'booth') {
-        st = ctx.boothStats?.() || {};
-        show = !!st.playing;
       } else {
         st = ctx.jukeboxStats?.() || {};
         show = !!st.playing;
@@ -2186,7 +2262,6 @@ export function initUI(ctx) {
       } else {
         queueEl?.classList.add('hidden');
         const fsB = $('#btn-tv-full'); if (fsB) fsB.style.display = 'none';
-        if (sys === 'booth') renderBoothQueue();
       }
     }, 500);
   }

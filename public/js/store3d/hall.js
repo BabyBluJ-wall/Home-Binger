@@ -7,7 +7,7 @@
 //  The book room will take the −x side later.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1789342462621';
+import { LAYOUT } from './config.js?v=1790065991054';
 // t119: hex mixer (same recipe as room.js) — the hall ceiling derives from the theme wall
 function mixHex(a, b, k) {
   const pa = /^#?([0-9a-f]{6})$/i.exec(String(a || '')), pb = /^#?([0-9a-f]{6})$/i.exec(String(b || ''));

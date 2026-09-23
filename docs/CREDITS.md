@@ -78,6 +78,29 @@ is not an endorsement by them.
   Simple Mode, vendored verbatim at `public/vendor/hls.min.js`
   (license note alongside: `public/vendor/HLS-LICENSE.txt`).
 
+## Free live TV sources (the Guide's channel packs)
+
+The Guide's extra channel packs are daily-regenerated community mirrors of
+the free ad-supported services' own public channel playlists, published at
+github.com/**BuddyChewChew** (many thanks — this is quietly-maintained
+infrastructure the FAST world relies on):
+
+- **Pluto TV / Samsung TV Plus / The Roku Channel / Plex** —
+  `BuddyChewChew/app-m3u-generator` and `BuddyChewChew/plex`
+- **Tubi** — `BuddyChewChew/tubi-scraper`
+
+The Guide's **program data** (now/next titles) comes from the free XMLTV
+EPG mirrors at **i.mjh.nz** (matthuisman.nz — many thanks: quietly-reliable
+infrastructure) and the Tubi scraper's own `tubi_epg.xml`. Channels whose
+provider publishes no schedule show an honest ● LIVE line — Home Binger
+never fabricates listings.
+
+The built-in directory backbone is **iptv-org** (iptv-org.github.io) — a
+public index of officially-free channels worldwide. All playback routes
+through your own server (a signed proxy); no accounts, no circumvention —
+these services stream free to everyone. Watch their apps to support them:
+pluto.tv, tubitv.com, plex.tv, samsungtvplus.com, roku.com.
+
 ## Home Binger itself
 
 © BluJ Productions · CC BY-NC-SA 4.0 (see [LICENSE](../LICENSE)).

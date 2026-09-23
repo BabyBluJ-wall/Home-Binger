@@ -40,7 +40,7 @@ import path from 'node:path';                             // t89: thumb cache di
 import { DATA_DIR } from '../lib/store.js';                // t89: grabbed-file case art
 import { CATALOG_SECTIONS } from '../lib/adapters/archive.js';
 import { GENRES as RADIO_GENRES } from '../lib/adapters/radio.js';
-import { proxyIptv } from '../lib/adapters/iptv.js';      // t123: the live TV proxy
+import { proxyIptv, epgSnapshot, iptvStats } from '../lib/adapters/iptv.js';      // t123: the live TV proxy · t139: program data · t144: dedupe count
 
 // t96: own version + the release feed (new-version notice)
 const PKG = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
@@ -305,6 +305,14 @@ export async function handleApi(req, res, pathname) {
     }
 
     // ── catalogue ──
+    // t139: the Guide's program data — now/next per channel (public: titles only)
+    // t140: ?at=<epoch ms> returns the slice AT that time (the Guide's time travel)
+    if (method === 'GET' && pathname === '/api/iptv/epg') {
+      const at = Number(new URL(req.url, 'http://x').searchParams.get('at')) || 0;
+      try { return ok(res, await epgSnapshot(at)); }
+      catch (e) { return fail(res, 503, 'EPG unavailable'); }
+    }
+
     if (method === 'GET' && pathname === '/api/library') {
       const cfg = getConfig();
       // per-visitor view: the store's setup overlaid with their media mix
@@ -326,12 +334,17 @@ export async function handleApi(req, res, pathname) {
           sectionId: i.sectionId || null,          // Shelf Map key (e.g. 'archive:staff-picks')
           sectionTitle: i.sectionTitle || null,    // real library name (By Library sort)
           guideOnly: i.guideOnly === true,         // t123: live TV lives in the Guide, never on shelves
-          langs: Array.isArray(i.langs) ? i.langs.slice(0, 4) : []   // t127: the Guide's language pages
+          langs: Array.isArray(i.langs) ? i.langs.slice(0, 4) : [],  // t127: the Guide's language pages
+          provider: i.provider || null,             // t138: the Guide's provider axis (Pluto TV, Plex Free…)
+          genre: i.genre || null,                   // t138: the Guide's genre axis (the clean canonical set)
+          chno: i.chno || null,                     // t139: the provider's own channel number (e.g. 104)
+          logo: i.logo || null                      // t139: the provider's channel logo (loaded direct, cached)
           // NOTE: no 'thumb' — posters are fetched via /img/<source>/<key>
         })),
         sections,
         shelves: cfg.shelves || {},
-        count: items.length
+        count: items.length,
+        liveDedupe: iptvStats().removed    // t144: "N duplicate channels hidden automatically" (admin panel shows it)
       });
     }
 
@@ -804,6 +817,30 @@ export async function handleApi(req, res, pathname) {
           next.iptv.sections = incoming.iptv.sections.map(String).filter(s => VALID.has(s)).slice(0, 12);
         if (typeof incoming.iptv.url === 'string')
           next.iptv.url = /^https?:\/\//.test(incoming.iptv.url) ? incoming.iptv.url.trim() : '';   // '' = the real iptv-org API
+        // t137: an EXTRA channel pack (.m3u playlist URL) — e.g. Plex's free
+        // live TV channels (community-maintained anonymous playlist). Rides
+        // the Guide as its own page; empty = off.
+        if (typeof incoming.iptv.playlistUrl === 'string')
+          next.iptv.playlistUrl = /^https?:\/\//.test(incoming.iptv.playlistUrl) ? incoming.iptv.playlistUrl.trim().slice(0, 500) : '';
+        // t138: EXTRA CHANNEL PACKS — a list of {label, url} providers. A
+        // legacy playlistUrl (beta ≤6 admin tab) folds in when no packs ride
+        // the save, so old tabs never strand their pack.
+        if (Array.isArray(incoming.iptv.packs)) {
+          const packs = [];
+          const seenUrl = new Set();
+          for (const pk of incoming.iptv.packs) {
+            if (!pk || typeof pk !== 'object') continue;
+            const url = /^https?:\/\//.test(pk.url || '') ? String(pk.url).trim().slice(0, 500) : '';
+            if (!url || seenUrl.has(url)) continue;
+            seenUrl.add(url);
+            const epg = /^https?:\//.test(pk.epg || '') ? String(pk.epg).trim().slice(0, 500) : undefined;   // t139: optional EPG override (advanced/tests)
+            packs.push({ label: String(pk.label || '').trim().slice(0, 24) || `Pack ${packs.length + 1}`, url , ...(epg ? { epg } : {}) });
+            if (packs.length >= 8) break;   // room for the known FAST world, and a spare
+          }
+          next.iptv.packs = packs;
+        } else if (next.iptv.playlistUrl) {
+          next.iptv.packs = [{ label: 'Plex Free', url: next.iptv.playlistUrl }];
+        }
         next.iptv.unverified = incoming.iptv.unverified === true;
       }
       // t61/t62: the file grabber — MULTIPLE spots on this machine, recursive
