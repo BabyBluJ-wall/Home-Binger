@@ -1,3 +1,52 @@
+## 2026-09-23 — v1.10.1 PUBLIC RELEASE: the Live TV update (t134–t145)
+
+- **The line in one sentence:** every free TV service in one Guide —
+  Pluto TV, Samsung TV Plus, Tubi, The Roku Channel, Plex, plus whole
+  countries in one click — with real now-and-next listings, an auto
+  duplicate remover, and a full-screen guide you can surf without it
+  closing. Carries the whole never-publicly-shipped 1.10.0 line (the TV
+  Guide itself, friend invites, per-account libraries, Simple Mode).
+- **t134 (09-14):** the owner's 1.10.0 beta bug list — ALL 8 fixed plus 4
+  bonus finds (138/138 ×2). **t135/t135b (09-15):** fullscreen channel
+  flips + README redo + the GitHub sync audit after the owner's first
+  1.10.0 push. **t136/136b (09-15):** Simple Mode grows up (☰ menu,
+  category chips, dead-item fallback, ™ block in the footer; 139/139).
+  **t137 (09-19):** Plex free live TV packs (141/141). **t138 (09-19):**
+  live TV from EVERY free service — multi-provider packs, zero duplicate
+  channels, provider × genre Guide (144/144).
+- **t139 (09-20) the Guide REBUILD:** real EPG listings (what's on now +
+  next, straight from the providers' schedules), a virtualized 60fps
+  channel list (1,400+ channels scroll like 14), instant search, and
+  squeeze-back video (147/147 ×2). Then six owner design passes in two
+  days — **t139b–t139h:** the full-screen Guide back to the CLASSIC side
+  dock (video keeps its exact size), tidy 3-option filter bars with
+  +N more / − Less (the channel list stays long), every option reachable,
+  and the pick: the **"hybrid"** layout — classic mechanics, new look,
+  NO shade over the view (AR-glasses feel).
+- **t140 (09-21):** the TIME BAR — ▶ Now · +1h … +8h, page through
+  tonight's (and tomorrow's) listings today. **t141:** the synopsis card
+  becomes real dark glass that works on a playing screen. **t142
+  (09-22):** booth shortcuts panel gets its glass back; store-TV defaults
+  move to Admin → 📺 Store TV (151/151). **t143:** ultrawide two-monitor
+  Guide (2560×1080: video left, dock right, nothing slides under
+  anything), the channel-info card moves to the theater with a ✕,
+  movement frozen under full screen, DJ booth remote removed (152/152).
+- **t144 (09-22):** duplicate remover v2 (prefix/suffix/spacing folding
+  with country separation — 703 removed on the real 6-pack bench, 0
+  same-country survivors) + **Find more channels** (19 country chips +
+  worldwide bundles + the iptv-org pointer) (154/154). **t145 (09-23):**
+  the theater card is actually CLICKABLE (it sat under the guide's
+  invisible backdrop — z 61 fixes it) and full-screen channel surfing —
+  picking a channel keeps the dock up, two-monitor style (155/155).
+- **Delivery along the way:** beta1 → beta14 hand-delivered builds, each
+  owner-tested; the suite grew 138 → 155 checks and the final build is
+  **155/155**.
+- **The release:** version 1.10.1, suite 155/155, release notes in
+  `RELEASE-NOTES-v1.10.1.md` (delivered next to the source zip), GitHub
+  tag **v1.10.1** (plain v-tag — the in-app new-version notice parses
+  it; publishing as a REGULAR release, not pre-release, makes the notice
+  fire for everyone still on the 1.10 beta).
+
 ## 2026-09-13 — t133: a lock is a TRUE SYNC, not a mask
 - **Owner: "the admin theme lock works for only part of it not all of it.
   everyone would still have to go sync their theme by changing it

@@ -5,24 +5,31 @@ You have: this zip = the complete, ready-to-commit source for this
 release. (The .gitignore inside already keeps out runtime data, test
 media, and builds — nothing to configure.)
 
-FIRST TIME ONLY — create the repo
----------------------------------
-GitHub Desktop (desktop.github.com) → File → Add Local Repository →
-pick the extracted folder → it offers to create one → name: home-binger,
-Git ignore: NONE, License: NONE (both already included) → Publish.
-Private is fine; flip to public later in repo Settings.
+FIRST TIME ONLY — create the repo (ALREADY DONE — yours is
+-----------------------------------------------------------
+github.com/BabyBluJ-wall/Home-Binger, live since the 1.10 beta push).
+Skip to "EVERY UPDATE". (Kept for reference: GitHub Desktop → File →
+Add Local Repository → name: home-binger, Git ignore: NONE, License:
+NONE → Publish.)
+
+WHERE THINGS STAND RIGHT NOW
+---------------------------
+The repo's latest release is "v1.10" (the 1.10 beta, 2026-09-12).
+Publishing v1.10.1 as a REGULAR release (pre-release box NOT ticked)
+makes the "new version out" notice appear for everyone still on the
+1.10 beta — that is the point of this release.
 
 EVERY UPDATE — three drags
 --------------------------
 1. On github.com, open your repo → "Add file" → "Upload files" → drag
    EVERYTHING from inside this zip in (matching files get replaced).
-   Commit message: a one-liner like "1.10.0".
+   Commit message: a one-liner like "1.10.1".
 2. Releases (right column) → "Draft a new release".
-3. Tag: v1.10.0        <- plain "v" + the version number, no extra letters
-   Title: Home Binger 1.10.0
+3. Tag: v1.10.1        <- plain "v" + the version number, no extra letters
+   Title: Home Binger 1.10.1
    Notes: paste the release-notes file delivered next to this zip
-   (RELEASE-NOTES-v1.10.0.md).
-   Drag the exe zip (HomeBinger-1.10.0-beta.zip) into "Attach binaries",
+   (RELEASE-NOTES-v1.10.1.md).
+   Drag the exe zip (HomeBinger-1.10.1.zip) into "Attach binaries",
    then Publish. Do NOT tick "Set as a pre-release" — the app's update
    notice only looks at regular releases.
 

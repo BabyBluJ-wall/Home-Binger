@@ -858,3 +858,4 @@ t68 fresh-install grabber fix + zip hygiene (63/63 on clean data) ·
 t86–t89 multi-source + shelf-map fixes + grabber case art + dance-floor lights 2.0 (85/85 ×2)
 t93 store polish → 1.7.0 LIVE (portable uninstall/update doctrine, movement lights, app-wide theme, pure shelf sections, multi-RSS; 90/90 ×2)
 t94–t96 → 1.8.0 BUILT FOR TESTING 2026-09-09 (verified update adoption, new-version notice, dance rig 3D + beat lock, reset-all fix, password-change coverage, Tailscale bundle + remote-access docs; 94/94 + 4-scenario Electron click-through)
+t134–t145 → 1.10.1 LIVE 2026-09-23 (the Live TV update: every free service in one Guide — Pluto/Samsung/Tubi/Roku/Plex + one-click countries, EPG now-&-next + the time bar, auto duplicate remover v2, ultrawide two-monitor dock, theater synopsis card, full-screen channel surfing; carries the never-shipped 1.10.0 line — friend invites, per-account libraries, Simple Mode; 155/155)

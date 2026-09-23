@@ -12,20 +12,40 @@
   <img src="docs/whats-new/entry-neon.png" alt="Home Binger's neon entry screen — press Enter the store to walk in" width="880">
 </p>
 
-**📺 The TV Guide — free live TV, in the theater.** Walk into the theater
-and press **G**: up comes a channel guide styled like the old paper TV
-guides — numbered channels, category pages (News · Movies · Series · Kids ·
-Documentary · Public Broadcasters…), language sections, and ☆ favorites that
-follow your account. Hundreds of **officially-free channels** (Pluto TV,
-Tubi, ABC, PBS and friends) stream through your server — nothing to pay,
-nothing to sign up for, and channels never clutter the shelves; the Guide is
-their home. In full screen the Guide **docks beside the movie** — the picture
-keeps its exact size and slides left — and flipping channels keeps the big
-screen big.
+**📺 The TV Guide — free live TV from every free service, with real
+listings.** Walk into the theater and press **G**: a glass channel guide
+floats in from the right like an AR overlay — the movie keeps playing
+bright on the screen behind it, with **no shade over the view**. It's
+styled like the old paper TV guides — numbered channels with their
+provider logos, **what's on right now AND what's on next** (real program
+titles, episode numbers, a live progress line and times — from the
+providers' own published schedules), a **time bar** to browse the whole
+published future — ▶ Now · 1 PM · 2 PM · … up to eight hours ahead, every
+row showing what's on then, like paging through a paper guide (press
+**T**), **genre pages** (News · Movies · Series · Kids · Sports…), a
+**provider row** (Pluto TV · Samsung TV Plus · Tubi · The Roku Channel ·
+Plex Free…), language sections, ☆ favorites that follow your account, and
+**instant search** (press **/** — by channel name, number, or the show
+airing now). **Thousands of officially-free channels** stream through your
+server — nothing to pay, nothing to sign up for — with **duplicates removed
+automatically**. The list renders only what you see, so it stays at 60fps
+no matter how many channels you add. In full screen the Guide **docks
+beside the movie** — the picture keeps its exact size and slides left, and
+on ultrawide monitors the dock sizes itself to the space the picture
+leaves, so it tiles like **two monitors side by side** (nothing slides
+under anything). The dock's padding is tight top, bottom and sides, so
+rows fill the space; the selected channel's story (episode, airtime,
+minutes left, what's next) rides the dock's **footer** with a one-click
+**▶ Watch**. The rich **synopsis card** lives in the theater (windowed)
+guide — it floats in front of the view, its buttons (▶ Watch · ☆ Favorite ·
+Next · ✕) take their own clicks, and **✕** closes it. Picking a channel in
+full screen **keeps the Guide docked** — flip channels like changing inputs
+on a second monitor. And while you're in full screen TV, your character
+stays put — no walking around unseen under the video.
 
 <p align="center">
-  <img src="docs/whats-new/tv-guide.png" alt="The TV Guide in the theater — numbered live channels in category pages" width="430">
-  <img src="docs/whats-new/guide-fullscreen-docked.png" alt="In full screen, the Guide docks beside the movie — the picture keeps its size and slides left" width="430">
+  <img src="docs/whats-new/tv-guide-epg.png" alt="The TV Guide — glass drawer with logos, live programme data, progress lines, provider tags and search" width="430">
+  <img src="docs/whats-new/tv-guide-docked.png" alt="In full screen, the Guide docks into a column on the right — the movie keeps its size and slides left" width="430">
 </p>
 
 **🎫 Invite a friend — your store, over the internet.** Admin → Users now
@@ -44,9 +64,10 @@ cartoons for the kids' accounts, and invites that only see what you shared.
 One building, everyone gets their own store.
 
 **📱 Simple Mode — the phone view.** Phones that visit your store get a
-clean, fast list view (big covers, one tap to play on the TV) — perfect for
-casting from the couch, no walking required. The full 3D store is one tap
-away.
+clean, fast list view — big covers, one tap to play, and shelves separated
+into **categories** (Movies · TV Series · Music · Radio · Podcasts · Live
+TV). The **☰ menu** holds the view switch and sign-in, with **Enter the 3D
+store** right at the top for the full walk-around.
 
 <p align="center">
   <img src="docs/whats-new/simple-mode-phone.png" alt="Simple Mode on a phone — a clean list view of the store, one tap to play" width="270">
@@ -112,9 +133,9 @@ Three connected spaces under one roof:
   plus **subwoofers at the front of the DJ booth counter** (mouths visible,
   aimed at the floor), and neon LED bars and diffused coves riding every wall. The **DJ booth** (two turntables, mixer, laptop) opens a
   full DJ deck: queue, fades, EQ, tempo, dead-center on the floor — and the
-  **TV remote follows you in**: in the dance hall its buttons run the booth
-  (play/pause, volume, stop), so you never have to walk back to the laptop
-  mid-set. Behind its swinging doors, the
+  booth is run entirely from the **PC's booth panel** (the floating TV
+  remote stays out of the dance hall — one controller, no confusion).
+  Behind its swinging doors, the
   **DJ's Library** keeps the vinyl — click a record to spin it for the floor.
   Dance music **stays in the dance hall**: room gates keep each zone's sound
   inside its own wing.
@@ -439,15 +460,54 @@ open, and everything reconnects when it's back.
   play/pause · 10⏩s · repeat · volume). Albums get a spectrum visualizer.
   The remote bar follows the room you're in: it runs the **jukebox** in the
   store, the **DJ booth** in the dance hall, and the **screen** in the
-  theater. Admins can change the idle screen (Admin → Server): the standby
+  theater. Admins can change the idle screen (Admin → Store TV): the standby
   card (the fresh-install default), a pinned item, a looping video URL, or
   the white projector screen.
-- **The TV Guide** (theater) — press **G** in the theater for the live-TV
-  guide: numbered channels, category and language pages, ☆ favorites,
-  ● LIVE everywhere, dead channels marked and skipped. In full screen the
-  Guide docks beside the movie — the picture keeps its exact size — and
-  picking a channel keeps you in full screen. The Guide button on the
-  remote opens it too (theater only, where it belongs).
+- **The TV Guide** (theater) — press **G** in the theater: a glass drawer
+  slides in from the right **with no shade over the rest of the view** —
+  the theater screen keeps playing bright behind it, like reading the
+  guide through a pair of AR glasses. Numbered channels with logos, **NOW
+  & NEXT program data** where the provider publishes a schedule (a channel
+  with no data shows the honest
+  ● LIVE line — never a made-up listing), and a **time bar** to browse the
+  whole published future — ▶ Now · 1 PM · 2 PM · … up to eight hours ahead
+  (press **T** or click an hour): every row shows what's on then, and the
+  synopsis card follows. **Genre pages**, a **provider
+  row**, language sections, ☆ favorites, **instant search** (**/**), dead
+  channels marked and skipped. The list is **virtualized** — only the
+  visible rows exist in the DOM, so 1,400+ channels scroll at 60fps. In
+  full screen the Guide **docks beside the movie** — the picture keeps its
+  exact size; on an ultrawide screen the dock fits the space the picture
+  leaves free, so the two sit side by side like a dual-monitor setup, and
+  the tight padding (top, bottom, both sides) fills the space with
+  channels. The selected channel's info rides the dock **footer** with a
+  **▶ Watch** button. The floating **synopsis card** (episode, airtime,
+  minutes left; click a row's NEXT to preview what's coming) lives in the
+  windowed/theater guide now — over the view, never over the fullscreen
+  movie — and its buttons take their own clicks (✕ closes it). Picking a
+  channel in full screen keeps you in full screen **with the Guide still
+  docked** — flip channels freely, two-monitor style — and while the big
+  screen is up your character can't wander off under it.
+  The Guide
+  button on the remote opens it too (theater only). The filter bars stay
+  TIDY so the channel list stays long: each bar shows its top 3 options
+  plus **+N more** — press it and every option appears (wrapped, all
+  clickable) with a **− Less** to tidy back up. Whatever you've selected
+  stays visible even when the bar is collapsed.
+  Admins stock it from two places (Admin → 🛰️ Server): the built-in
+  free-channel **directory** (curated iptv-org groups), plus **extra
+  channel packs** — one click each for **Pluto TV**, **Samsung TV Plus**,
+  **Tubi**, **The Roku Channel** and **Plex Free** (The Librarians,
+  Hallmark Movies & More, Stories by AMC…), or paste any `.m3u` playlist
+  URL. **Find more channels** (the same panel) adds whole countries in one
+  click — 🇬🇧 UK, 🇨🇦 Canada, 🇩🇪 Germany, 🇫🇷 France and 15 more, plus
+  worldwide bundles — and points at the public **iptv-org** directory for
+  thousands more playlists. Every pack arrives as its own provider page,
+  its channels fold into the genre pages, and the **duplicate remover**
+  folds the same channel automatically however it's spelled ("Danger TV" /
+  "DangerTV", "Estrella TV" / "EstrellaTV") — the panel even shows how
+  many it's hiding, and regional feeds (US vs UK) stay side by side. No
+  accounts, no costs, no DRM — just free ad-supported TV.
 
 <p align="center">
   <img src="docs/whats-new/tv-guide.png" alt="The TV Guide — numbered live channels in category pages, ● LIVE" width="430">
