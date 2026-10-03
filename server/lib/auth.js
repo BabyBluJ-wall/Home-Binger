@@ -213,6 +213,15 @@ export function writePrefs(key, incoming) {
     guideFavs: Array.isArray(incoming.guideFavs)
       ? [...new Set(incoming.guideFavs.map(String).filter(x => x.length > 0 && x.length <= 100))].slice(0, 300)
       : (current.guideFavs || []),
+    // t161: personal movement — look sensitivity + default speed tier
+    controls: {
+      look: Number.isFinite(+incoming.controls?.look)
+        ? Math.min(3, Math.max(0.25, +incoming.controls.look))
+        : (+current.controls?.look || 0.55),   // t165: the default is 0.55×
+      base: ['walk', 'jog', 'run'].includes(incoming.controls?.base)
+        ? incoming.controls.base
+        : (current.controls?.base || 'walk')
+    },
     updatedAt: Date.now()
   };
   setProfile(key, next);

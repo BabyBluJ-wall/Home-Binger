@@ -138,6 +138,10 @@ body {
 .side-link small { grid-column: 2; color: var(--vb-muted); font-weight: 500; font-size: 12px; margin-top: 2px; }
 .side-link:hover { background: color-mix(in srgb, var(--vb-accent, #ffd23f) 14%, transparent); border-color: color-mix(in srgb, var(--vb-accent, #ffd23f) 40%, var(--vb-line)); }
 .side-link.active { border-left: 3px solid var(--vb-accent); padding-left: 11px; background: color-mix(in srgb, var(--vb-accent, #ffd23f) 10%, transparent); }
+.side-version {           /* t149: Home Binger™ · vN.N.N under the front-entrance button */
+  text-align: center; font-size: 12px; letter-spacing: .4px;
+  color: var(--vb-muted); opacity: .8; padding: 2px 0 6px;
+}
 .sidebar-foot { padding: 14px 16px 18px; border-top: 1px solid rgba(255,255,255,.08); }
 .sidebar-tm {
   text-align: center; font-size: 10.5px; letter-spacing: .4px; opacity: .55;
@@ -156,23 +160,24 @@ body {
 #settings {
   position: fixed; inset: 0; z-index: 50; display: flex; align-items: center;
   justify-content: center; background: rgba(3, 7, 22, 0.6); backdrop-filter: blur(3px);
-  padding: 18px;
+  padding: 24px;
 }
 .settings-card {
-  width: min(760px, 100%); max-height: 88vh; display: flex; flex-direction: column;
+  /* t147: 760px on a 1920 screen was the "squeezed in with plenty of space
+     around" bulk — the card now uses the room it's given */
+  width: min(960px, 100%); max-height: 88vh; display: flex; flex-direction: column;
   background: var(--vb-card); border: 1px solid var(--vb-line);
   border-radius: var(--radius); box-shadow: var(--shadow);
 }
 .settings-head {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,.09);
+  padding: 20px 26px; border-bottom: 1px solid rgba(255,255,255,.09);
 }
-.settings-head h2 { margin: 0; font-size: 20px; font-style: italic; color: var(--vb-accent); }
-#settings-body { padding: 20px 22px 26px; overflow-y: auto; }
-
+.settings-head h2 { margin: 0; font-size: 21px; font-style: italic; color: var(--vb-accent); }
+#settings-body { padding: 22px 26px 30px; overflow-y: auto; }
 /* forms */
 .field { margin-bottom: 16px; }
-.field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--vb-muted); margin-bottom: 7px; letter-spacing: .3px; }
+.field label { display: block; font-size: 13px; font-weight: 700; color: var(--vb-muted); margin-bottom: 7px; letter-spacing: .3px; }
 .field input[type=text], .field input[type=password], .field input[type=url], .field select {
   width: 100%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.16);
   color: var(--vb-ink); border-radius: 10px; padding: 11px 13px; font-size: 14px;
@@ -214,6 +219,15 @@ body {
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn.danger { border-color: rgba(255, 110, 110, .5); color: #ff9c9c; }
 
+/* t147: the admin sub-tabs read as a segmented control — the active screen
+   is LIT, the others rest; before, they were five equal buttons dimmed to .55 */
+.admin-sub { opacity: .75; }
+.admin-sub:hover { opacity: 1; }
+.admin-sub.on {
+  opacity: 1; background: var(--vb-accent); color: #fff;
+  border-color: transparent; background-image: linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18));
+}
+
 .radio-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .radio-card {
   background: rgba(255,255,255,.05); border: 1.5px solid rgba(255,255,255,.12);
@@ -229,15 +243,16 @@ body {
 }
 
 .section-title {
-  font-size: 12px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--vb-accent);
-  font-weight: 800; margin: 22px 0 10px;
+  /* t147: section headers were 12px — smaller than everything they named */
+  font-size: 13px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--vb-accent);
+  font-weight: 800; margin: 28px 0 12px;
 }
 .section-title:first-child { margin-top: 0; }
 
 /* toggle switch */
-.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; gap: 14px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; gap: 14px; }   /* t147: room to breathe */
 .toggle-row .t-label { font-size: 14px; font-weight: 600; }
-.toggle-row .t-sub { font-size: 12px; color: var(--vb-muted); margin-top: 2px; }
+.toggle-row .t-sub { font-size: 12.5px; color: var(--vb-muted); margin-top: 2px; }
 .switch { position: relative; width: 46px; height: 26px; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; }
 .switch .track {
@@ -362,10 +377,16 @@ body {
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
 .loading-error { margin-top: 14px; color: #ff9c9c; font-size: 13.5px; line-height: 1.5; }
 
-/* scrollbar */
-::-webkit-scrollbar { width: 10px; }
+/* scrollbar — t156: slim + themed everywhere (the fat default bar was the
+   complaint); scroll chains contained so a list never drags the page with it */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.25); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.28); }
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
+#sidebar-nav, #side-search-results, #settings-body, .modal-card, #tv-queue, .dj-card .djp-list {
+  overscroll-behavior: contain;
+}
 
 /* ── TV remote (playback controls, visible while the TV plays) ── */
 #tv-remote {
@@ -396,7 +417,7 @@ body {
 .q-title { color: var(--vb-muted); font-size: 11px; font-weight: 700; letter-spacing: .4px; padding: 0 8px; }
 
 /* ── library checkbox picker (Admin → Server) ── */
-.lib-list { display: flex; flex-direction: column; gap: 4px; }
+.lib-list { display: flex; flex-direction: column; gap: 6px; }   /* t147: rows aren't a phone book */
 .lib-row {
   display: flex; align-items: center; gap: 10px; padding: 8px 10px;
   border: 1px solid var(--vb-line); border-radius: 10px; cursor: pointer; font-size: 14px;
@@ -416,6 +437,10 @@ body.tv-close #tv-queue {
 #tv-queue { transition: opacity .25s ease; }
 
 /* ── TRUE full-screen video (tv.js promotes the raw <video> into the DOM) ── */
+/* t152: the YouTube layer — the wrapper wears #vb-fs-video; its iframe fills
+   it, carries no chrome (controls=0 embed), and is click-through so every
+   interaction stays OURS (HUD buttons, seek bar, Esc) */
+#vb-fs-video iframe { width: 100%; height: 100%; border: 0; display: block; pointer-events: none; }
 body.tv-fullscreen #vb-fs-video {
   position: fixed; inset: 0; width: 100vw; height: 100vh;
   object-fit: contain; background: #000; z-index: 80;
@@ -493,6 +518,11 @@ body:has(#sidebar:not(.hidden)) #guide-syn { display: none !important; }
   border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
 .syn-nextbtn:hover { border-color: var(--vb-accent, #ff3ea5); }
 .syn-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 10px; }
+/* t156: the My Shelves map rows stack one-per-line — with a dozen units
+   that's a long, annoying scroll. Two columns on a normal card. */
+#shelf-map-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px 16px; }
+@media (max-width: 720px) { #shelf-map-rows { grid-template-columns: 1fr; } }
+
 .syn-btn { border: 1px solid var(--vb-line, #2a3354); background: rgba(255,255,255,.06); color: inherit;
   border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .syn-btn:hover { border-color: var(--vb-accent, #ff3ea5); }
@@ -532,16 +562,66 @@ body.tv-fullscreen.fhud-idle #tv-fs-top, body.tv-fullscreen.fhud-idle #tv-fs-bot
 body.tv-fullscreen.fhud-idle #tv-fs-top { transform: translateY(-8px); }
 body.tv-fullscreen.fhud-idle #tv-fs-bottom { transform: translateY(8px); }
 body.tv-fullscreen.fhud-idle { cursor: none; }
-/* t141: while the full-screen GUIDE is open, the video HUD's bars stand down.
-   They live at z-90 — ABOVE the synopsis card — and their full-width bottom
-   bar sat exactly on the card's Watch/Favorite/Back buttons, eating every
-   click (and the idle timer added cursor:none the moment you paused). The
-   video itself is never touched — the bars return the instant the guide
-   closes. The guide carries its own ✕ / Esc / ⤢ Back to video. */
+/* t153 (owner's call — supersedes the t141 stand-down): while the full-screen
+   GUIDE is docked, the HUD stays UP and USABLE — volume, play/pause, seek all
+   keep working while you browse. The bars now live in the video's own area
+   (left of the dock) so nothing underlaps the guide; the fs synopsis card the
+   stand-down was protecting is gone since t143 (the dock footer carries it).
+   The guide keeps its own ✕ / Esc / ⤢ Back to video. */
 body.tv-fullscreen.fs-guide #tv-fs-top,
-body.tv-fullscreen.fs-guide #tv-fs-bottom { opacity: 0; pointer-events: none; }
+body.tv-fullscreen.fs-guide #tv-fs-bottom { right: var(--fs-dock-w, min(760px, 46vw)); }
 body.tv-fullscreen.fs-guide { cursor: auto; }
+/* t153b: the CC toggle — lit when captions are on */
+#fs-cc { font-weight: 800; letter-spacing: .5px; }
+#fs-cc.cc-on { color: var(--vb-accent, #ffd23f); border-color: var(--vb-accent, #ffd23f); }
+#fs-cc.hidden { display: none; }
 #btn-tv-full.active { color: var(--vb-accent, #ffd23f); border-color: var(--vb-accent, #ffd23f); }
+
+/* ── t155/t159: the help-desk PC modal — wide, with the live chat embed ── */
+#helpdesk-modal .modal-card { width: min(880px, 96vw); display: flex; flex-direction: column; }
+#hd-chat {
+  flex: 1 1 auto; min-height: 380px; height: 58vh; border: 1px solid var(--vb-line, #2a3354);
+  border-radius: 12px; overflow: hidden; background: rgba(0,0,0,.25); margin-top: 10px;
+  display: flex; flex-direction: column;            /* t159b: sign-in bar + the embed stack */
+}
+#hd-chat iframe { border: 0; display: block; }
+.hd-chat-frame { position: relative; overflow: hidden; flex: 1 1 auto; min-height: 0; }
+/* t159c: wizcord's embed shows the server's whole channel list down its left
+   240px — decorative-Unicode names that read as an unreadable glyph wall
+   ("Chinese") and crowd out the actual messages. The frame is CROPPED: the
+   iframe runs 240px wider and sits 240px left, so only the chat pane
+   (messages + composer) is visible. Wizcord shows that sidebar only when the
+   iframe is ≳780px wide — see the narrow-screen branch below. */
+.hd-chat-frame iframe { position: absolute; top: 0; left: -240px; width: calc(100% + 240px); height: 100%; }
+/* Narrow screens (phones): wizcord hides the sidebar itself below its ~780px
+   breakpoint — no crop there, the chat already fills the frame. Above 700px
+   viewport the cropped iframe is always ≥ ~860px wide, safely past the
+   breakpoint, so the crop always removes exactly the sidebar. */
+@media (max-width: 699px) {
+  .hd-chat-frame iframe { left: 0; width: 100%; }
+}
+.hd-chat-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px;
+  border-bottom: 1px solid var(--vb-line, #2a3354); background: rgba(0,0,0,.25); }
+.hd-chat-bar .hint { margin: 0; flex: 1 1 140px; min-width: 120px; }
+#hd-chat-fallback { padding: 26px 10px; text-align: center; color: var(--vb-muted); font-size: 13px; }
+/* t160: the live chat projected onto the help-desk PC's monitor — display
+   only (pointer-events: none), so clicking still aims at the PC and opens
+   the enlarged chat. z-index 8: above the 3D canvas, below every UI layer
+   (HUD chips 20+, TV remote 24, panels 40+, modals 50+, fullscreen movie 80). */
+/* t160c: the chat plane — a FIXED 740×466 element that a per-frame matrix3d
+   (the homography from the monitor's projected corners) places IN the world
+   with true perspective. No left/top/scale/clip dancing: the transform IS
+   the screen quad, so nothing can spill past the bezel at any angle, and
+   the content never re-lays-out — it foreshortens like real glass. */
+#hd-world-chat { position: fixed; left: 0; top: 0; width: 740px; height: 466px;
+  transform-origin: 0 0; will-change: transform; overflow: hidden; pointer-events: none;
+  z-index: 8; display: none; background: #0b1020; }
+#hd-world-chat iframe { width: 100%; height: 100%; border: 0; display: block; }
+.hd-report summary { cursor: pointer; font-weight: 700; }
+.hd-report { background: rgba(255,255,255,.05); border: 1px solid var(--vb-line, #2a3354);
+  border-radius: 12px; padding: 12px 14px; margin-top: 12px; font-size: 13px; line-height: 1.55; }
+.hd-report b { display: block; margin-bottom: 4px; }
+.hd-report ol { margin: 6px 0 0 18px; padding: 0; }
 
 /* ── sidebar shelf search ── */
 .side-search { padding: 10px 14px 4px; }
@@ -552,9 +632,14 @@ body.tv-fullscreen.fs-guide { cursor: auto; }
 }
 .side-search input:focus { border-color: var(--vb-accent, #ffd23f); }
 #side-search-results {
-  margin-top: 6px; max-height: 42vh; overflow-y: auto;
+  /* t156: was max-height 42vh — a cramped little box with its own fat
+     scrollbar. Now it takes real room and shows the count up top. */
+  margin-top: 6px; max-height: min(64vh, 560px); overflow-y: auto;
   display: flex; flex-direction: column; gap: 3px;
+  padding-right: 4px;
 }
+.side-search-count { font-size: 11px; color: var(--vb-muted); padding: 2px 4px 4px; letter-spacing: .4px; }
+.search-row.kbd-pick { border-color: var(--vb-accent, #ffd23f); background: rgba(255,255,255,.09); }
 #side-search-results.hidden { display: none; }
 .search-row {
   display: flex; align-items: center; gap: 8px; text-align: left;
@@ -658,6 +743,19 @@ a { color: var(--vb-accent, #ffd23f); }
 #guide-modal {
   justify-content: flex-end; align-items: stretch; padding: 0;
   background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  /* t158 (owner's call): the modal layer spans the viewport but must NOT
+     own it — clicks outside the drawer pass straight through to the store,
+     the TV remote, the volume: the guide is a SIDE PANEL, not an overlay.
+     The drawer card keeps its own pointer events. */
+  pointer-events: none;
+}
+#guide-modal .guide-card { pointer-events: auto; }
+/* t158: while the guide is up, the player controls stay on top and usable */
+body.guide-open #tv-remote, body.guide-open #tv-queue { z-index: 62; }
+/* t158: the corner buttons slide left of the drawer instead of hiding under
+   it — capped so they stay on screen (a 640px window must still see them) */
+body.guide-open:not(.tv-fullscreen) #hud-buttons {
+  right: min(calc(min(760px, 96vw) + 16px), calc(100vw - 170px));
 }
 .guide-card {
   width: min(760px, 96vw); height: 100%; max-height: none;
@@ -751,6 +849,27 @@ a { color: var(--vb-accent, #ffd23f); }
   body.tv-fullscreen.fs-guide .guide-next { display: none; }
   body.tv-fullscreen.fs-guide .guide-star { grid-column: 4; grid-row: 1 / span 2; }
 }
+/* ── t147: the windowed Guide reads BIGGER and sits tighter to its frame ──
+   (the fs dock keeps the t143 geometry — these are scoped to windowed) */
+body:not(.tv-fullscreen) .guide-head { margin: 4px 8px 5px; }
+body:not(.tv-fullscreen) .guide-head h2 { font-size: 21px; }
+body:not(.tv-fullscreen) .guide-hint { font-size: 11px; }
+body:not(.tv-fullscreen) .guide-searchrow { margin: 0 8px 5px; }
+body:not(.tv-fullscreen) .guide-cats,
+body:not(.tv-fullscreen) #guide-langs,
+body:not(.tv-fullscreen) #guide-time { margin: 0 8px 5px; }
+body:not(.tv-fullscreen) #guide-body { margin: 0 8px; }
+body:not(.tv-fullscreen) #guide-foot { margin: 5px 8px 8px; }
+.guide-name { font-size: 16px; }                             /* t147: the channel name is the star */
+.guide-num { font-size: 14px; }
+.guide-epg { font-size: 12.5px; gap: 8px; }
+.guide-left { font-size: 11px; }
+.guide-next { font-size: 12px; gap: 2px; }
+.guide-next small { font-size: 10.5px; }
+.guide-cell { font-size: 12px; }
+#guide-search { font-size: 14.5px; padding: 9px 16px; }
+#guide-foot { font-size: 12.5px; }
+
 /* t139: the footer — the selected channel's now → next */
 #guide-foot {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -766,7 +885,7 @@ a { color: var(--vb-accent, #ffd23f); }
 .guide-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .guide-cat {
   border: 1px solid var(--vb-line, #2a3354); background: transparent; color: inherit;
-  border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 700;
+  border-radius: 999px; padding: 6px 13px; font-size: 13.5px; font-weight: 700;   /* t147: pills you can read across the room */
   letter-spacing: .5px; cursor: pointer;
 }
 .guide-cat small { margin-left: 6px; opacity: .6; font-weight: 400; }

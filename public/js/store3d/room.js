@@ -7,8 +7,8 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1790065991054';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1790065991054';
+import { LAYOUT } from './config.js?v=1790983945165';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1790983945165';
 
 // t120: sign backgrounds derive from the theme wall (were hardcoded plum #160f1e)
 const signBgOf = (t) => mixHex(t.wall || '#12275e', '#000000', 0.5);
@@ -302,6 +302,203 @@ export function computeTheaterSpeakers() {
   ];
 }
 
+// ── t155: THE HELP-DESK PC — right of the theater door, mirroring the
+// jukebox on the left. Click it → the help-desk modal (the store's bug-report
+// Discord invite + the bug-report format). A real little workstation: desk,
+// monitor with a glowing chat screen, mini tower with a power LED, keyboard.
+export function buildHelpDesk(theme) {
+  const L = LAYOUT;
+  const D = L.room.l / 2;
+  const group = new THREE.Group();
+  group.name = 'helpdesk';
+  const targets = [];
+  const wood = new THREE.MeshStandardMaterial({ color: '#4a3524', roughness: 0.6 });
+  const plastic = new THREE.MeshStandardMaterial({ color: '#191c26', roughness: 0.45, metalness: 0.25 });
+  const chrome = new THREE.MeshStandardMaterial({ color: '#cdd2da', roughness: 0.2, metalness: 0.85 });
+  const accent = new THREE.Color(theme?.accent || '#ff3ea5');
+
+  // the desk — writing desk against the back wall, facing the store
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.24, 0.05, 0.58), wood);
+  top.position.set(0, 0.75, 0); group.add(top);
+  for (const lx of [-0.55, 0.55]) for (const lz of [-0.22, 0.22]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.73, 0.05), wood);
+    leg.position.set(lx, 0.365, lz); group.add(leg);
+  }
+
+  // MONITOR — bezel + a glowing chat screen (canvas texture)
+  const screenCv = document.createElement('canvas');
+  screenCv.width = 512; screenCv.height = 320;
+  const g = screenCv.getContext('2d');
+  // t160c: no fake UI text on the glass — the REAL chat (the live overlay)
+  // IS the screen whenever you're in range of it. This texture is only what
+  // the monitor shows at a glance / from across the store: a dark chat pane,
+  // abstract message blocks, nothing readable (fake text would fight the
+  // real channel).
+  const drawScreen = (acc) => {
+    g.fillStyle = '#10141d'; g.fillRect(0, 0, 512, 320);
+    g.fillStyle = '#1a2130'; g.fillRect(0, 0, 512, 38);                 // header strip
+    g.fillStyle = acc; g.fillRect(14, 14, 10, 10);                       // status dot
+    g.fillStyle = '#161c29'; g.fillRect(12, 286, 488, 24);               // composer strip
+    g.fillStyle = acc; g.fillRect(24, 291, 3, 14);                       // caret
+    g.fillStyle = 'rgba(228,231,238,.08)';                               // name lines
+    for (const y of [56, 94, 132, 170, 208]) g.fillRect(44, y, 96, 9);
+    g.fillStyle = 'rgba(228,231,238,.055)';                              // message blocks
+    const widths = [312, 228, 354, 198, 286];
+    for (let i = 0; i < 5; i++) g.fillRect(44, 72 + i * 38, widths[i], 14);
+    g.fillStyle = 'rgba(228,231,238,.09)';                               // avatar squares
+    for (const y of [56, 94, 132, 170, 208]) g.fillRect(16, y, 20, 20);
+  };
+  drawScreen('#' + accent.getHexString());
+  const screenTex = new THREE.CanvasTexture(screenCv);
+  screenTex.colorSpace = THREE.SRGBColorSpace;
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.39),
+    new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
+  const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.45, 0.045), plastic);
+  bezel.position.set(0, 1.13, -0.12); group.add(bezel);
+  screen.position.set(0, 1.13, -0.095); group.add(screen);
+  targets.push(screen, bezel);
+  const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.09, 0.16, 12), chrome);
+  stand.position.set(0, 0.86, -0.12); group.add(stand);
+
+  // MINI TOWER on the desk, right side — power LED pulses
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.36, 0.34), plastic);
+  tower.position.set(0.5, 0.955, -0.1); group.add(tower);
+  targets.push(tower);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.012),
+    new THREE.MeshStandardMaterial({ color: '#8affc3', emissive: '#5cf0a8', emissiveIntensity: 2 }));
+  led.position.set(0.5, 1.1, 0.072); group.add(led);
+
+  // KEYBOARD + MOUSE
+  const kb = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.02, 0.14), plastic);
+  kb.position.set(-0.08, 0.785, 0.12); group.add(kb);
+  targets.push(kb);
+  const mouse = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.025, 0.09), plastic);
+  mouse.position.set(0.22, 0.788, 0.13); group.add(mouse);
+
+  const glow = new THREE.PointLight(accent, 1.6, 2.8, 2);
+  glow.position.set(0, 1.2, 0.45); group.add(glow);
+
+  // right of the theater door — the jukebox's mirror spot (it sits at x −3.35)
+  group.position.set(3.35, 0, -D + 0.42);
+
+  // ── t160c: the chat IS the monitor screen ── a real wizcord iframe placed
+  // IN the world with a projective CSS transform: the element is a fixed
+  // 740×466 plane (below wizcord's ~780px sidebar breakpoint → always the
+  // plain chat pane), and every frame the 4 world corners of the glass are
+  // projected and the homography mapping the element onto that exact quad
+  // becomes its matrix3d transform. TRUE perspective — walk to the side and
+  // the screen foreshortens like real glass; the content never re-lays-out
+  // or resizes, and nothing can spill past the bezel because the transform
+  // IS the quad (no clip, no bounding box). Display-only (pointer-events:
+  // none): the crosshair still clicks the PC itself — the modal, the
+  // ENLARGED chat — exactly as before. Lazy-mounted, kept warm.
+  const CHAT_W = 740, CHAT_H = 466;                       // 16:10, matches the 0.62×0.39 screen
+  const SCR = { x: group.position.x, y: 1.13, z: group.position.z - 0.095, hw: 0.31, hh: 0.195 };
+  let chatEl = null, chatGates = null, chatMtx = '', chatCorners = null;   // chatGates/chatMtx: test hooks — why is the screen on/off, where the quad sits
+  const _wp = new THREE.Vector3(), _wc = new THREE.Vector3(), _wv = new THREE.Vector3();
+  const SRC_PTS = [[0, 0], [CHAT_W, 0], [CHAT_W, CHAT_H], [0, CHAT_H]];   // the element's own corners: TL TR BR BL
+  const SCR_PTS = [[SCR.x - SCR.hw, SCR.y + SCR.hh], [SCR.x + SCR.hw, SCR.y + SCR.hh],
+                   [SCR.x + SCR.hw, SCR.y - SCR.hh], [SCR.x - SCR.hw, SCR.y - SCR.hh]];   // the glass in the same order
+  // 4 point pairs → the 3x3 projective map (h33 = 1) as 8 numbers
+  // [h11 h12 h13 h21 h22 h23 h31 h32]. Gaussian elimination with partial
+  // pivoting; null when the quad is degenerate (edge-on).
+  function homography(dst) {
+    const A = [], b = [];
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = SRC_PTS[i], [u, v] = dst[i];
+      A.push([x, y, 1, 0, 0, 0, -x * u, -y * u]); b.push(u);
+      A.push([0, 0, 0, x, y, 1, -x * v, -y * v]); b.push(v);
+    }
+    for (let c = 0; c < 8; c++) {
+      let piv = c;
+      for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      if (Math.abs(A[piv][c]) < 1e-8) return null;
+      if (piv !== c) { [A[c], A[piv]] = [A[piv], A[c]]; [b[c], b[piv]] = [b[piv], b[c]]; }
+      for (let r = 0; r < 8; r++) {
+        if (r === c) continue;
+        const f = A[r][c] / A[c][c];
+        for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k];
+        b[r] -= f * b[c];
+      }
+    }
+    const h = [];
+    for (let i = 0; i < 8; i++) h.push(b[i] / A[i][i]);
+    return h;
+  }
+  function tickChat(camera, player, sightBlocked) {
+    let show = false;
+    try {
+      const ch = window.__VB?.state?.boot?.community?.channelId || '';
+      const modal = document.getElementById('helpdesk-modal');
+      const modalOpen = !!(modal && !modal.classList.contains('hidden'));
+      const tvFs = document.body.classList.contains('tv-fullscreen');
+      let near = false, storeSide = true, inView = false, blocked = false;
+      if (ch && camera && player && !modalOpen && !tvFs) {
+        const dx = player.x - SCR.x, dz = player.z - SCR.z;
+        near = dx * dx + dz * dz < 6 * 6;                          // walk up to the desk
+        storeSide = player.z > -6.2;                               // t160b: never from the theater or its doorway
+        if (near && storeSide) {
+          _wc.set(SCR.x, SCR.y, SCR.z);
+          _wp.copy(_wc).project(camera);
+          inView = _wp.z < 1 && Math.abs(_wp.x) < 0.6 && Math.abs(_wp.y) < 0.6;   // actually LOOKING at the monitor
+          blocked = !!sightBlocked?.(_wc);
+          show = inView && !blocked;
+        }
+      }
+      chatGates = { ch: !!ch, modalOpen, tvFs, near, storeSide, inView, blocked, show,
+        ndc: inView ? null : { x: +_wp.x.toFixed(3), y: +_wp.y.toFixed(3), z: +_wp.z.toFixed(3) } };
+    } catch (e) { chatGates = { err: String(e).slice(0, 80) }; }   // the world screen is cosmetic — it must never break the loop
+    if (!chatEl) {
+      if (!show) return;                                          // lazy mount on first visibility
+      const ch = encodeURIComponent(window.__VB?.state?.boot?.community?.channelId || '');
+      chatEl = document.createElement('div');
+      chatEl.id = 'hd-world-chat';
+      chatEl.innerHTML = `<iframe src="https://wizcord.io/iframe?channelId=${ch}" title="Bug reports chat"
+        allow="clipboard-write" referrerpolicy="no-referrer"></iframe>`;
+      document.body.appendChild(chatEl);
+    }
+    if (!show) { chatEl.style.display = 'none'; chatEl.style.transform = ''; return; }
+    chatEl.style.display = 'block';
+    // t160c: place the plane IN the world — project the glass's 4 corners,
+    // solve the projective map, write it as one matrix3d. Guard rails: a
+    // corner behind the eye, a sliver-thin quad (edge-on) or a singular
+    // solve all mean "not looking at a screen" → hide.
+    const pts = []; let behind = false;
+    for (const [wx, wy] of SCR_PTS) {
+      _wv.set(wx, wy, SCR.z).applyMatrix4(camera.matrixWorldInverse);
+      if (_wv.z > -0.05) { behind = true; break; }                 // corner behind/too close to the eye — the projection would wrap
+      _wp.set(wx, wy, SCR.z).project(camera);
+      pts.push([(_wp.x * 0.5 + 0.5) * innerWidth, (-_wp.y * 0.5 + 0.5) * innerHeight]);
+    }
+    chatCorners = pts.map(([x, y]) => [+x.toFixed(1), +y.toFixed(1)]);
+    let area = 0;                                                  // signed area — a flipped/degenerate quad means hide
+    for (let i = 0; i < 4; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % 4]; area += x1 * y2 - x2 * y1; }
+    const h = behind || Math.abs(area) < 400 ? null : homography(pts);   // abs — px space is y-DOWN, so a healthy quad's signed area is negative here
+    if (!h) { chatEl.style.display = 'none'; chatGates = { ...chatGates, degenerate: true, show: false }; return; }
+    chatMtx = `matrix3d(${[h[0], h[3], 0, h[6], h[1], h[4], 0, h[7], 0, 0, 0, 0, h[2], h[5], 0, 1].map(n => +n.toFixed(5)).join(',')})`;
+    chatEl.style.transform = chatMtx;
+  }
+
+  let tClock = 0;
+  return {
+    group, targets,
+    debugWorldChat: () => ({ scr: { ...SCR }, gates: chatGates, mounted: !!chatEl, art: 'chat-glass', matrix: chatMtx, corners: chatCorners }),   // tests: the world screen's live state
+    colliders: [{ minX: 2.68, maxX: 4.02, minZ: -6.0, maxZ: -5.35 }],   // the desk is SOLID (full footprint, front legs included)
+    update(dt, camera, player, sightBlocked) {
+      tClock += dt;
+      led.material.emissiveIntensity = 1.6 + Math.sin(tClock * 3.1) * 0.7;
+      glow.intensity = 1.5 + Math.sin(tClock * 2.2) * 0.25;
+      tickChat(camera, player, sightBlocked);     // t160: the live chat on the monitor
+    },
+    applyTheme(t) {
+      const a = new THREE.Color(t?.accent || '#ff3ea5');
+      glow.color.copy(a);
+      drawScreen('#' + a.getHexString());
+      screenTex.needsUpdate = true;
+    }
+  };
+}
+
 export function buildTheater(theme) {
   const L = LAYOUT, th = L.theater, slope = th.slope;
   const D = L.room.l / 2, T = L.room.wallThickness;
@@ -311,6 +508,15 @@ export function buildTheater(theme) {
   const group = new THREE.Group();
   group.name = 'theater';
   const colliders = [];
+  // t164 (owner: "movie screen can be walked through — needs to be solid"):
+  // the big screen hangs PROUD of the far wall (tv.js mounts it 12 cm out)
+  // and nothing stopped you at it — your body passed straight through the
+  // glass. One box across the screen + frame: the stage stays walkable, you
+  // just can't step into the picture. (Side lanes to the far wall stay open.)
+  {
+    const scr = L.theater.screen, sZ1 = z0 - LEN;        // far wall inner face
+    colliders.push({ minX: -(scr.w / 2 + 0.28), maxX: scr.w / 2 + 0.28, minZ: sZ1 - 0.06, maxZ: sZ1 + 0.2 });
+  }
 
   const carpet = new THREE.MeshStandardMaterial({ color: '#3d2436', roughness: 1 });
   const dimWall = new THREE.MeshStandardMaterial({ color: '#241a2e', roughness: 0.95 });

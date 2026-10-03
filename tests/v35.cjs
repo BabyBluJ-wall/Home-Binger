@@ -415,8 +415,15 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
 
   // ── browser phase (guest device) ──
   const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--js-flags=--max-old-space-size=520', '--renderer-process-limit=2', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });   // t79 heap cap (t118: 640→520 + process cap — sandbox RAM is tighter this cycle) · t118: fake mic device so the booth mic path is testable headless
+  // t160: wizcord stub for the WHOLE browser session, every page. The help-desk
+  // PC's world screen auto-mounts near the PC whenever boot carries a channel
+  // id (it's the shipped DEFAULT) — without this, mid-suite pages load the
+  // real embed, whose anonymous 401s (and its own "refreshTimer" bug) pollute
+  // the error counter.
+  const stubWiz = (p) => p.route('**wizcord.io/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><html><body></body></html>' }));
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   await page.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
+  await stubWiz(page);
   const errors = [];
   page.on('console', m => { if (m.type() === 'error' && !/502|404|ERR|net::/.test(m.text())) errors.push(m.text()); });
     page.on('pageerror', e => errors.push(e.message));
@@ -645,6 +652,34 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
     s.tv.setIdle({ enabled: true, idleMode: 'white' });
     const attached = s.tv.surfaceInfo().canvasAttached;     // t44: idle canvas is ON the screen
     return { whitePaints, standbyPaints, attached, ok: attached && whitePaints <= 2 && standbyPaints <= 45 };
+  });
+
+  // 16d0b) t146: the idle screen is a BILLBOARD — out of the camera's view it
+  // must not paint at all. (Every paint uploads the whole ~8 MB supersampled
+  // canvas; since the 1.10 line flipped the theater default to the animated
+  // standby card, walking the store with the screen on-screen cost up to
+  // 15 full-HD repaint+uploads a second — the "store feels slow when
+  // walking around" report. Fix: frustum gate + distance throttle + cached
+  // static headline raster.)
+  R.checks.t146IdleBillboard = await page.evaluate(async () => {
+    const s = window.__VB.scene;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    s.tv.stop();
+    s.tv.setIdle({ enabled: true, idleMode: 'standby' });
+    s.debugTeleport(0, -8.5); await sleep(700);         // the theater deck, screen in view
+    let c0 = s.tv.getPaintCount(); await sleep(1600);
+    out.visiblePaints = s.tv.getPaintCount() - c0;      // the twinkle still runs (≤10 fps)
+    s.debugTeleport(0, -24); await sleep(700);          // behind the screen, facing away
+    c0 = s.tv.getPaintCount(); await sleep(1600);
+    out.behindPaints = s.tv.getPaintCount() - c0;       // want 0 — the billboard gate
+    s.debugTeleport(0, -8.5); await sleep(700);         // back in view: catch-up + resume
+    c0 = s.tv.getPaintCount(); await sleep(1600);
+    out.resumedPaints = s.tv.getPaintCount() - c0;
+    out.canvasAttached = s.tv.surfaceInfo().canvasAttached;
+    s.tv.setIdle({ enabled: true, idleMode: 'white' });
+    out.ok = out.canvasAttached && out.visiblePaints >= 1 && out.behindPaints === 0 && out.resumedPaints >= 1;
+    return out;
   });
 
   // 16d1) t41: stage is a STEP (walk up), and clicks are honest — walls/doors
@@ -4142,6 +4177,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
     // ── (d) SIMPLE MODE: /m serves, lists, and the phone redirect fires ──
     {
       const mp = await browser.newPage({ viewport: { width: 390, height: 700 }, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
+      await stubWiz(mp);   // t160: the world screen can mount anywhere, any page
       await mp.goto(BASE + '/', { waitUntil: 'domcontentloaded' }).catch(() => {});
       await mp.waitForTimeout(1800);
       const redirected = /\/m$/.test(new URL(mp.url()).pathname);
@@ -4395,6 +4431,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
       });
       // policies: the default-theme preset picker (fresh page = clean session)
       const pp = await browser.newPage({ viewport: { width: 640, height: 400 } });
+      await stubWiz(pp);   // t160: the world screen can mount anywhere, any page
       await pp.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
       await pp.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
       await pp.waitForFunction(() => !!window.__VB?.mainCtx, { timeout: 45000 });
@@ -4715,6 +4752,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
     // t101: …and a FRESH session (next launch) shows the note again — proven in a second page
     const freshSession = await (async () => {
       const p2 = await browser.newPage();   // fresh page = fresh session (launch-created contexts can't take extra pages)
+      await stubWiz(p2);   // t160: the world screen can mount anywhere, any page
       try {
         await p2.goto(BASE + '/', { waitUntil: 'domcontentloaded', timeout: 30000 });
         await p2.waitForSelector('#toast-version', { timeout: 90000 });   // its own boot check fires ~5 s after ready
@@ -5470,7 +5508,13 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
         out.footShownInFs = getComputedStyle(footEl).display !== 'none' && footEl.textContent.trim().length > 0;
         out.footWatch = !!footEl.querySelector('[data-footwatch]');
         out.dockPadZero = getComputedStyle(modal).padding === '0px';   // t143: padding cut
-        out.hudStandsDown = getComputedStyle(document.getElementById('tv-fs-bottom')).pointerEvents === 'none';   // t141: the video HUD's control bars must NOT cover the syn card's buttons while the Guide is open
+        // t153 (owner's call, supersedes t141): the HUD stays UP and USABLE while
+        // the Guide is docked — volume/seek/play keep working — and its bars sit
+        // LEFT of the dock (right offset = the dock width), never under it
+        const hbm = document.getElementById('tv-fs-bottom');
+        const hcs = getComputedStyle(hbm);
+        out.hudUpWithGuide = hcs.pointerEvents === 'auto' && hcs.opacity !== '0';
+        out.hudConfined = parseFloat(hcs.right) > 100;
         out.rows = document.querySelectorAll('.guide-row').length;
         out.sameElement = document.getElementById('vb-fs-video') === vid;
         document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
@@ -5511,7 +5555,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
         s.tv.stop();
         out.ok = out.entered && out.vidIsVideo && out.open && out.docked && out.slideSettled && out.sameElement
           && out.sameSize && out.movedLeft && out.dockRight && out.rows > 0
-          && out.synHiddenInFs && out.footShownInFs && out.footWatch && out.dockPadZero && out.hudStandsDown
+          && out.synHiddenInFs && out.footShownInFs && out.footWatch && out.dockPadZero && out.hudUpWithGuide && out.hudConfined
           && out.guideClosedByEsc && out.fsStillOn && out.videoBackCenter && out.fsExited && out.gOverlayStillWorks
           && out.noShade && out.drawerRight && out.drawerW > 500 && out.drawerFullH && out.nextCells > 0;
         return out;
@@ -5964,6 +6008,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
     {
       const uw = { };
       const uwPage = await browser.newPage({ viewport: { width: 2560, height: 1080 } });
+      await stubWiz(uwPage);   // t160: the world screen can mount anywhere, any page
       try {
         await uwPage.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
         await uwPage.goto(BASE, { waitUntil: 'domcontentloaded' });
@@ -6080,9 +6125,25 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
         && dd.danger === 1 && dd.dangerHD === 1 && dd.comet === 2
         && dd.dupesMiscLeft === 0 && dd.survivors.join() === 'DupeGB,DupeUS' };
 
-      // the panel (second page, signed in as admin — the main page stays guest)
+      // t144/t147b: the corrected split (the owner's clarification): ADDING
+      // channels (packs, countries, curated groups) lives in Settings →
+      // Admin → FREE TV; the channel LIST lives in the Guide only — Settings
+      // has no channel rows and no play buttons, ever, and tuner/server
+      // channels ride the Guide too. Second page signed in as admin.
+      // STAGE a clean slate first: sources OFF — the panel's ONE Save must
+      // not be hostage to the servers group's plex validation (the exact
+      // trap that blocked this save in the first t147b suite run: plex on +
+      // libs not loaded → "No Plex libraries are ticked"). The dupes packs
+      // stay staged — the dedupe badge needs liveDedupe = 5.
+      await putT({ iptv: { url: '', sections: [], playlistUrl: '', packs: [
+        { label: 'DupeUS', url: 'http://127.0.0.1:32790/iptv/dupes_us.m3u' },
+        { label: 'DupeGB', url: 'http://127.0.0.1:32790/iptv/dupes_gb.m3u' },
+        { label: 'DupeMisc', url: 'http://127.0.0.1:32790/iptv/dupes_misc.m3u' },
+      ] }, sources: { plex: false, jellyfin: false }, plex: { url: '', token: '', sections: [] }, jellyfin: { url: '', apiKey: '', sections: [] }, local: { on: false, spots: [] } });
+      await libT();
       const mp = { };
       const morePage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      await stubWiz(morePage);   // t160: the world screen can mount anywhere, any page
       try {
         await morePage.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
         await morePage.goto(BASE, { waitUntil: 'domcontentloaded' });
@@ -6093,31 +6154,66 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
         await morePage.waitForFunction(() => { const g = window.__VB?.scene?.threeScene?.getObjectByName('shelves'); return !!g && g.children.some(c => c.isInstancedMesh && c.count > 30); }, { timeout: 60000 });
         await morePage.waitForTimeout(1500);
         Object.assign(mp, await morePage.evaluate(async () => {
+          const w = window, s = w.__VB.scene, ui = w.__VB.ui, sleep = ms => new Promise(r => setTimeout(r, ms));
           const out = {};
-          document.getElementById('btn-menu')?.click();
-          await new Promise(r => setTimeout(r, 600));
-          document.querySelector('.side-link[data-tab="admin"]')?.click();
-          await new Promise(r => setTimeout(r, 1300));
+          // ── THE GUIDE first, on the stable pre-save library: the channel
+          //    LIST lives here — packs AND tuner rows ride it, no ⚙ anymore
+          s.debugTeleport(0, -8.5); await sleep(300);
+          w.__VB.state.items.unshift({ id: 'tun-suite-1', type: 'live', source: 'plex', title: '📺 Suite Tuner 7', url: 'http://127.0.0.1:32790/tuner.m3u8' });
+          w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+          await sleep(1000);
+          out.guideOpen = !document.getElementById('guide-modal').classList.contains('hidden');
+          const tunRow = [...document.querySelectorAll('#guide-rows .guide-row')].find(r => /Suite Tuner 7/.test(r.textContent));
+          out.tunerRowInGuide = !!tunRow;
+          out.tunerProvIsPlex = !!tunRow && /Plex/.test(tunRow.querySelector('.guide-prov')?.textContent || '');
+          out.tunerPrefixStripped = !!tunRow && !/📺/.test(tunRow.querySelector('.guide-name')?.textContent || '');
+          out.noGearInGuide = !document.getElementById('guide-chman');
+          const ix = w.__VB.state.items.findIndex(i => i.id === 'tun-suite-1'); if (ix >= 0) w.__VB.state.items.splice(ix, 1);
+          w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+          await sleep(400);
+          // ── SETTINGS → ADMIN → FREE TV: the lineup ──
+          ui.openSettings('admin'); await sleep(1000);
+          out.subs = [...document.querySelectorAll('.admin-sub')].map(b => b.dataset.sub);
+          out.noChmanAnywhere = !document.getElementById('chman');
+          [...document.querySelectorAll('.admin-sub')].find(b => b.dataset.sub === 'free')?.click();
+          for (let i = 0; i < 30 && !document.querySelector('#settings #iptv-packs'); i++) await sleep(400);
+          await sleep(700);
+          out.lineupInSettings = !!document.querySelector('#settings #iptv-libraries')
+            && !!document.querySelector('#settings #iptv-unverified');
           const box = document.getElementById('iptv-more-countries');
           out.countriesBlock = !!box;
           out.chips = box ? box.querySelectorAll('[data-country]').length : 0;
           out.moreBtn = box?.querySelector('[data-ccmore]')?.textContent || null;
-          out.worldwide = [...document.querySelectorAll('[data-world]')].length;
-          out.whereHint = /iptv-org/.test(document.getElementById('admin-sub-body')?.textContent || '');
-          // expand → every country + a way back
+          out.worldwide = [...document.querySelectorAll('#settings [data-world]')].length;
+          out.whereHint = /iptv-org/.test(document.getElementById('settings-body')?.textContent || '');
           box?.querySelector('[data-ccmore]')?.click();
-          await new Promise(r => setTimeout(r, 250));
+          await sleep(250);
           out.chipsExpanded = box.querySelectorAll('[data-country]').length;
           out.lessBtn = box.querySelector('[data-ccmore]')?.textContent || null;
-          // Canada → its three packs land in the draft list
           box.querySelector('[data-country="ca"]')?.click();
-          await new Promise(r => setTimeout(r, 350));
-          out.canadaPacks = [...document.querySelectorAll('#iptv-packs [data-pk-url]')].map(i => i.value).filter(u => /ca\.m3u/.test(u)).length;
-          out.canadaIsPlutoSamsungPlex = [...document.querySelectorAll('#iptv-packs [data-pk-url]')].map(i => i.value).filter(u => /ca\.m3u/.test(u))
+          await sleep(350);
+          out.canadaPacks = [...document.querySelectorAll('#settings #iptv-packs [data-pk-url]')].map(i => i.value).filter(u => /ca\.m3u/.test(u)).length;
+          out.canadaIsPlutoSamsungPlex = [...document.querySelectorAll('#settings #iptv-packs [data-pk-url]')].map(i => i.value).filter(u => /ca\.m3u/.test(u))
             .filter(u => /plutotv_ca|samsungtvplus_ca|plex_ca/.test(u)).length;
-          // the live duplicate-remover count (the mock dupes are staged → 5)
-          await new Promise(r => setTimeout(r, 500));
+          await sleep(900);
           out.dedupeBadge = document.getElementById('iptv-dedupe-live')?.textContent || '';
+          // Save through the panel's ONE Save while still on Free TV
+          const packsBefore = ((await (await fetch('/api/admin/config', { credentials: 'include' })).json()).config.iptv?.packs || []).length;
+          document.getElementById('btn-save-server')?.click();
+          await sleep(4000);
+          const cfgNow = (await (await fetch('/api/admin/config', { credentials: 'include' })).json()).config;
+          out.savedPackLabels = (cfgNow.iptv?.packs || []).map(p => p.label);
+          out.saveAddsCanada = out.savedPackLabels.length === packsBefore + 3;
+          out.saveKeptDupes = ['DupeUS', 'DupeGB', 'DupeMisc'].every(l => out.savedPackLabels.includes(l));
+          // ── SERVERS: no channel list, no play buttons (the owner's rule) ──
+          ui.openSettings('admin'); await sleep(1000);
+          [...document.querySelectorAll('.admin-sub')].find(b => b.dataset.sub === 'servers')?.click();
+          for (let i = 0; i < 20 && !document.querySelector('#livetv-section'); i++) await sleep(300);
+          await sleep(900);
+          out.settingsHasPlayButtons = !!document.querySelector('#settings [data-live-play]');
+          out.liveHintNotList = !document.querySelector('#settings .live-row');
+          out.liveHintPointsToGuide = /press <b>G<\/b>|Guide/.test(document.querySelector('#livetv-section')?.innerHTML || '');
+          ui.closeSettings(); await sleep(400);
           return out;
         }));
       } catch (e) { mp.fatal = String(e.message || e).slice(0, 120); }
@@ -6126,7 +6222,21 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
         && /\+12 more/.test(mp.moreBtn || '') && mp.worldwide === 4 && mp.whereHint === true
         && mp.chipsExpanded === 19 && /Less/.test(mp.lessBtn || '')
         && mp.canadaPacks === 3 && mp.canadaIsPlutoSamsungPlex === 3
-        && /5 duplicate channels hidden/.test(mp.dedupeBadge || '') };
+        && /5 duplicate channels hidden/.test(mp.dedupeBadge || '')
+        && mp.subs.length === 6 && ['servers', 'friends', 'free', 'tv', 'users', 'policies'].every(k => mp.subs.includes(k))
+        && mp.noChmanAnywhere === true && mp.lineupInSettings === true
+        && mp.saveAddsCanada === true && mp.saveKeptDupes === true
+        && mp.settingsHasPlayButtons === false && mp.liveHintNotList === true && mp.liveHintPointsToGuide === true
+        && mp.guideOpen === true && mp.tunerRowInGuide === true && mp.tunerProvIsPlex === true
+        && mp.tunerPrefixStripped === true && mp.noGearInGuide === true };
+      // restore: dupes-only again (t145 tunes the mock Comet; the Canada
+      // save's real-playlist fetch must not bleed into the next check)
+      await putT({ iptv: { url: '', sections: [], playlistUrl: '', packs: [
+        { label: 'DupeUS', url: 'http://127.0.0.1:32790/iptv/dupes_us.m3u' },
+        { label: 'DupeGB', url: 'http://127.0.0.1:32790/iptv/dupes_gb.m3u' },
+        { label: 'DupeMisc', url: 'http://127.0.0.1:32790/iptv/dupes_misc.m3u' },
+      ] } });
+      await libT();
     }
 
     // (c6) t145: the theater card takes its own clicks (it sat UNDER the
@@ -6136,6 +6246,7 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
     {
       const gs = { };
       const gsPage = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+      await stubWiz(gsPage);   // t160: the world screen can mount anywhere, any page
       try {
         await gsPage.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
         await gsPage.goto(BASE, { waitUntil: 'domcontentloaded' });
@@ -6215,6 +6326,56 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
         && gs.windowedTuneCloses === true && gs.windowedTuned === true
         && gs.entered === true && gs.fsDocked === true && gs.fsTuneKeepsGuide === true && gs.fsTuned === true
         && gs.escPeelsGuide === true && gs.escExitsFs === true };
+
+      // t147: guide typography up, padding down (windowed/theater); the fs
+      // dock keeps its t143 geometry; the ⚙ stays admin-only. Guest page.
+      {
+        const ty = {};
+        const tyPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      await stubWiz(tyPage);   // t160: the world screen can mount anywhere, any page
+        try {
+          await tyPage.addInitScript(() => { try { localStorage.setItem('vb_seen_help', '1'); } catch {} });
+          await tyPage.goto(BASE, { waitUntil: 'domcontentloaded' });
+          await tyPage.waitForSelector('#btn-enter:not(.hidden)', { timeout: 90000 });
+          await tyPage.click('#btn-enter', { force: true });
+          await tyPage.waitForFunction(() => { const g = window.__VB?.scene?.threeScene?.getObjectByName('shelves'); return !!g && g.children.some(c => c.isInstancedMesh && c.count > 30); }, { timeout: 60000 });
+          await tyPage.waitForTimeout(1500);
+          Object.assign(ty, await tyPage.evaluate(async () => {
+            const w = window, s = w.__VB.scene, sleep = ms => new Promise(r => setTimeout(r, ms));
+            const out = {};
+            const cs = (sel, prop) => { const el = document.querySelector(sel); return el ? getComputedStyle(el)[prop] : null; };
+            s.debugTeleport(0, -8.5); await sleep(300);
+            w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+            await sleep(900);
+            out.windowedOpen = !document.getElementById('guide-modal').classList.contains('hidden');
+            out.nameFont = cs('.guide-name', 'fontSize');
+            out.pillFont = cs('.guide-cat', 'fontSize');
+            out.headMargin = cs('.guide-head', 'margin');
+            out.bodyMargin = cs('#guide-body', 'margin');
+            out.rowH = cs('.guide-row', 'height');
+            out.searchFont = cs('#guide-search', 'fontSize');
+            out.gearGone = !document.getElementById('guide-chman');
+            w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+            await sleep(300);
+            // fs movie dock: same geometry as t143 (nothing t147 touched it)
+            const movie = (w.__VB.state.items || []).find(i => i.type === 'movie');
+            w.__VB.mainCtx.playItem(movie); await sleep(900);
+            s.tv.enterFullscreen(); await sleep(400);
+            try { s.tv.mediaEl().pause(); } catch {}
+            w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+            await sleep(900);
+            out.fsHeadMargin = cs('.guide-head', 'margin');
+            s.tv.stop();
+            return out;
+          }));
+        } catch (e) { ty.fatal = String(e.message || e).slice(0, 120); }
+        finally { await tyPage.close().catch(() => {}); }
+        R.checks.t147GuideType = { ...ty, ok: !ty.fatal && ty.windowedOpen === true
+          && ty.nameFont === '16px' && ty.pillFont === '13.5px'
+          && ty.headMargin === '4px 8px 5px' && ty.bodyMargin === '0px 8px'
+          && ty.rowH === '56px' && ty.searchFont === '14.5px'
+          && ty.gearGone === true && ty.fsHeadMargin === '10px 10px 6px' };
+      }
     }
 
     // (d) t139c: More/Less — a collapsed bar always shows its way back.
@@ -6362,9 +6523,1185 @@ body: JSON.stringify({ iptv: { sections: [], url: '', playlistUrl: '', packs: []
       out.pointerNote = /Admin → 📺 Store TV/.test(look?.textContent || '');
       out.noDetailsBlock = !document.getElementById('tv-admin-body');
       document.getElementById('btn-settings-close')?.click();
-      out.ok = out.admin && out.subs.includes('tv') && out.subs.length === 4 && out.toggle && out.idleCards && out.pointerNote && out.noDetailsBlock;
+      out.ok = out.admin && out.subs.includes('tv') && out.subs.length === 6 && out.toggle && out.idleCards && out.pointerNote && out.noDetailsBlock;
       return out;
     });
+  }
+
+  // ── t148–t152 (owner's batch): live-never-playlists, version label,
+  //     Projector idle screen, local preview grabs, YouTube in the Guide ──
+  {
+    const fs = require('node:fs');
+    const P = require('node:path');
+    const PKG = require(P.resolve(__dirname, '../package.json'));
+    const root = P.resolve('tests/media/local');
+    const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    const lib = () => fetch(BASE + '/api/library?refresh=1', { headers: authH }).then(r => r.json());
+    // stage: local spot (real fixtures live there) + a live-TV pack
+    await put({ local: { on: true, spots: [root] }, iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'PlutoTV', url: 'http://127.0.0.1:32790/iptv/plutopack.m3u' }] } });
+    const items = await lib();
+    const locals = items.items.filter(i => i.source === 'local');
+    const live = items.items.find(i => i.type === 'live');
+    const movie = items.items.find(i => i.type === 'movie' && i.source === 'local') || items.items.find(i => i.type === 'movie');
+
+    // (a) t151 — REAL decode → upload → serve, proven on a lightweight 404
+    //     page (no GL store fighting for the software GPU in the test rig),
+    //     plus the server-side album-art paths (folder cover + embedded tag)
+    let t151 = { fatal: null };
+    try {
+      const lite = await browser.newPage({ viewport: { width: 300, height: 200 } });
+      await lite.goto(BASE + '/img/local/none', { waitUntil: 'domcontentloaded' });
+      const grab = await lite.evaluate(async (key) => {
+        const du = await new Promise((resolve) => {
+          const v = document.createElement('video');
+          v.muted = true; v.preload = 'auto';
+          v.src = '/api/play/local/' + encodeURIComponent(key);
+          const finish = (x) => { clearTimeout(t); v.onerror = v.onloadeddata = v.onseeked = null; v.removeAttribute('src'); try { v.load(); } catch {} resolve(x); };
+          const t = setTimeout(() => finish(null), 12000);
+          v.onerror = () => finish(null);
+          v.onloadeddata = () => {                    // t151: no-duration streams seek to 2s, never garbage
+            const dur = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+            const target = dur > 4 ? dur * 0.15 : 2;
+            try { v.currentTime = Math.min(Math.max(2, target), Math.max(2, dur || 90)); } catch { finish(null); return; }
+            setTimeout(() => { if (v.onseeked) v.onseeked(); }, 4000);   // t151: seekless fallback — draw the frame we have
+          };
+          v.onseeked = () => {
+            v.onseeked = null;
+            try {
+              const w = 240, h = Math.max(1, Math.round((v.videoHeight || 320) / ((v.videoWidth || 240) / w)));
+              const c = document.createElement('canvas'); c.width = w; c.height = h;
+              c.getContext('2d', { willReadFrequently: true }).drawImage(v, 0, 0, w, h);
+              finish(c.toDataURL('image/jpeg', 0.72));
+            } catch { finish(null); }
+          };
+        });
+        if (!du) return { decoded: false };
+        const post = await fetch('/api/thumb/local/' + encodeURIComponent(key), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dataUrl: du }) });
+        const after = await fetch('/img/local/' + encodeURIComponent(key));
+        return { decoded: true, posted: post.status === 200, served: after.status === 200, bytes: after.ok ? (await after.arrayBuffer()).byteLength : 0 };
+      }, '0/Movies/Tiny Clip.webm');
+      await lite.close();
+      const art = async (suffix) => { const it = locals.find(i => i.key.endsWith(suffix)); if (!it) return 0; const r = await fetch(BASE + '/img/local/' + encodeURIComponent(it.key), { headers: authH }); return r.ok ? (await r.arrayBuffer()).byteLength : 0; };
+      t151 = { ...grab, folderCoverBytes: await art('01 - Loop.mp3'), embeddedArtBytes: await art('Tagged Art/song.mp3') };
+      t151.ok = t151.decoded === true && t151.posted === true && t151.served === true && t151.bytes > 500
+        && t151.folderCoverBytes > 0 && t151.embeddedArtBytes > 0;
+    } catch (e) { t151.fatal = String(e.message || e).slice(0, 120); t151.ok = false; }
+    R.checks.t151LocalPreviews = t151;
+
+    // (b) page side: t148 live-never-playlists, t149 version label,
+    //     t150 Projector option, t152 YouTube link in the Guide
+    const tp = await page.evaluate(async ({ PKGv, liveArg, movieArg }) => {
+      const w = window, VB = w.__VB, s = VB.scene, ui = VB.ui, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = { fatal: null };
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(400);
+      try {
+      const live = (VB.state.items || []).find(i => i.type === 'live') || liveArg;
+      const movie = (VB.state.items || []).find(i => i.type === 'movie') || movieArg;
+
+      // t149: the trademark + version ride under the front-entrance button
+      out.versionLabel = document.getElementById('side-version')?.textContent || null;
+      out.versionOk = out.versionLabel === ('Home Binger™ · v' + PKGv);
+
+      // t148: LIVE never seeds a playlist — plays bare, queue holds only it
+      if (live) {
+        ctx.playItem(live); await sleep(1000);
+        out.liveQueueLen = s.tv.state.queue?.list?.length;
+        out.liveOnlyIt = s.tv.state.queue?.list?.[0]?.id === live.id;
+        s.tv.stop(); await sleep(250);
+        if (movie) { ctx.playItem(movie); await sleep(700); out.movieQueueLen = s.tv.state.queue?.list?.length; }  // shelved media still seeds
+        out.playNextLive = s.tv.playNext(live);            // 'now' — it can't queue BEHIND anything
+        await sleep(500);
+        out.tookOver = s.tv.state.queue?.list?.[s.tv.state.queue?.index]?.type === 'live';
+        s.tv.stop(); await sleep(250);
+        ui.showItemModal(live);
+        let d = '';
+        for (let i = 0; i < 20; i++) { d = getComputedStyle(document.getElementById('item-play-next')).display; if (d === 'none') break; await sleep(500); }
+        out.modalLiveHidden = d === 'none';                // t148: no Play-next for live
+        document.querySelector('#item-modal .modal-close')?.click(); await sleep(300);
+        ui.showItemModal(movie); let dm = '';
+        for (let i = 0; i < 10; i++) { dm = getComputedStyle(document.getElementById('item-play-next')).display; if (dm === 'block') break; await sleep(400); }
+        out.modalMovieBack = dm === 'block';               // …and it comes BACK for shelved media
+        document.querySelector('#item-modal .modal-close')?.click();
+        s.tv.stop(); await sleep(250);
+      }
+
+      // t150: Projector ('white') is a first-class idle screen — admin card
+      //       first + the personal picker saves it
+      ui.openSettings('admin'); await sleep(700);
+      [...document.querySelectorAll('.admin-sub')].find(b => b.dataset.sub === 'tv')?.click(); await sleep(800);
+      out.adminCards = [...document.querySelectorAll('#admin-sub-body [data-tvmode]')].map(c => c.dataset.tvmode);
+      ui.closeSettings(); await sleep(300);
+      await fetch('/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tv: { idleMode: 'white', itemId: '' } }) });
+      const boot = await (await fetch('/api/bootstrap')).json();
+      out.personalWhiteSaved = boot.prefs?.tv?.idleMode === 'white';
+      await fetch('/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tv: { idleMode: '', itemId: '' } }) });
+
+      // t152: a pasted YouTube link plays on the store TV with the app's own
+      //       HUD — stub the YT iframe API so no network is touched
+      w.__ytCalls = [];
+      w.YT = { Player: class {
+        constructor(el, opts) {
+          this.opts = opts; this.state = 5; this.t = 0; this.d = 300;
+          const ifr = document.createElement('iframe');
+          ifr.src = 'about:blank'; ifr.style.cssText = 'width:100%;height:100%;border:0';
+          (el?.parentNode || document.body).appendChild(ifr);
+          setTimeout(() => { this.state = 1; opts?.events?.onReady?.({ target: this }); opts?.events?.onStateChange?.({ data: 1 }); }, 60);
+        }
+        playVideo() { w.__ytCalls.push('play'); }
+        pauseVideo() { w.__ytCalls.push('pause'); }
+        seekTo(t) { w.__ytCalls.push('seek:' + Math.round(t)); this.t = t; }
+        setVolume(v) { w.__ytCalls.push('vol:' + v); }
+        mute() { w.__ytCalls.push('mute'); }
+        unMute() { w.__ytCalls.push('unmute'); }
+        getPlayerState() { return this.state; }
+        getCurrentTime() { return this.t; }
+        getDuration() { return this.d; }
+        getVideoData() { return { title: 'Stub Video Title' }; }
+        destroy() { w.__ytCalls.push('destroy'); }
+      } };
+      s.debugTeleport(0, -8.5); await sleep(250);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+      await sleep(900);
+      out.guideOpen = !document.getElementById('guide-modal').classList.contains('hidden');
+      const sb = document.getElementById('guide-search');
+      sb.value = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+      sb.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(1400);
+      out.ytLayer = !!document.getElementById('vb-fs-video');
+      out.ytIframe = !!document.querySelector('#vb-fs-video iframe');
+      out.ytFullscreen = document.body.classList.contains('tv-fullscreen');
+      out.ytPlayed = (w.__ytCalls || []).includes('play');
+      out.guideClosedWindowed = document.getElementById('guide-modal').classList.contains('hidden');
+      out.hudTitle = document.getElementById('tv-fs-title')?.textContent || null;
+      document.getElementById('fs-play')?.click(); await sleep(250);
+      out.hudPause = (w.__ytCalls || []).includes('pause');
+      document.getElementById('fs-play')?.click(); await sleep(250);
+      const bar = document.getElementById('tv-fs-seek');
+      if (bar) { const r = bar.getBoundingClientRect(); bar.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + r.width * 0.5, bubbles: true })); bar.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); }
+      await sleep(250);
+      out.hudSeek = (w.__ytCalls || []).some(c => c.startsWith('seek:'));
+      const vol = document.getElementById('fs-vol');
+      if (vol) { vol.value = 40; vol.dispatchEvent(new Event('input', { bubbles: true })); }
+      await sleep(250);
+      out.hudVolume = (w.__ytCalls || []).some(c => c.startsWith('vol:'));
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(800);
+      out.escStopped = !s.tv.state.playing;
+      out.escLayerGone = !document.getElementById('vb-fs-video');
+      // the link parser: every shape in the wild, and refusals
+      const mod = await import('/js/yt.js');
+      out.parse = {
+        watch: mod.ytId('https://www.youtube.com/watch?v=dQw4w9WgXcQ') === 'dQw4w9WgXcQ',
+        youtuBe: mod.ytId('https://youtu.be/abc12345678') === 'abc12345678',
+        shorts: mod.ytId('https://www.youtube.com/shorts/xyz98765432') === 'xyz98765432',
+        params: mod.ytId('https://www.youtube.com/watch?app=desktop&v=dQw4w9WgXcQ&list=x') === 'dQw4w9WgXcQ',
+        notLink: mod.ytId('pluto tv news') === null,
+        notYT: mod.ytId('https://example.com/watch?v=abc12345678') === null
+      };
+      return out;
+      } catch (e) { out.fatal = String(e.message || e).slice(0, 140); return out; }
+    }, { PKGv: PKG.version, liveArg: live, movieArg: movie });
+    R.checks.t148LiveNoPlaylist = { ...tp, ok: !tp.fatal && tp.versionOk !== false
+      && tp.liveQueueLen === 1 && tp.liveOnlyIt === true && (tp.movieQueueLen === undefined || tp.movieQueueLen > 1)
+      && tp.playNextLive === 'now' && tp.tookOver === true && tp.modalLiveHidden === true && tp.modalMovieBack === true };
+    R.checks.t149VersionLabel = { label: tp.versionLabel, ok: tp.versionOk === true };
+    R.checks.t150Projector = { cards: tp.adminCards, ok: !tp.fatal && Array.isArray(tp.adminCards)
+      && tp.adminCards[0] === 'white' && tp.adminCards.length >= 5 && tp.personalWhiteSaved === true };
+    R.checks.t152YouTube = { ...tp, ok: !tp.fatal && tp.guideOpen === true && tp.ytLayer === true
+      && tp.ytIframe === true && tp.ytFullscreen === true && tp.ytPlayed === true && tp.guideClosedWindowed === true
+      && tp.hudTitle === 'Stub Video Title' && tp.hudPause === true && tp.hudSeek === true && tp.hudVolume === true
+      && tp.escStopped === true && tp.escLayerGone === true
+      && tp.parse && Object.values(tp.parse).every(Boolean) };
+    // leave the server clean for the restore block
+    await put({ local: { on: false, spots: [] }, iptv: { url: '', sections: [], playlistUrl: '', packs: [] } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+  }
+
+  // ── t153–t155 (owner's batch): HUD while the Guide is up + CC toggle,
+  //     downloads from own/shared libraries, the help-desk PC ──
+  {
+    const fs = require('node:fs');
+    const P = require('node:path');
+    const root = P.resolve('tests/media/local');
+    const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    await put({ local: { on: true, spots: [root] }, iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'PlutoTV', url: 'http://127.0.0.1:32790/iptv/plutopack.m3u' }] } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+    const items = (await j(await fetch(BASE + '/api/library', { headers: authH }))).items;
+
+    // (a) t154 — DOWNLOADS at the HTTP layer: own library + a SHARED library
+    //     (the friend token route) + the community.discord config round-trip
+    const tk = encodeURIComponent('0/Movies/Tiny Clip.webm');
+    const tinyBytes = fs.statSync(P.join(root, 'Movies/Tiny Clip.webm')).size;
+    const dl = await fetch(BASE + `/api/play/local/${tk}?dl=1`, { headers: authH });
+    const dlDisp = dl.headers.get('content-disposition') || '';
+    const dlOk = dl.status === 200 && /attachment/.test(dlDisp) && /Tiny%20Clip\.webm|Tiny Clip\.webm/.test(dlDisp)
+      && (await dl.arrayBuffer()).byteLength === tinyBytes;
+    const plain = await fetch(BASE + `/api/play/local/${tk}`, { headers: authH });
+    const plainOk = plain.status === 200 && !plain.headers.get('content-disposition');
+    // shared library: mint a friend token, download through the friend route
+    await put({ friendShare: { on: true, entries: [{ name: 'Buddy', sections: [] }] } });
+    const tok = ((await j(await fetch(BASE + '/api/admin/config', { headers: authH }))).config.friendShare.entries[0] || {}).token || '';
+    const fdl = await fetch(BASE + `/api/friend/stream/local/${tk}?token=${tok}&dl=1`);
+    const fdlOk = fdl.status === 200 && /attachment/.test(fdl.headers.get('content-disposition') || '');
+    const f401 = await fetch(BASE + `/api/friend/stream/local/${tk}?token=badtoken0000&dl=1`);
+    const f401Ok = f401.status === 401;
+    const audl = await fetch(BASE + `/api/play/local/${encodeURIComponent('0/Crate Diggers/Beat Tape A/01 - Loop.mp3')}?audio=1&dl=1`, { headers: authH });
+    const audlOk = audl.status === 200 && /attachment/.test(audl.headers.get('content-disposition') || '');
+    await put({ friendShare: { on: true, entries: [] } });
+    // t155 config: the store's bug-report Discord invite
+    await put({ community: { discord: 'https://discord.gg/suite-test' } });
+    let boot = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+    const cfgSaved = boot.community?.discord === 'https://discord.gg/suite-test';
+    await put({ community: { discord: 'not a url' } });
+    boot = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+    // t167 changed the contract: the chat is GLOBAL — an invalid/empty invite
+    // can no longer blank it (it keeps the current value instead)
+    const cfgCleaned = boot.community?.discord === 'https://discord.gg/suite-test';
+    await put({ community: { discord: 'https://discord.gg/suite-test' } });   // re-stage for the page checks
+    R.checks.t154Downloads = { dlOk, plainOk, fdlOk, f401Ok, audlOk,
+      ok: dlOk && plainOk && fdlOk && f401Ok && audlOk };
+    R.checks.t155DiscordConfig = { cfgSaved, cfgCleaned, ok: cfgSaved && cfgCleaned };
+
+    // (b) page side: t153 HUD-with-Guide + CC on both engines
+    const tp = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ui = VB.ui, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = { fatal: null };
+      const press = (key, code) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
+      try {
+        await ctx.reloadLibrary?.(); } catch {}
+      await sleep(400);
+      try {
+      const movie = (VB.state.items || []).find(i => i.type === 'movie' && /Tiny Clip/.test(i.title));
+      out.movieFound = !!movie;
+      out.movieTitles = (VB.state.items || []).filter(i => i.type === 'movie').map(i => i.title).slice(0, 6);
+
+      // t153a: watching in the theater, Guide docked → HUD stays up + usable.
+      // PAUSE immediately — the staged clip is 2.4s and the sibling queue is
+      // fail-fast fakes; the auto-advance cascade must not race the check.
+      s.debugTeleport(0, -8.5); await sleep(300);
+      ctx.playItem(movie); await sleep(400);
+      out.playingAfter = s.tv.state.playing?.title || null;
+      s.tv.togglePlay(); await sleep(250);                       // pause (keeps S.playing stable)
+      out.pausedNow = !!(s.tv.mediaEl() && s.tv.mediaEl().paused);
+      out.enterFsRet = s.tv.enterFullscreen(); await sleep(600);
+      out.fs = document.body.classList.contains('tv-fullscreen');
+      press('g', 'KeyG'); await sleep(1000);
+      out.docked = !document.getElementById('guide-modal').classList.contains('hidden') && document.body.classList.contains('fs-guide');
+      const hcs = getComputedStyle(document.getElementById('tv-fs-bottom'));
+      out.hudUp = hcs.pointerEvents === 'auto' && hcs.opacity !== '0';
+      out.hudConfined = parseFloat(hcs.right) > 100;
+      const vol = document.getElementById('fs-vol');
+      vol.value = 70; vol.dispatchEvent(new Event('input', { bubbles: true })); await sleep(250);
+      out.volWhileGuide = s.tv.volumeInfo().target;
+      press('Escape', 'Escape'); await sleep(500);
+      out.guideClosed = document.getElementById('guide-modal').classList.contains('hidden');
+      press('Escape', 'Escape'); await sleep(700);
+      out.exitedFs = !document.body.classList.contains('tv-fullscreen');
+      s.tv.stop(); await sleep(300);
+
+      // t153b: CC on the <video> engine (pause first so the short clip can't
+      // advance — the clip is 2.4s and the sibling queue is fail-fast fakes.
+      // Pause SOONER than the HUD part above, and if the auto-advance
+      // cascade already tore the session down (slow run), retry once instead
+      // of crashing the whole block into a cascade of false failures.
+      const playMoviePaused = async () => {
+        ctx.playItem(movie); await sleep(350);
+        s.tv.enterFullscreen(); await sleep(350);
+        s.tv.togglePlay(); await sleep(200);
+        return s.tv.mediaEl();
+      };
+      let vel = await playMoviePaused();
+      if (!vel) { s.tv.stop(); await sleep(250); vel = await playMoviePaused(); }
+      out.ccClipHeld = !!vel;
+      if (vel) {
+      if (!vel.paused) { s.tv.togglePlay(); await sleep(200); }          // ensure PAUSED
+      const tr = vel.addTextTrack('subtitles', 'English', 'en');
+      const cc = document.getElementById('fs-cc');
+      out.ccAppears = false;
+      for (let i = 0; i < 14; i++) { if (!cc.classList.contains('hidden')) { out.ccAppears = true; break; } await sleep(300); }
+      cc.click(); await sleep(250);
+      out.ccOnVideo = tr.mode === 'showing' && cc.classList.contains('cc-on');
+      cc.click(); await sleep(250);
+      out.ccOffVideo = tr.mode === 'hidden' && !cc.classList.contains('cc-on');
+      s.tv.exitFullscreen(); await sleep(300);
+      s.tv.stop(); await sleep(300);
+      }                                   // end ccClipHeld guard
+
+      // t153b: CC on the YouTube engine — captions default OFF + the button toggles
+      w.__ytCalls = [];
+      w.YT = { Player: class {
+        constructor(el, opts) {
+          this.opts = opts; this.state = 5; this.t = 0; this.d = 300;
+          const ifr = document.createElement('iframe');
+          ifr.src = 'about:blank'; ifr.style.cssText = 'width:100%;height:100%;border:0';
+          (el?.parentNode || document.body).appendChild(ifr);
+          setTimeout(() => { this.state = 1; opts?.events?.onReady?.({ target: this }); opts?.events?.onStateChange?.({ data: 1 }); }, 60);
+        }
+        playVideo() { w.__ytCalls.push('play'); }
+        pauseVideo() { w.__ytCalls.push('pause'); }
+        seekTo(t) { w.__ytCalls.push('seek:' + Math.round(t)); this.t = t; }
+        setVolume(v) { w.__ytCalls.push('vol:' + v); }
+        mute() {} unMute() {}
+        setOption(m, k, v) { w.__ytCalls.push('set:' + m + '.' + k + '=' + JSON.stringify(v)); }
+        getOption(m, k) { return k === 'tracklist' ? [{ languageCode: 'en' }] : null; }
+        getPlayerState() { return this.state; }
+        getCurrentTime() { return this.t; }
+        getDuration() { return this.d; }
+        getVideoData() { return { title: 'Stub Video Title' }; }
+        destroy() { w.__ytCalls.push('destroy'); }
+      } };
+      s.debugTeleport(0, -8.5); await sleep(250);
+      w.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true, cancelable: true }));
+      await sleep(900);
+      const sb = document.getElementById('guide-search');
+      sb.value = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+      sb.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(1400);
+      out.ytCcDefaultOff = (w.__ytCalls || []).includes('set:captions.track={}');
+      const ycc = document.getElementById('fs-cc');
+      out.ytCcBtn = !ycc.classList.contains('hidden');
+      ycc.click(); await sleep(250);
+      out.ytCcOn = (w.__ytCalls || []).some(c => c.includes('languageCode')) && ycc.classList.contains('cc-on');
+      ycc.click(); await sleep(250);
+      const sets = (w.__ytCalls || []).filter(c => c.startsWith('set:captions'));
+      out.ytCcOff = sets.length >= 3 && sets[sets.length - 1] === 'set:captions.track={}' && !ycc.classList.contains('cc-on');
+      press('Escape', 'Escape'); await sleep(800);
+      out.ytStopped = !s.tv.state.playing;
+
+      // t154: the modal Download button (local movie shows it, live never does)
+      const clicks = [];
+      const origClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { clicks.push(this.href); };
+      const waitDl = async (wantNone) => {
+        const b = document.getElementById('item-download');
+        for (let i = 0; i < 20; i++) {
+          if (typeof b.onclick === 'function' && b.style.display === (wantNone ? 'none' : '')) return true;
+          await sleep(400);
+        }
+        return false;
+      };
+      const neutralize = () => { const b = document.getElementById('item-download'); b.onclick = null; b.style.display = 'none'; };   // no stale wiring from earlier checks
+      neutralize();
+      ui.showItemModal(movie);
+      out.dlMovie = await waitDl(false);
+      document.getElementById('item-download').click();
+      document.querySelector('#item-modal .modal-close')?.click(); await sleep(300);
+      const live = (VB.state.items || []).find(i => i.type === 'live');
+      if (live) { neutralize(); ui.showItemModal(live); out.dlLiveHidden = await waitDl(true); }
+      HTMLAnchorElement.prototype.click = origClick;
+      document.querySelector('#item-modal .modal-close')?.click(); await sleep(200);
+      out.dlHref = clicks[0] || null;
+      if (out.dlHref) { const r = await fetch(out.dlHref); out.dlDisp = r.headers.get('content-disposition') || ''; }
+
+      // t155: the help-desk PC — 3D, aim, click, modal (both branches)
+      const hd = s.threeScene.getObjectByName('helpdesk');
+      out.pcExists = !!hd;
+      out.pcPos = hd ? [+hd.position.x.toFixed(2), +hd.position.y.toFixed(2), +hd.position.z.toFixed(3)] : null;
+      out.pcPick = null;
+      for (const pitch of [-0.24, -0.3, -0.18]) {
+        s.debugTeleport(3.35, -3.4, 0, pitch); await sleep(350);
+        if (s.debugPickSpecial() === 'helpdesk') { out.pcPick = 'helpdesk'; break; }
+      }
+      s.fireSelect(); await sleep(400);
+      out.pcModal = !document.getElementById('helpdesk-modal').classList.contains('hidden');
+      out.pcInviteRowGone = !document.querySelector('#helpdesk-modal a[href*="discord"]');   // t168: the modal is the CHAT — no invite-link row
+      // t167 changed the precondition: the GLOBAL default means every fresh
+      // session already HAS the chat — the "unconfigured" fallback is only
+      // reachable with a hand-edited config now. Assert the embed is there.
+      out.pcChatGlobalDefault = /wizcord\.io\/iframe\?channelId=/.test(document.querySelector('#hd-chat iframe')?.getAttribute('src') || '');
+      document.querySelector('#helpdesk-modal .modal-close')?.click(); await sleep(200);
+      // set-state boot (what the next session's bootstrap carries) → the EMBED branch
+      VB.state.boot.community = { discord: 'https://discord.gg/suite-test', channelId: '123456789012345678' };
+      ui.openHelpDesk(); await sleep(300);
+      out.pcEmbedBranch = /wizcord\.io\/iframe\?channelId=/.test(document.querySelector('#hd-chat iframe')?.getAttribute('src') || '');
+      document.querySelector('#helpdesk-modal .modal-close')?.click(); await sleep(200);
+      // the desk is SOLID: its lane stops short of the wall, the gap lane doesn't
+      const walkLane = async (x) => {
+        s.debugTeleport(x, -5.15, 0, 0); await sleep(300);
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', code: 'KeyW', bubbles: true, cancelable: true }));
+        await sleep(1400);
+        document.body.dispatchEvent(new KeyboardEvent('keyup', { key: 'w', code: 'KeyW', bubbles: true }));
+        await sleep(150);
+        return +s.debugPose().z.toFixed(2);
+      };
+      out.pcLaneZ = await walkLane(3.35);
+      out.gapLaneZ = await walkLane(1.6);
+      out.pcSolid = out.pcLaneZ > -5.45 && out.gapLaneZ < out.pcLaneZ - 0.3;
+      s.debugTeleport(0, 0, 0, 0); await sleep(200);
+
+      // t155: admin → Users carries the invite field
+      ui.openSettings('admin'); await sleep(700);
+      [...document.querySelectorAll('.admin-sub')].find(b => b.dataset.sub === 'users')?.click(); await sleep(900);
+      const inp = document.getElementById('hd-discord-input');
+      out.adminField = false;
+      if (inp) for (let i = 0; i < 15; i++) { if (inp.value.includes('discord.gg')) { out.adminField = true; break; } await sleep(400); }
+      if (inp) {
+        inp.value = 'https://discord.gg/suite-second';
+        document.getElementById('hd-discord-save').click(); await sleep(700);
+      }
+      const boot2 = await (await fetch('/api/bootstrap')).json();
+      out.adminSaved = boot2.community?.discord === 'https://discord.gg/suite-second';
+      document.getElementById('btn-settings-close')?.click(); await sleep(300);
+      return out;
+      } catch (e) { out.fatal = String(e.message || e).slice(0, 140); return out; }
+    });
+    R.checks.t153HudWithGuide = { ...tp, ok: !tp.fatal && tp.movieFound === true && tp.fs === true && tp.docked === true && tp.hudUp === true
+      && tp.hudConfined === true && tp.volWhileGuide === 0.7 && tp.guideClosed === true && tp.exitedFs === true
+      && tp.ccClipHeld === true && tp.ccAppears === true && tp.ccOnVideo === true && tp.ccOffVideo === true };
+    R.checks.t153Captions = { ok: !tp.fatal && tp.ytCcDefaultOff === true && tp.ytCcBtn === true
+      && tp.ytCcOn === true && tp.ytCcOff === true && tp.ytStopped === true };
+    R.checks.t154ModalDownload = { ok: !tp.fatal && tp.dlMovie === true && tp.dlLiveHidden === true
+      && /\/api\/play\/local\/.+%2F.+/.test(tp.dlHref || '') && /attachment/.test(tp.dlDisp || '') };
+    R.checks.t155HelpDeskPc = { pcExists: tp.pcExists, pcPick: tp.pcPick, pcModal: tp.pcModal,
+      inviteRowGone: tp.pcInviteRowGone, chatGlobalDefault: tp.pcChatGlobalDefault, embedBranch: tp.pcEmbedBranch,
+      pcSolid: tp.pcSolid, adminField: tp.adminField, adminSaved: tp.adminSaved,
+      ok: !tp.fatal && tp.pcExists === true && Array.isArray(tp.pcPos)
+      && Math.abs(tp.pcPos[0] - 3.35) < 0.01 && Math.abs(tp.pcPos[2] + 5.675) < 0.01
+      && tp.pcPick === 'helpdesk' && tp.pcModal === true && tp.pcInviteRowGone === true
+      && tp.pcChatGlobalDefault === true && tp.pcEmbedBranch === true
+      && tp.pcSolid === true && tp.adminField === true && tp.adminSaved === true };
+    // leave the server clean for the restore block
+    await put({ local: { on: false, spots: [] }, iptv: { url: '', sections: [], playlistUrl: '', packs: [] }, community: { discord: '' } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+  }
+
+  // ── t156–t159 (owner's batch): shelf-search menu + slim scrollbars,
+  //     YouTube playlists, windowed Guide stops blocking, PC chat embed ──
+  {
+    const P = require('node:path');
+    const root = P.resolve('tests/media/local');
+    const put = (body) => fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH }, body: JSON.stringify(body) });
+    await put({ local: { on: true, spots: [root] }, iptv: { url: 'http://127.0.0.1:32790/iptv', sections: [], playlistUrl: '', packs: [{ label: 'PlutoTV', url: 'http://127.0.0.1:32790/iptv/plutopack.m3u' }] } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
+
+    // (a) t159/t159b — HTTP layer: the chat-embed config round-trips, per-key
+    // merge, pasted channel LINKS normalize to the id, and the b2r5 default
+    // (which pointed at the WRONG channel) is swapped for the invite's target
+    const CH = '1547379611338285177';   // the channel discord.gg/rbq2m9zZBs actually lands on
+    await put({ community: { channelId: '1098314040608030830' } });   // the retired b2r5 default
+    let boot = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+    const retiredSwapped = boot.community?.channelId === CH;
+    await put({ community: { channelId: 'https://discord.com/channels/1066831924804464691/1547379611338285177' } });   // a pasted channel link
+    boot = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+    const linkNormalized = boot.community?.channelId === CH;
+    await put({ community: { discord: 'https://discord.gg/suite-t159' } });
+    boot = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+    const mergeKeepsChannel = boot.community?.discord === 'https://discord.gg/suite-t159' && !!boot.community?.channelId;
+    await put({ community: { channelId: '123456789012345678' } });
+    boot = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+    const mergeKeepsInvite = boot.community?.discord === 'https://discord.gg/suite-t159' && boot.community?.channelId === '123456789012345678';
+    await put({ community: { channelId: 'abc' } });
+    boot = await j(await fetch(BASE + '/api/bootstrap', { headers: authH }));
+    // t167: invalid channel input keeps the current id (the global chat never blanks)
+    const invalidClearsOnlyThat = boot.community?.discord === 'https://discord.gg/suite-t159' && boot.community?.channelId === '123456789012345678';
+    await put({ community: { channelId: CH } });   // a valid one for the page checks
+    R.checks.t159ChatConfig = { retiredSwapped, linkNormalized, mergeKeepsChannel, mergeKeepsInvite, invalidClearsOnlyThat,
+      ok: retiredSwapped && linkNormalized && mergeKeepsChannel && mergeKeepsInvite && invalidClearsOnlyThat };
+
+    // (b) page side: everything else. The chat embed points at wizcord.io —
+    // stubbed session-wide since t160 (the PC's world screen can mount long
+    // before this block), so nothing to route here; the SRC is what's under
+    // test (the real embed needs the owner's machine).
+    const tp = await page.evaluate(async () => {
+      const w = window, VB = w.__VB, s = VB.scene, ui = VB.ui, ctx = VB.mainCtx;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const out = { fatal: null };
+      const press = (key, code) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
+      try { await ctx.reloadLibrary?.(); } catch {}
+      await sleep(400);
+      try {
+      const movie = (VB.state.items || []).find(i => i.type === 'movie' && /Tiny Clip/.test(i.title));
+
+      // ── t156: the shelf-search menu ──
+      ui.openSidebar(); await sleep(400);
+      const inp = document.getElementById('side-search');
+      const res = document.getElementById('side-search-results');
+      const probe = ((VB.state.items || []).find(i => (i.title || '').length >= 4) || {}).title || 'test';
+      const q = probe.slice(0, 2).toLowerCase();
+      inp.value = q; inp.dispatchEvent(new Event('input', { bubbles: true }));
+      let counted = null;
+      for (let i = 0; i < 14; i++) { counted = res.querySelector('.side-search-count')?.textContent || null; if (counted) break; await sleep(300); }
+      out.searchCount = counted;
+      out.searchRows = res.querySelectorAll('[data-search-id]').length;
+      out.searchTall = parseFloat(getComputedStyle(res).maxHeight) > window.innerHeight * 0.5;   // > the old 42vh, any viewport
+      out.searchThin = getComputedStyle(res).scrollbarWidth === 'thin';
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true, cancelable: true }));
+      out.kbPick = !!res.querySelector('.search-row.kbd-pick');
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(700);
+      out.kbOpensModal = !document.getElementById('item-modal').classList.contains('hidden');
+      document.querySelector('#item-modal .modal-close')?.click(); await sleep(200);
+      ui.closeSidebar(); await sleep(300);
+      ui.openSettings('shelves'); await sleep(900);
+      out.mapIsGrid = getComputedStyle(document.getElementById('shelf-map-rows')).display === 'grid';   // multi-col ≥720px, 1-col below (responsive)
+      out.mapColumns = getComputedStyle(document.getElementById('shelf-map-rows')).gridTemplateColumns.split(' ').length;
+      document.getElementById('btn-settings-close')?.click(); await sleep(300);
+
+      // ── t158: the WINDOWED guide is a side panel, not an overlay ──
+      // (the staged clip is 2.4s and fragile under load — pause it fast and
+      // retry if the decode died; the assertions need a live paused TV)
+      s.debugTeleport(0, -8.5); await sleep(400);
+      out.remoteVisible = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        ctx.playItem(movie); await sleep(250);
+        if (s.tv.state.playing) { s.tv.togglePlay(); await sleep(200); }
+        if (s.tv.state.playing) {
+          for (let i = 0; i < 10; i++) { if (!document.getElementById('tv-remote').classList.contains('hidden')) break; await sleep(300); }
+          out.remoteVisible = !document.getElementById('tv-remote').classList.contains('hidden');
+          if (out.remoteVisible) break;
+        }
+      }
+      out.tvAlive = !!s.tv.state.playing;
+      press('g', 'KeyG'); await sleep(1000);
+      out.guideWindowed = !document.getElementById('guide-modal').classList.contains('hidden') && !document.body.classList.contains('tv-fullscreen');
+      const gm = document.getElementById('guide-modal'), gc = document.querySelector('#guide-modal .guide-card');
+      out.modalPassThrough = getComputedStyle(gm).pointerEvents === 'none';
+      out.cardInteractive = getComputedStyle(gc).pointerEvents === 'auto';
+      out.remoteZ = getComputedStyle(document.getElementById('tv-remote')).zIndex;
+      out.hudRight = parseFloat(getComputedStyle(document.getElementById('hud-buttons')).right);
+      out.hudRightVisible = (window.innerWidth - out.hudRight) >= 160;   // the buttons' right edge stays on screen
+      const rp = document.getElementById('tv-remote').getBoundingClientRect();
+      const atRemote = document.elementFromPoint(rp.left + 30, rp.top + rp.height / 2);
+      out.remoteClickable = !!(atRemote && (atRemote.closest('#tv-remote')));
+      const atLeft = document.elementFromPoint(150, 300);
+      out.leftAreaFree = !(atLeft && atLeft.closest?.('#guide-modal'));
+      const vv = document.getElementById('tv-vol');
+      vv.value = 80; vv.dispatchEvent(new Event('input', { bubbles: true })); await sleep(250);
+      out.volThroughGuide = s.tv.volumeInfo().target;
+      out.guideSurvivesVolume = !document.getElementById('guide-modal').classList.contains('hidden');
+      press('Escape', 'Escape'); await sleep(500);
+      out.guideEscClose = document.getElementById('guide-modal').classList.contains('hidden');
+      s.tv.stop(); await sleep(300);
+
+      // ── t157: YouTube PLAYLISTS ──
+      const mod = await import('/js/yt.js');
+      out.parse = {
+        playlist: JSON.stringify(mod.ytPlaylistId('https://www.youtube.com/playlist?list=PLabc1234567890xyz_-')) === JSON.stringify({ list: 'PLabc1234567890xyz_-', videoId: null }),
+        watchList: JSON.stringify(mod.ytPlaylistId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLxyz987654321abc')) === JSON.stringify({ list: 'PLxyz987654321abc', videoId: 'dQw4w9WgXcQ' }),
+        plainWatch: mod.ytPlaylistId('https://www.youtube.com/watch?v=dQw4w9WgXcQ') === null,
+        notYT: mod.ytPlaylistId('https://example.com/playlist?list=PLabc1234567890') === null,
+        notLink: mod.ytPlaylistId('pluto tv') === null
+      };
+      w.__ytCalls = [];
+      w.__ytAutoAdvance = false;   // real YouTube advances playlists by itself — the STALLED case is the test
+      w.YT = { Player: class {
+        // t157b: an HONEST stub — a playlist id (or junk) handed in as a
+        // videoId is a DEAD player (error, never plays: the b2r5 freeze),
+        // constructor playlist vars alone load nothing (loadPlaylist does),
+        // and watch?v=…&list=… starts the video with the list behind it.
+        constructor(el, opts) {
+          this.opts = opts; this.state = 5; this.t = 0; this.d = 300; this.idx = 0;
+          this.list = []; this.titles = ['']; this.dead = false;
+          const ifr = document.createElement('iframe');
+          ifr.src = 'about:blank'; ifr.style.cssText = 'width:100%;height:100%;border:0';
+          (el?.parentNode || document.body).appendChild(ifr);
+          w.__ytStub = this;
+          const vid = opts?.videoId, pv = opts?.playerVars || {};
+          if (vid && !/^[\w-]{8,20}$/.test(vid)) {
+            w.__ytCalls.push('ctor-badvid:' + vid);
+            this.dead = true;
+            setTimeout(() => { this.state = -1; opts?.events?.onReady?.({ target: this }); opts?.events?.onError?.({ data: 2 }); }, 60);
+            return;
+          }
+          if (vid && pv.list) {
+            this.list = ['vid-aaa', 'vid-bbb', 'vid-ccc'];
+            this.titles = ['Playlist Video One', 'Playlist Video Two', 'Playlist Video Three'];
+            w.__ytCalls.push('ctor-list:' + pv.list);
+          } else if (vid) {
+            this.titles = ['A YouTube Video'];
+          } else if (pv.list) {
+            w.__ytCalls.push('ctor-list:' + pv.list);   // the vars carried… but nothing is loaded yet
+          }
+          setTimeout(() => {
+            opts?.events?.onReady?.({ target: this });
+            if (vid || this.list.length) { this.state = 1; opts?.events?.onStateChange?.({ data: 1 }); }
+          }, 60);
+        }
+        loadPlaylist(o) {
+          if (this.dead) return;
+          w.__ytCalls.push('loadpl:' + (o?.list || ''));
+          this.list = ['vid-aaa', 'vid-bbb', 'vid-ccc'];
+          this.titles = ['Playlist Video One', 'Playlist Video Two', 'Playlist Video Three'];
+          this.idx = 0; this.state = 3;
+          this.opts?.events?.onStateChange?.({ data: 3 });
+          setTimeout(() => { this.state = 1; this.opts?.events?.onStateChange?.({ data: 1 }); }, 80);
+        }
+        endCurrent() {            // test helper: the current video ends
+          this.state = 0; this.opts?.events?.onStateChange?.({ data: 0 });
+          if (w.__ytAutoAdvance && this.list.length && this.idx < this.list.length - 1)
+            setTimeout(() => { this.idx++; this.state = 1; this.opts?.events?.onStateChange?.({ data: 1 }); }, 120);
+        }
+        playVideo() { w.__ytCalls.push('play'); if (!this.dead && (this.opts?.videoId || this.list.length)) this.state = 1; }
+        pauseVideo() { w.__ytCalls.push('pause'); this.state = 2; }
+        seekTo(t) { w.__ytCalls.push('seek:' + Math.round(t)); this.t = t; }
+        setVolume(v) { w.__ytCalls.push('vol:' + v); }
+        setOption(m, k, v) { w.__ytCalls.push('set:' + m + '.' + k + '=' + JSON.stringify(v)); }
+        getOption(m, k) { return k === 'tracklist' ? [{ languageCode: 'en' }] : null; }
+        nextVideo() { w.__ytCalls.push('next'); this.idx = Math.min(this.idx + 1, this.list.length - 1); this.state = 1; this.opts.events.onStateChange({ data: 1 }); }
+        previousVideo() { w.__ytCalls.push('prev'); this.idx = Math.max(this.idx - 1, 0); this.state = 1; this.opts.events.onStateChange({ data: 1 }); }
+        getPlaylistIndex() { return this.list.length ? this.idx : -1; }
+        getPlaylist() { return this.list; }
+        getPlayerState() { return this.state; }
+        getCurrentTime() { return this.t; }
+        getDuration() { return this.d; }
+        getVideoData() { return { video_id: this.dead ? '' : (this.opts?.videoId || (this.list.length ? this.list[this.idx] : '')), title: this.titles[this.idx] || '' }; }
+        destroy() { w.__ytCalls.push('destroy'); }
+      } };
+      s.debugTeleport(0, -8.5); await sleep(250);
+      press('g', 'KeyG'); await sleep(900);
+      const sb = document.getElementById('guide-search');
+      sb.value = 'https://www.youtube.com/playlist?list=PLsuite1234567890';
+      sb.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(1500);
+      out.plBuilt = (w.__ytCalls || []).includes('ctor-list:PLsuite1234567890');   // the list rode the playerVars
+      out.plLoaded = (w.__ytCalls || []).includes('loadpl:PLsuite1234567890');     // the onReady fallback loaded it
+      out.plNoFakeVid = !w.__ytStub?.opts?.videoId;                                // the playlist id never posed as a video id
+      out.plFullscreen = document.body.classList.contains('tv-fullscreen');
+      out.plLayer = !!document.getElementById('vb-fs-video');
+      await sleep(800);
+      out.plTitle = document.getElementById('tv-fs-title')?.textContent || null;
+      document.getElementById('fs-next')?.click(); await sleep(500);
+      out.plNext = (w.__ytCalls || []).includes('next');
+      await sleep(600);
+      out.plTitleAfterNext = document.getElementById('tv-fs-title')?.textContent || null;
+      document.getElementById('fs-prev')?.click(); await sleep(300);
+      out.plPrev = (w.__ytCalls || []).includes('prev');
+      const stub = w.__ytStub;
+      // STALLED auto-advance: the video ends mid-list and nothing moves —
+      // the app must nudge nextVideo() awake on its own (t157b)
+      const nextBefore = (w.__ytCalls || []).filter(c => c === 'next').length;
+      stub.endCurrent();                                                  // ends video 2 of 3, stalled
+      await sleep(2600);
+      out.endedMidKeeps = !!s.tv.state.playing;
+      out.plNudge = (w.__ytCalls || []).filter(c => c === 'next').length > nextBefore;
+      // NATIVE auto-advance (what real YouTube does): ENDED mid-list, the
+      // player moves on by itself — the title follows, no nudge involved
+      const nextBeforeAuto = (w.__ytCalls || []).filter(c => c === 'next').length;
+      w.__ytAutoAdvance = true;
+      stub.endCurrent();                                                  // ends video 2 of 3, advances itself
+      await sleep(800);
+      out.plAutoAdv = (document.getElementById('tv-fs-title')?.textContent || '') === 'Playlist Video Three';
+      out.plNoNudgeWhenAlive = (w.__ytCalls || []).filter(c => c === 'next').length === nextBeforeAuto;
+      w.__ytAutoAdvance = false;
+      stub.idx = stub.list.length - 1; stub.endCurrent();                 // the last one
+      await sleep(2200);
+      out.endedLastStops = !s.tv.state.playing;
+      out.plLayerGone = !document.getElementById('vb-fs-video');
+
+      // watch?v=…&list=… — starts at the linked video; the list rides the
+      // PLAIN list param (YouTube's continue-the-playlist embed form)
+      press('g', 'KeyG'); await sleep(900);
+      const sb2 = document.getElementById('guide-search');   // re-fetch: openGuide may have re-made it
+      sb2.value = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLwatch9876543210';
+      sb2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(1400);
+      out.wlStartsAtVideo = w.__ytStub?.opts?.videoId === 'dQw4w9WgXcQ';
+      out.wlBareList = w.__ytStub?.opts?.playerVars?.list === 'PLwatch9876543210' && !w.__ytStub?.opts?.playerVars?.listType;
+      out.wlPlaying = w.__ytStub?.getPlayerState() === 1;
+      out.wlListLoaded = (w.__ytStub?.getPlaylist() || []).length === 3;
+      out.wlTitle = (document.getElementById('tv-fs-title')?.textContent || '') === 'Playlist Video One';
+
+      // a DEAD playlist (private / blocked from embedding / a Mix): the
+      // player errors — the TV must say so and hand control back, not freeze
+      w.__ytStub.opts.events.onError({ data: 150 });
+      await sleep(3400);
+      out.errRecovers = !s.tv.state.playing && !document.getElementById('vb-fs-video');
+
+      // ── t159: the PC + the chat embed ──
+      // (this page booted BEFORE the block's config PUTs — set-state boot is
+      // exactly what a fresh session would have received from the server)
+      VB.state.boot.community = { discord: 'https://discord.gg/suite-t159', channelId: '1098314040608030830' };
+      s.debugTeleport(3.35, -3.4, 0, -0.24); await sleep(350);
+      out.pcPick = s.debugPickSpecial();
+      // ── t160: the LIVE chat on the PC's world screen ── mounted + visible
+      // + passive (clicks aim at the PC) + sized to the projected monitor.
+      // debugWorldChatTick runs one REAL evaluation deterministically — the
+      // rig's render loop only strokes frames on event bursts.
+      await sleep(300);
+      s.debugWorldChatTick?.(); await sleep(120); s.debugWorldChatTick?.();
+      const wc = document.getElementById('hd-world-chat');
+      out.worldChatMounted = !!wc;
+      out.worldChatVisible = !!wc && wc.style.display === 'block';
+      out.worldChatSrc = wc?.querySelector('iframe')?.getAttribute('src') || '';
+      out.worldChatPassive = !!wc && getComputedStyle(wc).pointerEvents === 'none';
+      const wcr = wc?.getBoundingClientRect();
+      out.worldChatSized = !!wcr && wcr.width > 40 && wcr.width < innerWidth * 0.95 && wcr.height > 30;
+      out.worldChatLowZ = !!wc && parseFloat(getComputedStyle(wc).zIndex) < 20;   // under every UI layer
+      out.worldChatPlaced = !!wc && (wc.style.transform || '').startsWith('matrix3d(');   // t160c: a projective transform places the plane IN the world
+      const dbgWC = s.debugWorldChat();
+      out.worldChatArt = dbgWC.art;                              // t160c: no fake HELP-DESK text on the glass — abstract chat-glass only
+      const cWC = dbgWC.corners || [];
+      out.worldChatCornersOrdered = cWC.length === 4 && cWC[0][0] < cWC[1][0] && cWC[3][0] < cWC[2][0] && cWC[0][1] < cWC[3][1];   // TL left of TR, TL above BL — no mirror
+      // t160c: TRUE PERSPECTIVE — stand to the LEFT of the desk, aim at the
+      // glass: the quad is a trapezoid and the matrix's perspective terms
+      // (args 4 and 8) go non-zero. Head-on they're ~0.
+      const scWC = dbgWC.scr;
+      const apx = 1.7, apz = -3.2;
+      const ayaw = Math.atan2(-(scWC.x - apx), -(scWC.z - apz));
+      s.debugTeleport(apx, apz, ayaw, -0.2); await sleep(150);
+      s.debugWorldChatTick?.(); await sleep(120); s.debugWorldChatTick?.();
+      const wcA = document.getElementById('hd-world-chat');
+      out.worldChatAngledVisible = wcA?.style.display === 'block' && (wcA?.style.transform || '').startsWith('matrix3d(');
+      const mAng = (wcA?.style.transform || '').match(/matrix3d\(([^)]+)\)/);
+      const vAng = mAng ? mAng[1].split(',').map(Number) : [];
+      out.worldChatPerspAngled = vAng.length === 16 && (Math.abs(vAng[3]) > 1e-4 || Math.abs(vAng[7]) > 1e-4);
+      const cAng = (s.debugWorldChat().corners || []);
+      out.worldChatAngledQuad = cAng.length === 4 && Math.abs(cAng[0][1] - cAng[3][1]) > Math.abs(cAng[1][1] - cAng[2][1]) * 1.05;   // near (left) edge renders ≥5% TALLER than the far edge — true foreshortening, not a stretch (ratio, so it holds at any viewport size)
+      // t160b: near the desk but LOOKING AWAY → off (it's a monitor, not a HUD)
+      s.debugTeleport(3.35, -3.4, 1.5708, -0.1); await sleep(150);
+      s.debugWorldChatTick?.();
+      out.worldChatHiddenTurnedAway = document.getElementById('hd-world-chat')?.style.display === 'none';
+      s.debugTeleport(3.35, -3.4, 0, -0.24); await sleep(150);   // back on the PC
+      s.fireSelect(); await sleep(500);
+      out.pcModal = !document.getElementById('helpdesk-modal').classList.contains('hidden');
+      out.worldChatHiddenWhileModal = document.getElementById('hd-world-chat')?.style.display === 'none';
+      out.pcInviteGone = !document.querySelector('#helpdesk-modal a[href*="discord"]');   // t168: no link row — the chat IS the UI
+      out.pcChatSrc = document.querySelector('#hd-chat iframe')?.getAttribute('src') || null;
+      // t159c: the channel-list crop — the embed's left 240px (the server's
+      // decorative-Unicode channel wall, unreadable "Chinese") is cropped out
+      // on wide screens; at THIS 640px viewport the narrow branch applies
+      // (wizcord hides the sidebar itself below its ~780px breakpoint)
+      const cfr = document.querySelector('#hd-chat .hd-chat-frame');
+      const cifr = document.querySelector('#hd-chat .hd-chat-frame iframe');
+      if (cfr && cifr) {
+        const cs = getComputedStyle(cifr);
+        // rect vs rect — the app scales the modal at narrow widths, so
+        // computed (layout) widths and rects live in different spaces
+        out.cropNarrowBranch = cs.left === '0px' && Math.abs(cifr.getBoundingClientRect().width - cfr.getBoundingClientRect().width) < 2
+          && getComputedStyle(cfr).overflow === 'hidden';
+        let cropRule = '';
+        try {
+          for (const sh of document.styleSheets) for (const r of sh.cssRules || []) {
+            if (r.media) { for (const rr of r.cssRules || []) if ((rr.selectorText || '').includes('hd-chat-frame')) cropRule += ' ' + rr.cssText; }
+            else if ((r.selectorText || '').includes('hd-chat-frame')) cropRule += ' ' + r.cssText;
+          }
+        } catch {}
+        out.cropRuleWide = /left:\s*-240px/i.test(cropRule) && /calc\(100%\s*\+\s*240px\)/i.test(cropRule);
+      }
+      // t159b: sign-in + reload — Discord's login can't run inside a frame,
+      // so the button opens the chat page as a real window and reloads the
+      // embed when it closes
+      const signin = document.getElementById('hd-signin'), reloadBtn = document.getElementById('hd-reload');
+      out.signinBar = !!signin && !!reloadBtn;
+      const realOpen = w.open.bind(w);
+      w.__openUrls = [];
+      w.open = (u) => { w.__openUrls.push(String(u)); return { closed: false }; };
+      signin?.click();
+      out.signinOpens = (w.__openUrls[0] || '').includes('wizcord.io/iframe?channelId=');
+      const ifr1 = document.querySelector('#hd-chat iframe')?.getAttribute('src') || '';
+      w.open = (u) => { w.__openUrls.push(String(u)); return { closed: true }; };   // "signed in + closed the window"
+      signin?.click();
+      await sleep(1100);
+      const ifr2 = document.querySelector('#hd-chat iframe')?.getAttribute('src') || '';
+      out.signinReloads = ifr2 !== ifr1 && /&t=\d+/.test(ifr2);
+      w.open = realOpen;                                    // restore — nothing later may need it stubbed
+      document.querySelector('#helpdesk-modal .modal-close')?.click(); await sleep(200);
+      // t160: away from the desk → the world screen goes dark (stays mounted)
+      s.debugTeleport(0, 4.2); await sleep(300);
+      s.debugWorldChatTick?.();
+      out.worldChatHiddenFar = document.getElementById('hd-world-chat')?.style.display === 'none';
+      // t160b: inside the theater → ALWAYS dark, even with the door open
+      s.debugTeleport(3.35, -8.2, 0, -0.2); await sleep(300);
+      s.debugWorldChatTick?.();
+      out.worldChatHiddenInTheater = document.getElementById('hd-world-chat')?.style.display === 'none';
+      ui.openSettings('admin'); await sleep(700);
+      [...document.querySelectorAll('.admin-sub')].find(b => b.dataset.sub === 'users')?.click(); await sleep(1200);
+      const di = document.getElementById('hd-discord-input'), ci = document.getElementById('hd-channel-input');
+      out.adminInviteVal = di?.value || '';
+      out.adminChannelVal = ci?.value || '';
+      // t159b: pasting a channel LINK (no Developer Mode needed) saves the id
+      if (ci) {
+        ci.value = 'https://discord.com/channels/1066831924804464691/1547379611338285177';
+        document.getElementById('hd-channel-save')?.click();
+        await sleep(900);
+        const cfg = await (await fetch('/api/admin/config')).json();
+        out.adminLinkPaste = cfg?.config?.community?.channelId === '1547379611338285177' && ci.value === '1547379611338285177';
+      }
+      document.getElementById('btn-settings-close')?.click(); await sleep(300);
+      return out;
+      } catch (e) { out.fatal = String(e.message || e).slice(0, 140); return out; }
+    });
+    R.checks.t156SearchMenu = { ...tp, ok: !tp.fatal && /on the shelves/.test(tp.searchCount || '')
+      && tp.searchRows >= 1 && tp.searchTall === true && tp.searchThin === true
+      && tp.kbPick === true && tp.kbOpensModal === true && tp.mapIsGrid === true };
+    R.checks.t158GuideSidePanel = { ...tp, ok: !tp.fatal && tp.tvAlive === true && tp.remoteVisible === true && tp.guideWindowed === true
+      && tp.modalPassThrough === true && tp.cardInteractive === true && tp.remoteZ === '62'
+      && tp.hudRightVisible === true && tp.remoteClickable === true && tp.leftAreaFree === true
+      && tp.volThroughGuide === 0.8 && tp.guideSurvivesVolume === true && tp.guideEscClose === true };
+    R.checks.t157Playlists = { ok: !tp.fatal && Object.values(tp.parse || {}).every(Boolean)
+      && tp.plBuilt === true && tp.plFullscreen === true && tp.plLayer === true
+      && tp.plTitle === 'Playlist Video One' && tp.plNext === true && tp.plTitleAfterNext === 'Playlist Video Two'
+      && tp.plPrev === true && tp.endedMidKeeps === true && tp.endedLastStops === true && tp.plLayerGone === true };
+    R.checks.t157StuckFixes = { ok: !tp.fatal && tp.plLoaded === true && tp.plNoFakeVid === true
+      && tp.plNudge === true && tp.plAutoAdv === true && tp.plNoNudgeWhenAlive === true
+      && tp.wlStartsAtVideo === true && tp.wlBareList === true && tp.wlPlaying === true
+      && tp.wlListLoaded === true && tp.wlTitle === true && tp.errRecovers === true };
+    R.checks.t159HelpDeskChat = { ok: !tp.fatal && tp.pcPick === 'helpdesk' && tp.pcModal === true
+      && tp.pcInviteGone === true
+      && /wizcord\.io\/iframe\?channelId=/.test(tp.pcChatSrc || '')
+      && tp.adminInviteVal === 'https://discord.gg/suite-t159' && /^\d+$/.test(tp.adminChannelVal) };
+    R.checks.t159SignIn = { ok: !tp.fatal && tp.signinBar === true && tp.signinOpens === true
+      && tp.signinReloads === true && tp.adminLinkPaste === true
+      && tp.cropNarrowBranch === true && tp.cropRuleWide === true };
+
+    // ── t161/t164/t165: movement — look sensitivity (default 0.55×) + ONE-PRESS Shift pace ──
+    // (a) HTTP: the controls pref round-trips, sanitizes, and DEFAULTS to
+    // 0.55× on a fresh device (own device keys, so the shared page's prefs
+    // are untouched)
+    {
+      const DEV = 'dev:a1b2c3d4e5f60718a1b2c3d4e5f60718';   // must be dev:+32 HEX — anything else mints a fresh profile per request
+      const post = (body) => fetch(BASE + '/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json', 'X-VB-Device': DEV }, body: JSON.stringify(body) });
+      const bootDev = async (dev) => j(await fetch(BASE + '/api/bootstrap', { headers: { 'X-VB-Device': dev || DEV } }));
+      const DEV2 = 'dev:b2c3d4e5f60718293a4b5c6d7e8f90';    // t165: fresh device → the factory default
+      const bd = await bootDev(DEV2);
+      const defaultOk = bd.prefs?.controls?.look === 0.55 && bd.prefs?.controls?.base === 'walk';
+      await post({ controls: { look: 1.8, base: 'run' } });
+      let bb = await bootDev();
+      const savedOk = bb.prefs?.controls?.look === 1.8 && bb.prefs?.controls?.base === 'run';
+      await post({ controls: { look: 99, base: 'teleport' } });
+      bb = await bootDev();
+      const clampedOk = bb.prefs?.controls?.look === 3 && bb.prefs?.controls?.base === 'run';
+      // (b) page: the Movement settings + the X key + the look multiplier
+      const mv = await page.evaluate(async () => {
+        const w = window, VB = w.__VB, s = VB.scene, ui = VB.ui, ctx = VB.mainCtx;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = { fatal: null };
+        const press = (key, code) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
+        const release = (key, code) => document.body.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true }));
+        try {
+          out.defaultLook = s.debugControlInfo().lookScale;   // t165: fresh device → 0.55 (BEFORE this block touches the slider)
+          ui.openSettings('profile'); await sleep(600);
+          const slider = document.getElementById('mv-look');
+          out.uiPresent = !!slider && document.querySelectorAll('.mv-speed').length === 3;
+          out.sliderDefault = slider ? slider.value : null;   // t165: the UI shows the factory default too
+          if (slider) {
+            slider.value = '2';
+            slider.dispatchEvent(new Event('input', { bubbles: true }));
+            await sleep(200);
+            out.lookApplied = s.debugControlInfo().lookScale === 2;
+          }
+          document.getElementById('btn-settings-close')?.click(); await sleep(400);
+          // t164: ONE PRESS of Shift cycles the pace; holding (auto-repeat) and
+          // the old X key change nothing; speeds ascend; wrap returns to walk
+          out.baseStart = s.debugControlInfo().base;
+          press('Shift', 'ShiftLeft'); await sleep(80);
+          const j1 = s.debugControlInfo();
+          press('Shift', 'ShiftLeft'); await sleep(80);       // a second TAP (fresh keydown)
+          const j2 = s.debugControlInfo();
+          press('Shift', 'ShiftLeft'); await sleep(80);
+          const j3 = s.debugControlInfo();
+          out.cycles = [j1.base, j2.base, j3.base];
+          out.speedsAscend = j1.speed > 3.4 && j2.speed > j1.speed && j3.speed < j1.speed;   // jog > walk, run > jog, wrap < jog
+          out.nowEqualsBase = j3.now === j3.base;             // t164: no boost tier — the pace IS the tier
+          // holding Shift (auto-repeat events) must NOT keep cycling
+          press('Shift', 'ShiftLeft'); await sleep(40);       // tap → walk (wrapped)
+          let held = s.debugControlInfo().base;
+          for (let k = 0; k < 4; k++) { held = s.debugControlInfo().base; }   // repeats suppressed by !e.repeat
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft', bubbles: true, repeat: true }));
+          await sleep(60);
+          out.holdDoesNothing = s.debugControlInfo().base === held;
+          // the old X key is free — it must do nothing to the pace
+          press('x', 'KeyX'); await sleep(80);
+          out.xDoesNothing = s.debugControlInfo().base === held;   // t164: X no longer bound
+          press('Shift', 'ShiftLeft'); await sleep(60);       // held=jog → run
+          press('Shift', 'ShiftLeft'); await sleep(60);       // run → walk for later blocks
+          // the look multiplier really scales the turn
+          ctx.applyControlPrefs({ look: 1 }); await sleep(60);
+          const a1 = Math.abs(s.debugLook(100, 0));
+          ctx.applyControlPrefs({ look: 2 }); await sleep(60);
+          const a2 = Math.abs(s.debugLook(100, 0));
+          out.lookScales = Math.abs(a2 - 2 * a1) < 1e-9;
+          out.lookDeltas = [+a1.toFixed(5), +a2.toFixed(5)];
+        } catch (e) { out.fatal = String(e.message || e).slice(0, 140); return out; }
+        return out;
+      });
+      R.checks.t161Movement = { defaultOk, savedOk, clampedOk, ...mv,
+        ok: defaultOk && savedOk && clampedOk && !mv.fatal && mv.uiPresent === true && mv.lookApplied === true
+        && Number.isFinite(+mv.defaultLook) && mv.sliderDefault === String(+mv.defaultLook)   // UI shows exactly what boot served (0.55 for fresh visitors)
+        && mv.baseStart === 'walk' && JSON.stringify(mv.cycles) === JSON.stringify(['jog', 'run', 'walk'])
+        && mv.speedsAscend === true && mv.nowEqualsBase === true && mv.holdDoesNothing === true
+        && mv.xDoesNothing === true && mv.lookScales === true };
+    }
+
+    // ── t163: the mouse that behaves — lock failures are TRANSIENT, menus
+    // always get the cursor, and drag-look clicks never fight an open panel ──
+    {
+      const ml = await page.evaluate(async () => {
+        const w = window, VB = w.__VB, s = VB.scene, ui = VB.ui;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = { fatal: null };
+        try {
+          out.hooks = typeof s.debugLockInfo === 'function' && typeof s.debugLockTick === 'function';
+          const canvas = document.querySelector('canvas');
+          // (a) stub a real lock, then a menu must TAKE the cursor
+          Object.defineProperty(document, 'pointerLockElement', { value: canvas, configurable: true });
+          document.dispatchEvent(new Event('pointerlockchange'));
+          out.lockedStub = s.debugLockInfo().locked === true;
+          let exited = 0;
+          const origExit = document.exitPointerLock;
+          document.exitPointerLock = () => { exited++; try { origExit.call(document); } catch {} };
+          ui.openSettings('profile'); await sleep(150);
+          s.debugLockTick();
+          document.exitPointerLock = origExit;
+          out.menuReleases = exited >= 1;
+          document.getElementById('btn-settings-close')?.click(); await sleep(150);
+          delete document.pointerLockElement;        // back to the real (null) element
+          document.dispatchEvent(new Event('pointerlockchange'));
+          out.unlockedClean = s.debugLockInfo().locked === false;
+          // (b) a lock failure is TRANSIENT: blocked immediately, clear on its own
+          document.dispatchEvent(new Event('pointerlockerror'));
+          out.blockedRightAway = s.debugLockInfo().lockBlocked === true;
+          await sleep(1550);
+          out.blockClears = s.debugLockInfo().lockBlocked === false;
+          // (c) drag-look fallback: clicks belong to an OPEN MENU, not the world
+          document.dispatchEvent(new Event('pointerlockerror'));   // re-block (fresh window)
+          await sleep(30);
+          const st = s.controls.state;
+          const prevClick = st.onClick; let fired = 0;
+          st.onClick = () => { fired++; };
+          ui.openSettings('profile'); await sleep(120);
+          canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+          document.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+          out.menuClickClean = fired === 0;          // nothing fired through the open panel
+          document.getElementById('btn-settings-close')?.click(); await sleep(120);
+          canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+          document.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+          out.worldClickFires = fired === 1;         // panel closed → the 3D click works again
+          st.onClick = prevClick;
+          document.dispatchEvent(new Event('pointerlockerror'));  // leave a clean, cleared window
+          await sleep(60);
+        } catch (e) { out.fatal = String(e.message || e).slice(0, 140); }
+        return out;
+      });
+      R.checks.t163MouseLock = { ...ml,
+        ok: !ml.fatal && ml.hooks === true && ml.lockedStub === true && ml.menuReleases === true
+        && ml.unlockedClean === true && ml.blockedRightAway === true && ml.blockClears === true
+        && ml.menuClickClean === true && ml.worldClickFires === true };
+    }
+
+    // ── t164: a SOLID world — the theater screen blocks feet, and the dance
+    // hall door no longer has a slow-walk dead band ──
+    {
+      const sw = await page.evaluate(async () => {
+        const w = window, s = w.__VB.scene;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = { fatal: null };
+        try {
+          // (a) the movie screen: walk at it from the stage — must STOP
+          s.debugTeleport(0, -15.0, 0, 0); await sleep(120);
+          for (let i = 0; i < 40; i++) s.debugStep(0, -0.05);   // 2 m of northward pressure
+          out.screenStopZ = +(s.debugPose().z.toFixed(3));
+          out.screenBlocks = out.screenStopZ > -16.45;           // stopped in FRONT of the screen plane (~ -16.68)
+          // …while the side lane beside the screen still reaches the wall
+          s.debugTeleport(4.2, -15.0, 0, 0); await sleep(120);
+          for (let i = 0; i < 40; i++) s.debugStep(0, -0.05);
+          out.sideLaneZ = +(s.debugPose().z.toFixed(3));
+          out.sideLaneOpen = out.sideLaneZ < -16.45;             // past the screen's block = the lane is walkable
+          // (b) the dance door dead band: MICRO-steps (the slow-walk repro —
+          // a fast step used to jump the 4 cm gap) must walk clean through
+          s.debugTeleport(5.0, 7.595, 0, 0); await sleep(120);   // hall side, door center line
+          let stall = 0, maxStall = 0, lastX = 5.0;
+          for (let i = 0; i < 150; i++) {
+            s.debugStep(0.02, 0);
+            const x = s.debugPose().x;
+            if (x > lastX + 1e-6) { stall = 0; } else { stall++; maxStall = Math.max(maxStall, stall); }
+            lastX = x;
+          }
+          out.doorFinalX = +lastX.toFixed(3);
+          out.doorMaxStall = maxStall;
+          out.doorPassesSlow = lastX > 6.9 && maxStall < 3;      // through the door, never stuck
+        } catch (e) { out.fatal = String(e.message || e).slice(0, 140); }
+        return out;
+      });
+      R.checks.t164SolidWorld = { ...sw,
+        ok: !sw.fatal && sw.screenBlocks === true && sw.sideLaneOpen === true
+        && sw.doorPassesSlow === true };
+    }
+
+    // ── t166: the DJ booth's FOLDER view — media selection at the booth from
+    // the DJ's own local folder(s) ──
+    {
+      const dj = await page.evaluate(async () => {
+        const w = window, VB = w.__VB, ui = VB.ui, st = VB.state;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = { fatal: null };
+        try {
+          // (a) the tab exists; with NO local music it explains where to add a
+          // folder (the bench stages a real local spot, so both branches are
+          // valid — assert whichever state the page is in renders correctly)
+          ui.openDj('booth'); await sleep(250);
+          document.getElementById('djp-tab-folder')?.click(); await sleep(150);
+          out.tabPresent = !!document.getElementById('djp-tab-folder');
+          const listA = document.getElementById('djp-list')?.textContent || '';
+          out.hasLocalMusic = (st.items || []).some(i => i.source === 'local');
+          out.hintShown = out.hasLocalMusic ? /📁/.test(listA) : /Admin/.test(listA);
+          document.getElementById('dj-close')?.click(); await sleep(150);
+          // (b) with folder music: grouped rows + one-tap queue-all
+          st.items.unshift(
+            { id: 'local:0/Night Set/ns1.mp3', source: 'local', type: 'album', key: '0/Night Set/ns1.mp3', title: 'Night Set One' },
+            { id: 'local:0/Night Set/ns2.mp3', source: 'local', type: 'album', key: '0/Night Set/ns2.mp3', title: 'Night Set Two' },
+            { id: 'local:0/Warmup/w1.mp3', source: 'local', type: 'album', key: '0/Warmup/w1.mp3', title: 'Warmup Track' });
+          ui.openDj('booth'); await sleep(250);
+          document.getElementById('djp-tab-folder')?.click(); await sleep(150);
+          const listTxt = document.getElementById('djp-list')?.textContent || '';
+          out.groupsShow = /📁 Night Set/.test(listTxt) && /📁 Warmup/.test(listTxt);
+          out.countsShow = /2 tracks/.test(listTxt) && /1 tracks/.test(listTxt);
+          const qall = document.querySelector('[data-qall]');
+          out.queueAllBtn = !!qall;
+          if (qall) { qall.click(); await sleep(120); }
+          out.queuedToast = /queued 2 from folder \(2 in list\)/.test(document.body.textContent || '');   // the toast starts with ✓
+          // per-track buttons still work in the folder view (queue the
+          // Warmup track — the Night Set ones are already in from ＋ all)
+          const rows = [...document.querySelectorAll('#djp-list [data-queue]')];
+          const qbtn = rows.find(b => (b.closest('[data-i]')?.textContent || '').includes('Warmup'));
+          if (qbtn) { qbtn.click(); await sleep(100); }
+          out.queuedOne = /queued for AUTO-DJ \(3\)/.test(document.body.textContent || '');
+          // search narrows the folder view
+          const srch = document.getElementById('djp-search');
+          if (srch) { srch.value = 'warmup'; srch.dispatchEvent(new Event('input', { bubbles: true })); await sleep(150); }
+          out.searchNarrows = /Warmup/.test(document.getElementById('djp-list')?.textContent || '')
+            && !/Night Set One/.test(document.getElementById('djp-list')?.textContent || '');
+          if (srch) { srch.value = ''; srch.dispatchEvent(new Event('input', { bubbles: true })); }
+          // cleanup: drop the synthetic items + close
+          st.items.splice(0, 3);
+          document.getElementById('dj-close')?.click(); await sleep(150);
+        } catch (e) { out.fatal = String(e.message || e).slice(0, 140); }
+        return out;
+      });
+      R.checks.t166DjFolder = { ...dj,
+        ok: !dj.fatal && dj.tabPresent === true && dj.hintShown === true && dj.groupsShow === true
+        && dj.countsShow === true && dj.queueAllBtn === true && dj.queuedToast === true
+        && dj.queuedOne === true && dj.searchNarrows === true };
+    }
+
+    // ── t167: the Discord chat is GLOBAL — empty/invalid never blanks it ──
+    {
+      const pre = (await j(await fetch(BASE + '/api/bootstrap', { headers: authH }))).community || {};
+      const put = await fetch(BASE + '/api/admin/config', { method: 'PUT', headers: { 'content-type': 'application/json', ...authH },
+        body: JSON.stringify({ community: { discord: '', channelId: '' } }) });
+      const bb = await j(await fetch(BASE + '/api/bootstrap'));
+      const cg = bb.community || {};
+      // blanking keeps the CURRENT values (and on a fresh install those ARE
+      // the factory defaults — verified by the staged-server bootstrap)
+      const freshDefault = 'https://discord.gg/rbq2m9zZBs';   // the factory default invite (defaultConfig)
+      R.checks.t167CommunityGlobal = { putOk: put.ok, discord: cg.discord, channelId: cg.channelId,
+        neverBlanks: !!cg.discord && !!cg.channelId && cg.discord === (pre.discord || freshDefault) && cg.channelId === (pre.channelId || '1547379611338285177'),
+        ok: put.ok && !!cg.discord && !!cg.channelId && cg.discord === (pre.discord || freshDefault) && cg.channelId === (pre.channelId || '1547379611338285177') };
+    }
+
+    // ── t162: live TV that survives the long haul ── the owner's report:
+    // "plays for periods of time then goes to a black screen and basically
+    // stops playing." Root cause: hls.js streams have NO src attribute, so
+    // the stall/error nudges read null and hard-failed the screen; and a
+    // frozen picture with no events at all sat there forever. Now: nudges
+    // re-attach the stream, a watchdog re-attaches on a frozen playhead,
+    // and hls.js runs a real recovery ladder.
+    {
+      const tvr = await page.evaluate(async () => {
+        const w = window, VB = w.__VB, s = VB.scene, tv = s.tv;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const out = { fatal: null };
+        try {
+          // 1) play a LIVE channel — HLS rides hls.js (MSE — no el.src)
+          tv.playItem({ id: 't162live', type: 'live', source: 'iptv', key: 'NewsOne.us', title: 'News One' });
+          await sleep(1000);
+          out.hlsAttached = tv.surfaceInfo().srcSet === true;
+          // 2) the OLD bug, verbatim: a 'stalled' event on an MSE stream read
+          // a null src attribute and black-screened INSTANTLY. Fire a real
+          // one — the screen must not fail, and the nudge re-attaches.
+          const r0 = tv.debugTvWatchdog();
+          const el = tv.mediaEl ? tv.mediaEl() : document.querySelector('video');
+          el?.dispatchEvent(new Event('stalled'));
+          await sleep(250);
+          const r1 = tv.debugTvWatchdog();
+          out.stalledNoBlack = !(r0.failed === false && r1.failed === true);
+          out.stalledReloaded = r1.reloads > (r0.reloads || 0);
+          // 3) the quiet freeze: no error events at all, the playhead just
+          // stops — the watchdog re-attaches within ~15 s and says so
+          tv.debugTvFreezePlayhead(() => 42.5);              // frozen mid-show
+          let st = null;
+          for (let i = 0; i < 4; i++) { st = tv.debugTvWatchdogForce(); await sleep(30); }
+          out.watchdogReloads = st.reloads;
+          out.watchdogFired = st.reloads >= 1;
+          out.plateSaysReconnect = /reconnecting/i.test(tv.debugTvWatchdog().plate || '');
+          // 4) sustained health pays the reload budget back
+          let ft = 100;
+          tv.debugTvFreezePlayhead(() => (ft += 1));         // advancing again
+          for (let i = 0; i < 7; i++) { st = tv.debugTvWatchdogForce(); await sleep(10); }
+          out.budgetRestored = st.reloads === 0;
+          tv.debugTvFreezePlayhead(null);                    // back to the real playhead
+          // 5) the hls.js recovery ladder itself — honest stub: network
+          //    fatals, media fatals, unclassifiable fatals
+          const hpUrl = performance.getEntriesByType('resource').find(r => r.name.includes('/js/hlsplay.js'))?.name || '/js/hlsplay.js';
+          const { attachStream: attach } = await import(hpUrl);
+          const instances = [];
+          class FakeHls {
+            constructor() { this.calls = { startLoad: 0, recoverMediaError: 0, destroy: 0, loadSource: 0, attachMedia: 0 }; this.handlers = {}; instances.push(this); }
+            static isSupported() { return true; }
+            on(ev, fn) { (this.handlers[ev] ||= []).push(fn); }
+            fire(d) { (this.handlers.error || []).forEach(fn => fn('error', d)); }
+            frag() { (this.handlers.fragbuffered || []).forEach(fn => fn()); }
+            startLoad() { this.calls.startLoad++; }
+            recoverMediaError() { this.calls.recoverMediaError++; }
+            destroy() { this.calls.destroy++; }
+            loadSource() { this.calls.loadSource++; }
+            attachMedia() { this.calls.attachMedia++; }
+          }
+          FakeHls.Events = { ERROR: 'error', FRAG_BUFFERED: 'fragbuffered' };
+          FakeHls.ErrorTypes = { MEDIA_ERROR: 'mediaError', NETWORK_ERROR: 'networkError', OTHER: 'other' };
+          const realHls = w.Hls;
+          let fatalReported = 0;
+          try {
+            w.Hls = FakeHls;
+            const v = document.createElement('video');
+            const h = attach(v, 'http://127.0.0.1:32790/hls/master.m3u8', { onError: () => { fatalReported++; } });
+            const i0 = instances[instances.length - 1];
+            i0.fire({ fatal: true, type: 'networkError' });
+            i0.fire({ fatal: true, type: 'networkError' });
+            i0.fire({ fatal: true, type: 'networkError' });
+            out.ladderStartLoads = i0.calls.startLoad === 3 && instances.length === 1 && fatalReported === 0;
+            i0.fire({ fatal: true, type: 'networkError' });            // 4th → the session is sick: full re-attach
+            out.ladderReloads = instances.length === 2 && instances[1].calls.loadSource === 1 && h.reloads === 1;
+            instances[1].frag();                                       // a segment LANDED → budget pays back
+            out.ladderBudgetBack = h.startLoads === 0;
+            instances[1].fire({ fatal: true, type: 'mediaError' });    // decode hiccup → recover, not rebuild
+            out.ladderMedia = instances[1].calls.recoverMediaError === 1 && instances.length === 2;
+            instances[1].fire({ fatal: true, type: 'other' });         // unclassifiable → report it, tear down
+            out.ladderGivesUp = fatalReported === 1 && instances[1].calls.destroy >= 1;
+          } finally { w.Hls = realHls; }
+          // 6) stop cleanly (watchdog disarmed, nothing playing)
+          tv.stop(); await sleep(400);
+          out.stoppedClean = !tv.state.playing && tv.debugTvWatchdog().armed === false;
+        } catch (e) { out.fatal = String(e.message || e).slice(0, 140); }
+        return out;
+      });
+      R.checks.t162TvStall = { ...tvr,
+        ok: !tvr.fatal && tvr.hlsAttached === true && tvr.stalledNoBlack === true && tvr.stalledReloaded === true
+        && tvr.watchdogFired === true && tvr.plateSaysReconnect === true && tvr.budgetRestored === true
+        && tvr.ladderStartLoads === true && tvr.ladderReloads === true && tvr.ladderBudgetBack === true
+        && tvr.ladderMedia === true && tvr.ladderGivesUp === true && tvr.stoppedClean === true };
+    }
+
+    R.checks.t160WorldChat = { mounted: tp.worldChatMounted, visible: tp.worldChatVisible, src: tp.worldChatSrc,
+      passive: tp.worldChatPassive, sized: tp.worldChatSized, lowZ: tp.worldChatLowZ, placed: tp.worldChatPlaced,
+      art: tp.worldChatArt, cornersOrdered: tp.worldChatCornersOrdered,
+      angledVisible: tp.worldChatAngledVisible, perspAngled: tp.worldChatPerspAngled, angledQuad: tp.worldChatAngledQuad,
+      hiddenWhileModal: tp.worldChatHiddenWhileModal, hiddenFar: tp.worldChatHiddenFar,
+      hiddenTurnedAway: tp.worldChatHiddenTurnedAway, hiddenInTheater: tp.worldChatHiddenInTheater,
+      ok: !tp.fatal && tp.worldChatMounted === true && tp.worldChatVisible === true
+      && /wizcord\.io\/iframe\?channelId=/.test(tp.worldChatSrc || '')
+      && tp.worldChatPassive === true && tp.worldChatSized === true && tp.worldChatLowZ === true
+      && tp.worldChatPlaced === true
+      && tp.worldChatArt === 'chat-glass' && tp.worldChatCornersOrdered === true
+      && tp.worldChatAngledVisible === true && tp.worldChatPerspAngled === true && tp.worldChatAngledQuad === true
+      && tp.worldChatHiddenWhileModal === true && tp.worldChatHiddenFar === true
+      && tp.worldChatHiddenTurnedAway === true && tp.worldChatHiddenInTheater === true };
+    // leave the server clean for the restore block
+    await put({ local: { on: false, spots: [] }, iptv: { url: '', sections: [], playlistUrl: '', packs: [] }, community: { discord: '', channelId: '' } });
+    await fetch(BASE + '/api/library?refresh=1', { headers: authH });
   }
 
   // ── restore the live preview: real archive.org defaults, no mocks ──

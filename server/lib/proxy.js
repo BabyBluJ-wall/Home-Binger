@@ -129,12 +129,21 @@ function fetchRaw(urlStr, headers, redirectsLeft = 5, retriesLeft = 1) {
 
 // t61: stream a file straight off THIS machine's disk (the local file
 // grabber). Full HTTP Range support — seeking works exactly like the proxy.
-export function streamLocalFile(req, res, absPath, mime) {
+// t154: download requests add Content-Disposition (attachment). dlName is
+// already sanitized by the caller (routes); empty/absent = plain streaming.
+export function dispositionHeader(name) {
+  const clean = String(name || '').replace(/[\r\n"\\]/g, '').trim().slice(0, 150) || 'home-binger-download';
+  const ascii = clean.replace(/[^\x20-\x7e]/g, '_').replace(/;/g, '');
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(clean)}`;
+}
+
+export function streamLocalFile(req, res, absPath, mime, dlName = '') {
   fs.stat(absPath, (e, st) => {
     if (e || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('file not found'); return; }
     const total = st.size;
     const head = (code, extra) => res.writeHead(code, {
-      'Content-Type': mime || 'application/octet-stream', 'Accept-Ranges': 'bytes', ...extra });
+      'Content-Type': mime || 'application/octet-stream', 'Accept-Ranges': 'bytes',
+      ...(dlName ? { 'Content-Disposition': dispositionHeader(dlName) } : {}), ...extra });
     const range = req.headers.range;
     const m = /^bytes=(\d*)-(\d*)$/.exec(String(range || ''));
     if (m) {
@@ -150,7 +159,9 @@ export function streamLocalFile(req, res, absPath, mime) {
   });
 }
 
-export async function proxyVideo(req, res, upstreamUrl) {
+// t154: opts = { dlName } — set Content-Disposition so the browser SAVES the
+// stream instead of playing it. Ranges stay on (resumable downloads).
+export async function proxyVideo(req, res, upstreamUrl, opts = {}) {
   let done = false, clientGone = false, repairs = 0, pipedTotal = 0;
   let currentUp = null;
 
@@ -237,6 +248,16 @@ export async function proxyVideo(req, res, upstreamUrl) {
   }
 
   const outHeaders = {};
+  if (opts.dlName) {
+    let name = String(opts.dlName);
+    if (!/\.[a-z0-9]{1,5}$/i.test(name)) {          // no extension → take it from the stream's mime
+      const mimeExt = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/x-matroska': '.mkv',
+        'audio/mpeg': '.mp3', 'audio/mp4': '.m4a', 'audio/flac': '.flac', 'audio/ogg': '.ogg',
+        'audio/wav': '.wav', 'video/quicktime': '.mov', 'video/x-msvideo': '.avi' }[String(up.headers['content-type'] || '').split(';')[0].trim().toLowerCase()];
+      if (mimeExt) name += mimeExt;
+    }
+    outHeaders['content-disposition'] = dispositionHeader(name);
+  }
   for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
     const v = up.headers[h];
     if (v) outHeaders[h] = v;

@@ -17,10 +17,11 @@
 //  (or ⏹ Stop) controls it.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1790065991054';   // t123: live TV (HLS) on the big screen
-import { LAYOUT } from './config.js?v=1790065991054';
-import { signTexture, hashString } from './textures.js?v=1790065991054';
-import { computeTheaterSpeakers } from './room.js?v=1790065991054';   // 8.2 layout (shared with the room mesh)
+import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1790983945165';   // t123: live TV (HLS) on the big screen
+import { createYtPlayer } from '/js/yt.js?v=1790983945165';   // t152: pasted YouTube links play on the big screen
+import { LAYOUT } from './config.js?v=1790983945165';
+import { signTexture, hashString } from './textures.js?v=1790983945165';
+import { computeTheaterSpeakers } from './room.js?v=1790983945165';   // 8.2 layout (shared with the room mesh)
 
 const TW = 512, TH = 288;   // screen canvas LOGICAL resolution (drawing code)
 const SS = 3.75;            // supersample: device canvas = TW×SS × TH×SS = 1920×1080.
@@ -172,6 +173,7 @@ export function buildTV(theme) {
       });
     };
     videoEl.addEventListener('error', () => {
+      if (hlsHandle) return;    // t162: an MSE stream's errors flow through hls.js — it runs its own recovery ladder, and only a spent ladder may fail the screen
       if (S.playing && S.playing.kind === 'video' && videoEl.getAttribute('src')) {
         setTimeout(resumeVideo, 600 * (resumeTries + 1));      // backoff between tries
       } else videoFailed = true;
@@ -179,10 +181,15 @@ export function buildTV(theme) {
     videoEl.addEventListener('playing', () => { resumeTries = 0; });
     let lastStallNudge = 0;
     videoEl.addEventListener('stalled', () => {
-      // data stopped arriving while playing → one nudge per 20 s
+      // data stopped arriving while playing → one nudge per 20 s.
+      // t162: an HLS stream has NO src attribute (hls.js feeds the element
+      // through MSE) — the old nudge read null and flipped the screen BLACK
+      // on the first hiccup, hours into a show. Live TV gets a fresh attach
+      // instead; plain files keep the reload-and-resume path.
       if (S.playing && S.playing.kind === 'video' && Date.now() - lastStallNudge > 20000) {
         lastStallNudge = Date.now();
-        resumeVideo();
+        if (hlsHandle?.reload) hlsHandle.reload();
+        else resumeVideo();
       }
     });
     // NOTE: no VideoTexture here on purpose — video frames are composited
@@ -231,6 +238,42 @@ export function buildTV(theme) {
       if (S.playing) onEnded();
     });
   }
+  // ── t162: the live-TV watchdog ── long shows used to die quietly: a
+  // stream can freeze with NO error event at all (buffer runs dry, a CDN
+  // stalls, a token lapses mid-show) and the picture just stops — a black
+  // screen you have to get up and fix. While an HLS channel plays, the
+  // playhead is sampled every 5 s; ~15 s without advancing re-attaches the
+  // stream (fresh manifest, back at the live edge) and says so on the plate.
+  // The TV heals itself; nobody misses the show.
+  let wdTimer = null, wdLast = -1, wdStuck = 0, wdHealthy = 0, wdReloads = 0, wdSampler = null;
+  const wdSample = () => (wdSampler ? wdSampler() : (videoEl ? videoEl.currentTime : -1));
+  function watchdogTick() {                    // one sample → decide → maybe re-attach
+    const t = wdSample();
+    let reloaded = false;
+    if (t > wdLast + 0.4) {                    // advancing — healthy
+      wdLast = t; wdStuck = 0;
+      if (++wdHealthy >= 6) wdReloads = 0;     // ~30 s of health earns reloads back
+    } else {
+      wdHealthy = 0;
+      if (++wdStuck >= 3 && wdReloads < 6) {   // ~15 s frozen → re-attach (bounded)
+        wdStuck = 0; wdReloads++; reloaded = true;
+        wdLast = -1;                           // re-baseline: a live rejoin may land EARLIER than the frozen playhead
+        setPlate(`${S.playing?.item?.title || 'The channel'} — reconnecting…`);
+        hlsHandle?.reload?.();
+      }
+    }
+    return { t: +t.toFixed(2), stuck: wdStuck, healthy: wdHealthy, reloads: wdReloads, reloaded };
+  }
+  function watchdogStart() {
+    watchdogStop();
+    wdLast = -1; wdStuck = 0; wdHealthy = 0; wdReloads = 0;
+    wdTimer = setInterval(() => {
+      if (S.playing?.kind !== 'video' || !hlsHandle?.reload || !videoEl || videoEl.paused) return;
+      watchdogTick();
+    }, 5000);
+  }
+  function watchdogStop() { if (wdTimer) { clearInterval(wdTimer); wdTimer = null; } }
+
   // WebAudio analyser gives REAL spectrum bars when audio actually streams.
   // ROOM-LOCAL SOUND: every media element routes through ONE shared graph
   // with a PannerNode parked at the screen — volume falls off with distance
@@ -380,8 +423,70 @@ export function buildTV(theme) {
       audioData = new Uint8Array(analyser.frequencyBinCount);
     } catch { analyser = null; /* visualizer falls back to animated bars */ }
   }
+  // ── t152: YOUTUBE — a pasted link plays in its own HTML layer (an iframe
+  // can't feed the WebGL screen texture), wearing the same #vb-fs-video
+  // styling as a full-screen movie, controlled entirely by OUR HUD. ──
+  let ytCtl = null, ytWrap = null;
+  function ytTeardown() {
+    if (ytCtl) { try { ytCtl.destroy(); } catch {} ytCtl = null; }
+    if (ytWrap) { try { ytWrap.remove(); } catch {} ytWrap = null; }
+  }
+  function ytStart(item) {
+    ytTeardown();
+    ytWrap = document.createElement('div');
+    const mount = document.createElement('div');
+    ytWrap.appendChild(mount);
+    // t157b: a playlist item's "key" is only a starting VIDEO when the link
+    // carried one (watch?v=…&list=…); a playlist-only link's key IS the
+    // playlist id — not a video id, and YouTube would embed a dead "Video
+    // unavailable" player that never starts (the TV froze on its title card).
+    const startId = item.list ? (item.key && item.key !== item.list ? item.key : null) : item.key;
+    ytCtl = createYtPlayer(mount, { videoId: startId, list: item.list || null }, {
+      onReady: (title) => {
+        if (S.playing?.kind !== 'youtube' || !ytCtl) return;
+        if (title) { S.playing.item.title = title; setPlate(title); }
+        hudShow();               // the HUD title catches the real video name
+        emit();
+      },
+      onTitle: (title) => {      // t157: playlist videos change on their own
+        if (S.playing?.kind !== 'youtube') return;
+        S.playing.item.title = title;
+        setPlate(title);
+        const t = document.getElementById('tv-fs-title');
+        if (t) t.textContent = title;
+        emit();
+      },
+      onEnded: () => onEnded(), // single-item queue → stop → idle screen
+      // t157b: dead links (private, removed, blocked from embedding, Mixes)
+      // must never hang the TV — say what happened, then hand control back.
+      onError: () => {
+        videoFailed = true;
+        setPlate(`${item.list ? 'That playlist' : 'That video'} can't play here — it may be private, removed, or blocked from embedding`);
+        setTimeout(() => { if (S.playing?.kind === 'youtube') onEnded(); }, 2600);
+      },
+      onAutoMuted: () => setPlate('Autoplayed muted — use the volume slider for sound')
+    });
+    enterFullscreen();           // the HTML layer is the ONLY view for YouTube
+    setPlate(item.title);
+  }
+  // a <video>-shaped shim over the controller — the HUD (seek bar, time,
+  // play state) reads/writes it like any media element
+  function ytShim() {
+    return {
+      get paused() { return !ytCtl || ytCtl.paused; },
+      get currentTime() { return ytCtl ? ytCtl.currentTime : 0; },
+      get duration() { return ytCtl ? ytCtl.duration : 0; },
+      get volume() { return ytCtl ? ytCtl.volume : 1; },
+      set currentTime(t) { ytCtl?.seekTo(t); },
+      buffered: { length: 1, end: () => (ytCtl?.duration || 0) }
+    };
+  }
+
   function stopMedia() {
+    ccOn = false;                                       // t153: every playback starts caption-state fresh
+    ytTeardown();                                       // t152: the YouTube layer goes first
     if (hlsHandle) { try { hlsHandle.destroy(); } catch {} hlsHandle = null; }   // t123: tear down any live-TV session
+    watchdogStop();                                    // t162: and its watchdog
     exitFullscreen();                                  // detach the DOM layer if up
     if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); }
     if (audioEl) { audioEl.pause(); audioEl.removeAttribute('src'); }
@@ -408,7 +513,10 @@ export function buildTV(theme) {
     const prevWasPlaying = prev?.tagName === 'VIDEO' && !videoEl.paused;
     if (prev) { prev.removeAttribute('id'); prev.parentNode?.removeChild(prev); }
     if (prevWasPlaying && S.playing?.kind === 'video') resumeAfterDetach();
-    if (S.playing.kind === 'video' && videoEl) {
+    if (S.playing.kind === 'youtube' && ytWrap) {        // t152: the iframe layer
+      ytWrap.id = 'vb-fs-video';                        // …wears the movie layer's styling
+      if (!ytWrap.parentNode) document.body.appendChild(ytWrap);
+    } else if (S.playing.kind === 'video' && videoEl) {
       videoEl.id = 'vb-fs-video';                     // the movie itself, native resolution
       videoEl.style.cssText = '';                     // t46: drop the hidden-attach styles — the
                                                       // fullscreen sheet owns the layout now
@@ -431,6 +539,18 @@ export function buildTV(theme) {
   }
   function exitFullscreen() {
     if (!fsActive) return;
+    // t152: YouTube exists ONLY in the HTML layer — leaving it stops playback
+    // (inline exit, then stop(); stop→stopMedia→exitFullscreen early-returns)
+    if (S.playing?.kind === 'youtube') {
+      fsActive = false;
+      document.body.classList.remove('tv-fullscreen');
+      document.body.classList.remove('fs-guide');
+      hudHide();
+      const yel = document.getElementById('vb-fs-video');
+      if (yel) { yel.removeAttribute('id'); yel.parentNode?.removeChild(yel); }
+      stop();
+      return;
+    }
     fsActive = false;
     document.body.classList.remove('tv-fullscreen');
     document.body.classList.remove('fs-guide');   // t134: un-dock the Guide if it's up
@@ -454,6 +574,40 @@ export function buildTV(theme) {
     }
   });
 
+  // ── t153: CLOSED CAPTIONS — one CC button, both engines. YouTube starts
+  // with captions OFF (yt.js enforces it — its own controls are stripped, so
+  // there'd be no other way to dismiss them); local/HLS files follow their
+  // text tracks. No captions available → no button.
+  let ccOn = false;
+  // the RAW <video>/<audio> element (mediaEl() returns the YT shim for YouTube)
+  function mediaElRaw() {
+    if (S.playing?.kind === 'audio') return audioEl || ensureAudio();
+    if (S.playing?.kind === 'video') return videoEl || ensureVideo();
+    return null;
+  }
+  function ccAvailable() {
+    if (S.playing?.kind === 'youtube') return true;          // YT (auto-)captions nearly always exist
+    const el = S.playing ? mediaElRaw() : null;
+    return !!(el?.textTracks && el.textTracks.length && [...el.textTracks].some(t => t.kind === 'subtitles' || t.kind === 'captions'));
+  }
+  function ccApply() {
+    if (S.playing?.kind === 'youtube') { ytCtl?.setCc?.(ccOn); return; }
+    const el = mediaElRaw();
+    if (!el?.textTracks) return;
+    let first = true;
+    for (const t of el.textTracks) {
+      if (t.kind !== 'subtitles' && t.kind !== 'captions') continue;
+      t.mode = ccOn && first ? 'showing' : 'hidden';
+      if (ccOn && first) first = false;
+    }
+  }
+  function ccPaint() {
+    const cc = byId('fs-cc'); if (!cc) return;
+    cc.classList.toggle('hidden', !ccAvailable());
+    cc.classList.toggle('cc-on', ccOn);
+    cc.title = ccOn ? 'Turn captions off' : 'Turn captions on';
+  }
+
   // ── full-screen HUD — seek bar + transport controls. While playing it
   // fades out after a few idle seconds (cursor + Esc hint go with it);
   // any mouse move or key press brings it back. Paused/seeking keeps it up.
@@ -470,6 +624,7 @@ export function buildTV(theme) {
     if (b && el.buffered.length) b.style.width = ((el.buffered.end(el.buffered.length - 1) / (d || 1)) * 100) + '%';
     const t = byId('fs-time'); if (t) t.textContent = `${fmtHud(el.currentTime)} / ${fmtHud(d)}`;
     const play = byId('fs-play'); if (play) play.textContent = el.paused ? '▶' : '⏸';
+    const ccb = byId('fs-cc'); if (ccb && ccb.classList.contains('hidden') && ccAvailable()) ccPaint();   // tracks can appear after playback starts
   }
   function hudWake() {
     if (!fsActive) return;
@@ -491,6 +646,7 @@ export function buildTV(theme) {
     if (vol && vi && document.activeElement !== vol) vol.value = Math.round(vi.target * 100);   // t63: the TARGET, not the pinned element
     clearInterval(hudTick);
     hudTick = setInterval(hudPaint, 250);
+    ccPaint();               // t153: the CC button reflects this item's caption reality
     hudPaint();
     hudWake();
   }
@@ -529,6 +685,11 @@ export function buildTV(theme) {
     if (vol && !vol.dataset.wired) {
       vol.dataset.wired = '1';
       vol.addEventListener('input', () => tvSelf && tvSelf.setVolume(vol.value / 100));
+    }
+    const ccBtn = byId('fs-cc');
+    if (ccBtn && !ccBtn.dataset.wired) {
+      ccBtn.dataset.wired = '1';
+      ccBtn.addEventListener('click', () => { ccOn = !ccOn; ccApply(); ccPaint(); });
     }
   }
 
@@ -609,10 +770,13 @@ export function buildTV(theme) {
   function startCurrent() {
     const item = S.queue.list[S.queue.index];
     if (!item) { stop(); return; }
+    ccOn = false;                                       // t153: fresh item → captions off (the button turns them on)
     S.playing = { item, kind: playKindFor(item) };
     if (fsActive) enterFullscreen();          // swap the DOM layer to the new kind (video ⇄ visualizer)
 
-    if (S.playing.kind === 'video') {
+    if (S.playing.kind === 'youtube') {                  // t152: pasted link
+      ytStart(S.playing.item);
+    } else if (S.playing.kind === 'video') {
       ensureVideo();
       if (!fsActive && (videoEl.id === 'vb-fs-video' || !videoEl.parentNode)) {
         videoEl.id = '';
@@ -627,11 +791,13 @@ export function buildTV(theme) {
       const vsrc = `/api/play/${item.source}/${encodeURIComponent(item.key)}`;
       if (isHlsItem(item, vsrc)) {
         hlsHandle = attachStream(videoEl, vsrc, { onError: () => { videoFailed = true; } });
+        watchdogStart();                     // t162: the frozen-picture self-heal
         videoEl.play().catch(() => {         // autoplay refused → retry muted (same ladder as direct)
           videoEl.muted = true;
           videoEl.play().catch(() => { videoFailed = true; });
         });
       } else {
+        watchdogStop();                      // plain files have their own resume path
         videoEl.src = vsrc;
         videoEl.play().catch(() => {         // autoplay refused → retry muted
           videoEl.muted = true;
@@ -670,6 +836,7 @@ export function buildTV(theme) {
   const VIDEO_EXT = /\.(mp4|m4v|webm|mkv|mov|avi)$/i;
   const AUDIO_EXT = /\.(mp3|wav|ogg|flac|m4a|aac|opus)$/i;
   function playKindFor(item) {
+    if (item?.type === 'youtube') return 'youtube';        // t152: a pasted link — its own kind
     const f = `${item.key || ''} ${item.file || ''}`;
     if (VIDEO_EXT.test(f)) return 'video';
     if (AUDIO_EXT.test(f)) return 'audio';
@@ -728,6 +895,7 @@ export function buildTV(theme) {
 
   // IDLE 'standby': the classic starry "NOW PLAYING: NOTHING" card (back by
   // popular demand — it's a selectable option, no longer the default)
+  let standbyTxt = null, standbyTxtAccent = null;    // t146: static headline raster once, not 15×/s
   function drawStandby(dt) {
     bgGradient(228, 210);
     for (let i = 0; i < 26; i++) {
@@ -736,16 +904,23 @@ export function buildTV(theme) {
       g.fillStyle = `rgba(255,255,255,${0.12 + 0.5 * Math.abs(Math.sin(t * 1.4 + i))})`;
       g.fillRect(x, y, 2, 2);
     }
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = 'rgba(255,255,255,0.6)';
-    g.font = '700 17px system-ui, sans-serif';
-    g.fillText('NOW PLAYING', TW / 2, 74);
-    g.fillStyle = THEME_ACCENT;
-    g.font = 'italic 900 58px system-ui, sans-serif';
-    g.fillText('NOTHING', TW / 2, 118);
-    g.fillStyle = 'rgba(255,255,255,0.75)';
-    g.font = '500 15px system-ui, sans-serif';
-    g.fillText('bring a movie case to the theater deck', TW / 2, 162);
+    if (!standbyTxt || standbyTxtAccent !== THEME_ACCENT) {
+      standbyTxt = document.createElement('canvas');
+      standbyTxt.width = TW * SS; standbyTxt.height = 200 * SS;   // supersampled — text stays crisp
+      const b = standbyTxt.getContext('2d'); b.scale(SS, SS);
+      b.textAlign = 'center'; b.textBaseline = 'middle';
+      b.fillStyle = 'rgba(255,255,255,0.6)';
+      b.font = '700 17px system-ui, sans-serif';
+      b.fillText('NOW PLAYING', TW / 2, 74);
+      b.fillStyle = THEME_ACCENT;
+      b.font = 'italic 900 58px system-ui, sans-serif';
+      b.fillText('NOTHING', TW / 2, 118);
+      b.fillStyle = 'rgba(255,255,255,0.75)';
+      b.font = '500 15px system-ui, sans-serif';
+      b.fillText('bring a movie case to the theater deck', TW / 2, 162);
+      standbyTxtAccent = THEME_ACCENT;
+    }
+    g.drawImage(standbyTxt, 0, 0, TW, 200);          // one blit — t146
     const fy = 216 + Math.sin(t * 2) * 3;
     g.strokeStyle = 'rgba(255,210,63,0.8)'; g.lineWidth = 2;
     g.strokeRect(TW / 2 - 60, fy - 12, 120, 24);
@@ -950,6 +1125,13 @@ export function buildTV(theme) {
 
   // ═════════ per-frame update ═════════
   let lastCam = null;                                   // t53: gate target reads need a camera
+  // t146: the idle screen is a BILLBOARD — no paint (and no ~8 MB canvas
+  // upload) while it's out of the camera's view; the idle twinkle also
+  // slows with distance. Walking the store used to pay full-HD repaints
+  // 15×/s whenever the screen was merely on-screen — the "store feels
+  // slow when walking around" report.
+  let screenSphere = null;
+  const _frustum = new THREE.Frustum(), _projScreen = new THREE.Matrix4();
   function update(dt, camera) {
     lastCam = camera;
     if (actx && camera) {
@@ -1001,22 +1183,31 @@ export function buildTV(theme) {
       videoQuad.visible = !!videoLive && !fsActive;   // DOM layer owns the picture in fullscreen
       if (videoQuad.visible) fitVideoQuad();
     }
+    if (camera && !screenSphere) screenSphere = new THREE.Sphere(screen.getWorldPosition(new THREE.Vector3()), SCREEN_W * 0.75);
+    let screenVisible = true;                        // t146: billboard gate
+    if (camera && screenSphere) {
+      _frustum.setFromProjectionMatrix(_projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      screenVisible = _frustum.intersectsSphere(screenSphere);
+    }
+    const scrDist = camera && screenSphere ? camera.position.distanceTo(screenSphere.center) : 0;
+    const idleRate = scrDist > 12 ? 0.2 : 0.1;       // t146: idle twinkle 5 fps across the store, 10 fps up close
     const modeChanged = mode !== lastMode;
     let painted = false;
     if (mode === 'video' && !videoLive) {             // streaming… show the reel (15 fps is plenty)
-      if (modeChanged || t - lastPaint >= 0.066) { drawBuffering(S.playing.item); painted = true; }
+      if (screenVisible && (modeChanged || t - lastPaint >= 0.066)) { drawBuffering(S.playing.item); painted = true; }
       glow.color.set('#7aa7ff');
     } else if (videoLive) {
       // BLACK letterbox behind the film — once per playback session (t44:
       // the screen's base is black, top and bottom bars included)
-      if (modeChanged || !barsBlack) { g.fillStyle = '#000'; g.fillRect(0, 0, TW, TH); barsBlack = true; painted = true; }
+      if (screenVisible && (modeChanged || !barsBlack)) { g.fillStyle = '#000'; g.fillRect(0, 0, TW, TH); barsBlack = true; painted = true; }
       glow.color.set('#9fc4ff');
     } else if (mode === 'white') {
-      if (modeChanged) { drawWhite(); painted = true; }               // static — one paint total
+      if (screenVisible && modeChanged) { drawWhite(); painted = true; }
       glow.color.set('#86b8ff');
     } else {                                          // standby / loop / card / audio: 15 fps
-      if (modeChanged || t - lastPaint >= 0.066) {
-        if (mode === 'card') drawTitlecard(S.playing.item);
+      const rate = (mode === 'standby' || mode === 'loop') ? idleRate : 0.066;   // t146: idle modes distance-throttled
+      if (screenVisible && (modeChanged || t - lastPaint >= rate)) {
+        if (mode === 'card' || mode === 'youtube') drawTitlecard(S.playing.item);   // t152: the big title card while the layer plays
         else if (mode === 'audio') drawVisualizer(S.playing.item);
         else if (mode === 'loop') drawLoop();
         else drawStandby();
@@ -1071,14 +1262,23 @@ export function buildTV(theme) {
       if (videoEl) videoEl.muted = muted;
       if (audioEl) audioEl.muted = muted;
     },
-    isMuted() { return !videoEl || videoEl.muted; },
+    isMuted() {
+      if (S.playing?.kind === 'youtube') return !ytCtl || ytCtl.volume === 0;   // t152
+      return !videoEl || videoEl.muted;
+    },
     // ── TV REMOTE (HUD controls) ──
     mediaEl() {
+      if (S.playing?.kind === 'youtube') return ytShim();   // t152: HUD reads/writes this like a <video>
       if (S.playing?.kind === 'audio') return audioEl || ensureAudio();
       if (S.playing?.kind === 'video') return videoEl || ensureVideo();
       return null;                       // 'card' items have no timeline
     },
     togglePlay() {
+      if (S.playing?.kind === 'youtube') {                  // t152
+        if (!ytCtl) return;
+        ytCtl.paused ? ytCtl.play() : ytCtl.pause();
+        return;
+      }
       const el = this.mediaEl();
       if (!el) return;
       if (el.paused) el.play().catch(() => { videoFailed = true; });
@@ -1092,6 +1292,7 @@ export function buildTV(theme) {
     setVolume(v) {                        // 0..1 — t60: ONE smoothed gain node
       const t = Math.max(0, Math.min(1, +v || 0));
       volTarget = t;                      // remembered pre-play — the graph picks it up
+      if (S.playing?.kind === 'youtube') { ytCtl?.setVolume(t); return; }   // t152: the player owns it
       const el = this.mediaEl();
       if (el) { el.volume = 1; el.muted = t === 0; }
       for (const vg of volGains) vg.gain.setTargetAtTime(t, actx.currentTime, 0.03);   // t63: every element's node ramps together
@@ -1111,6 +1312,8 @@ export function buildTV(theme) {
     // ⏭ PLAY NEXT — insert into the queue right after the current item
     playNext(item) {
       if (!item?.id) return 'ignored';
+      // t148: LIVE TV never joins a playlist (the owner's rule) — it plays now
+      if (item.type === 'live') { this.playItem(item); return 'now'; }
       if (!S.playing) { this.playItem(item); return 'now'; }
       const q = S.queue || (S.queue = { list: [S.playing.item], index: 0, mode: 'off' });
       q.list.splice(q.index + 1, 0, item);
@@ -1118,6 +1321,12 @@ export function buildTV(theme) {
     },
     // jump to a queue entry (click in the queue panel)
     step(dir) {
+      // t157: a YouTube PLAYLIST answers ⏭/⏮ itself (the queue holds only
+      // the playlist as one item — the list's own order is the order)
+      if (S.playing?.kind === 'youtube' && ytCtl?.playlist) {
+        dir > 0 ? ytCtl.next() : ytCtl.prev();
+        return;
+      }
       const q = S.queue;
       if (!q?.list?.length) return;
       const n = q.list.length;
@@ -1157,6 +1366,10 @@ export function buildTV(theme) {
         letterboxBlack: barsBlack };
     },
     getPaintCount() { return paintCount; },
+    debugTvWatchdog: () => ({ armed: !!wdTimer, playing: S.playing?.kind || null, hls: !!hlsHandle,
+      failed: videoFailed, reloads: hlsHandle ? (hlsHandle.reloads ?? 0) : 0, plate: plateText || '' }),   // t162 tests: the self-heal state
+    debugTvWatchdogForce: () => watchdogTick(),          // t162 tests: run ONE sample→decide cycle now
+    debugTvFreezePlayhead: (fn) => { wdSampler = fn; },  // t162 tests: fake a frozen (or advancing) playhead
     enterFullscreen,
     exitFullscreen,
     fullscreenActive: () => fsActive,

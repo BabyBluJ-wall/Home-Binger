@@ -8,12 +8,12 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1790065991054';
-import { api } from './api.js?v=1790065991054';
-import { initUI } from './ui.js?v=1790065991054';
-import { createScene } from './store3d/scene.js?v=1790065991054';
-import { STORE, SUPPORT } from './store3d/config.js?v=1790065991054';
-import { initGuide, guideInfo, openGuide } from './guide.js?v=1790065991054';   // t123: the TV Guide
+import { state } from './state.js?v=1790983945165';
+import { api } from './api.js?v=1790983945165';
+import { initUI } from './ui.js?v=1790983945165';
+import { createScene } from './store3d/scene.js?v=1790983945165';
+import { STORE, SUPPORT } from './store3d/config.js?v=1790983945165';
+import { initGuide, guideInfo, openGuide } from './guide.js?v=1790983945165';   // t123: the TV Guide
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -134,7 +134,20 @@ async function boot() {
   };
   scene.setItems(state.items, prefs.sorting, onStockProgress, state.shelves);
   scene.setDancePrefs?.(state.prefs.dance);   // t86: dance-floor prefs at boot
+  scene.setControlPrefs?.(state.prefs.controls);   // t161: look sensitivity + speed tier
+  // t161: the X key cycles walk → jog → run — say so, so nobody has to guess
+  document.addEventListener('vb-speed', (e) => {
+    const t = e.detail?.tier;
+    toastIt(t === 'run' ? '💨 Running — press X to slow down'
+      : t === 'jog' ? '🏃 Jogging — press X again to run'
+      : '🚶 Walking — press X to jog');
+  });
   scheduleLocalThumbs();                      // t89: grabber case art, once the store settles
+  // t149: the version label under the sidebar's front-entrance button —
+  // from the bootstrap payload (the server reads package.json), so bumping
+  // the version at publish time is the ONLY step needed. No extra fetch.
+  { const v = state.boot?.version; const el = document.getElementById('side-version');
+    if (el && v) el.textContent = `Home Binger™ · v${v}`; }
   fill.style.width = '90%';
 
   // TV config (idle screen; playback is triggered by clicking shelf cases)
@@ -208,6 +221,7 @@ async function boot() {
     currentAccent: () => state.prefs.theme.accent,
     applySorting: (sorting) => { scene.applySorting(sorting); toastIt('Shelves restocked!'); },
     applyDancePrefs: (p) => scene.setDancePrefs?.(p),       // t86: dance-floor light prefs
+    applyControlPrefs: (p) => scene.setControlPrefs?.(p),   // t161: look sensitivity + speed tier
     checkVersion,                                           // t96: new-version notice (launch check)
     genLocalThumbs: () => scheduleLocalThumbs(),            // t89: grabber case art (also auto-runs)
     respawn: () => { scene.controls.reset(); },
@@ -276,6 +290,15 @@ async function boot() {
     shelfUnits: () => scene.shelfUnits(),
     previewShelves: (map) => scene.setShelfAssignment(map),
     playItem: (item) => {
+      // t148 (the owner's rule): LIVE TV NEVER STARTS A PLAYLIST — playlists
+      // are for shelved media only. A channel is a single stream you watch,
+      // not a track in a queue (the old seeding made every channel-swap seed
+      // a list of EVERY live channel — hundreds of "next up" entries).
+      if (item?.type === 'live') {
+        scene.playItem(item);
+        toastIt(`▶ Now on the store TV: ${item.title}`);
+        return;
+      }
       // seed the TV queue with the item's own section (its Plex/Jellyfin
       // library, or media type), in the current sort order — repeat plays
       // from there (see the TV remote's repeat button)
@@ -286,6 +309,24 @@ async function boot() {
       scene.playItem(item, list.length ? { list, index } : undefined);
       toastIt(`▶ Now playing on the store TV: ${item.title}`);
     },
+    // t152: a YouTube link from the Guide's search — a one-off stream, never
+    // a queue entry, never shelved. t157: (id, list) with a list plays the
+    // whole PLAYLIST (id = the starting video when the link carried both).
+    playYouTube: (id, list) => {
+      if (!id && !list) return;
+      const key = id || list;
+      scene.playItem({
+        // t157b: a watch?v=…&list=… link gets its OWN queue id (yt:<vid>) —
+        // with the shared yt:pl:<list> id, replaying "the same playlist" via
+        // a different starting link silently reused the OLD queue item and
+        // started at video 1 instead of the linked one.
+        id: list ? (id ? 'yt:' + id : 'yt:pl:' + list) : 'yt:' + id,
+        type: 'youtube', source: 'youtube', key,
+        ...(list ? { list } : {}),
+        title: list ? 'YouTube playlist' : 'YouTube'
+      });
+      toastIt(list ? '▶ Now playing the playlist on the store TV' : '▶ Now playing on the store TV: YouTube');
+    },
     reloadTv,
     rebuildStore: async () => {
       // prefs may have changed after login/logout/policies
@@ -293,6 +334,7 @@ async function boot() {
       scene.applyTheme(state.prefs.theme);
       scene.applySorting(state.prefs.sorting);
       scene.setDancePrefs?.(state.prefs.dance);   // t86
+      scene.setControlPrefs?.(state.prefs.controls);   // t161
       scheduleLocalThumbs();                      // t89: new files may have been grabbed
       ui.updateSidebar();
     },
@@ -430,10 +472,12 @@ async function boot() {
     scene.carry(null);
   };
   scene.onJukeboxClick = () => ui.openDj('jukebox');
+  scene.onHelpDeskClick = () => ui.openHelpDesk();   // t155: the PC by the theater door
 
   // t123: the TV GUIDE — lives in the theater (G key / remote 📖 button)
   initGuide({
     playItem: (it) => ctx.playItem(it),
+    playYouTube: (id, list) => ctx.playYouTube(id, list),     // t152: pasted link → the store TV · t157: playlists too
     playerRoom: () => ctx.playerRoom(),
     getTv: () => ctx.getTv(),
     toast: (msg, warn) => toastIt(msg, warn)
@@ -538,10 +582,12 @@ const thumbTried = new Set();
 function scheduleLocalThumbs() {
   setTimeout(async () => {
     if (document.hidden) return;                    // tries again on next rebuild/visit
+    // t151: FULL coverage — every grabber video gets its picture, one at a
+    // time (the old 6-per-pass cap left most of a real library artless)
     const vids = (state.items || [])
-      .filter(i => i.source === 'local' && i.type === 'movie' && !thumbTried.has(i.id))
-      .slice(0, 6);                                 // gentle: a few per pass
+      .filter(i => i.source === 'local' && i.type === 'movie' && !thumbTried.has(i.id));
     for (const item of vids) {
+      if (document.hidden) return;                  // picked back up on the next pass
       thumbTried.add(item.id);
       try {
         const r = await fetch(`/img/local/${encodeURIComponent(item.key)}`);
@@ -554,10 +600,13 @@ function scheduleLocalThumbs() {
           body: JSON.stringify({ dataUrl })
         });
         scene.refreshPosters?.([item]);             // repaint the case right now
+        await new Promise(res => setTimeout(res, 350));   // gentle on the CPU/GPU
       } catch { thumbTried.delete(item.id); }       // transient — a later visit retries
     }
   }, 1500);
 }
+// t151: a hidden tab pauses the pass — coming back picks it up
+document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleLocalThumbs(); });
 
 // Seek to ~15% in, paint one frame onto a small canvas, return a JPEG data URL.
 function grabVideoFrame(url) {
@@ -573,14 +622,25 @@ function grabVideoFrame(url) {
     const timer = setTimeout(() => finish(null), 12000);
     v.onerror = () => finish(null);                 // codec the browser can't read → skip
     v.onloadeddata = () => {
-      try { v.currentTime = Math.min(Math.max(2, (v.duration || 0) * 0.15), 90); }
-      catch { finish(null); }
+      // t151: streams with no duration header (recorded .webm/.mkv, raw
+      // captures) must not seek to a garbage target — duration NaN/null → 2s
+      const dur = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+      const target = dur > 4 ? dur * 0.15 : 2;
+      try { v.currentTime = Math.min(Math.max(2, target), Math.max(2, dur || 90)); }
+      catch { finish(null); return; }
+      // t151: if the seek never lands (odd containers), draw the frame we
+      // already have after a beat instead of giving up
+      setTimeout(() => { if (v.onseeked) v.onseeked(); }, 4000);
     };
     v.onseeked = () => {
+      v.onseeked = null;
       try {
         const w = 240, h = Math.max(1, Math.round((v.videoHeight || 320) / ((v.videoWidth || 240) / w)));
         const c = document.createElement('canvas'); c.width = w; c.height = h;
-        c.getContext('2d').drawImage(v, 0, 0, w, h);
+        // t151: willReadFrequently forces a CPU-backed canvas — a GL canvas
+        // makes the draw fight the 3D store for the (software) GPU and can
+        // starve the whole page on weak/uncelerated machines
+        c.getContext('2d', { willReadFrequently: true }).drawImage(v, 0, 0, w, h);
         finish(c.toDataURL('image/jpeg', 0.72));
       } catch { finish(null); }
     };

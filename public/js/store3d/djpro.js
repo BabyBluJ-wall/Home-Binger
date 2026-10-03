@@ -18,7 +18,7 @@ const djpUi = { eq: [{}, {}], trim: [1, 1], fader: [1, 1], rate: [1, 1], xf: 0.5
   pitch: 0, pitchRange: 8, xfAssign: ['a', 'b'], color: [0.5, 0.5], colorMode: ['filter', 'filter'] };   // t108
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1790065991054';
+import { LAYOUT } from './config.js?v=1790983945165';
 
 const D = LAYOUT.room.l / 2;
 const AUDIO_RE = /\.(mp3|wav|ogg|oga|flac|m4a|aac|opus)$/i;
@@ -1312,6 +1312,7 @@ export function createDjPro() {
       </div>
       <div class="djp-row">
         <button class="djp-btn" id="djp-tab-lib">📚 Library</button>
+        <button class="djp-btn" id="djp-tab-folder" title="Music from your own folders — Admin → Servers → Local files">📁 Folders</button>
         <button class="djp-btn" id="djp-tab-crate" title="Your staging crate — tracks parked for later">🏷️ Staging (0)</button>
         <input id="djp-search" placeholder="Search title / BPM / key…" style="flex:1;background:var(--djp-deep);border:1px solid var(--djp-line);color:var(--vb-ink,#dfe6ff);border-radius:6px;padding:6px 8px" title="Filter the playlist">
         <select id="djp-fkey" title="Camelot key filter"><option value="">Key: All</option></select>
@@ -1366,10 +1367,80 @@ export function createDjPro() {
         fkSel.value = keys.includes(cur) ? cur : '';
       }
       root.querySelector('#djp-tab-crate').textContent = `🏷️ Staging (${crate.length})`;
+      root.querySelector('#djp-tab-folder').textContent = `📁 Folders${folderRows.length ? ' (' + folderRows.length + ')' : ''}`;
       listEl.innerHTML = '';
+      // t166 (owner: "media selection for dj booth — djs set up what they
+      // want in the booth from their own folder"): the FOLDER view — every
+      // track from the store's local folders (Admin → Servers → Local
+      // files), grouped by the folder it lives in, with a one-tap
+      // "queue the whole folder" for building the night's set.
+      if (listTab === 'folder') { renderFolder(); listLimit = LIST_CEIL; setMoreNote(); wireListRows(); return; }
       renderRows(0, shown);
       setMoreNote();
       wireListRows();
+    }
+    // t166: the local-folder rows for the current search/filter — built from
+    // the same `items` the booth was mounted with, source 'local' only.
+    let folderRows = [];
+    function computeFolderRows() {
+      const q = (root.querySelector('#djp-search').value || '').toLowerCase();
+      return items.map((it, i) => ({ it, i }))
+        .filter(({ it }) => it.source === 'local' && (!q || (it.title || '').toLowerCase().includes(q)));
+    }
+    function renderFolder() {
+      const fk = root.querySelector('#djp-fkey')?.value || '';
+      const b1 = parseFloat(root.querySelector('#djp-fbpm1')?.value) || 0;
+      const b2 = parseFloat(root.querySelector('#djp-fbpm2')?.value) || 999;
+      const rows = folderRows.filter(({ it }) => {
+        const m = meta[it.id] || {};
+        if (fk && m.key !== fk) return false;
+        if (m.bpm && (m.bpm < b1 || m.bpm > b2)) return false;
+        return true;
+      });
+      // group by containing folder: local keys are '<spot>/<path>/file.ext'
+      const groups = new Map();
+      for (const r of rows) {
+        const segs = String(r.it.key || '').split('/');
+        const folder = segs.length >= 2 ? segs[segs.length - 2] : '(loose tracks)';
+        if (!groups.has(folder)) groups.set(folder, []);
+        groups.get(folder).push(r);
+      }
+      listTotal = rows.length;
+      listRowsCache = rows;
+      if (!rows.length) {
+        listEl.innerHTML = items.some(it => it.source === 'local')
+          ? '<div class="djp-rowitem" style="opacity:.65;cursor:default">No folder tracks match the current search/filters.</div>'
+          : `<div class="djp-rowitem" style="opacity:.65;cursor:default">No folder music yet — add the folder your music lives in under
+             <b>&nbsp;☰ Menu → Admin → Servers → Local files</b>, and everything in it shows up here, grouped and ready to queue.</div>`;
+        return;
+      }
+      const actKey = decks[activeDeck].key?.camelot || null;
+      let html = '';
+      let shownN = 0;
+      for (const [folder, rs] of groups) {
+        if (shownN >= LIST_CEIL) break;
+        html += `<div class="djp-rowitem" style="background:var(--djp-deep);font-weight:700;cursor:default">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📁 ${folder}</span>
+          <span class="djp-meta">${rs.length} tracks</span>
+          <button class="djp-btn" data-qall="${rs.map(r => r.i).join(',')}" title="Queue the whole folder for AUTO-DJ">＋ all</button>
+        </div>`;
+        for (const { it, i } of rs.slice(0, Math.max(0, LIST_CEIL - shownN))) {
+          shownN++;
+          const m = meta[it.id] || {};
+          const harm = CAMELOT_OK(actKey, m.key);
+          const staged = crate.includes(it.id);
+          html += `<div class="djp-rowitem ${harm ? 'harmonic' : ''}" data-i="${i}">
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.title || 'untitled'}</span>
+            <span class="djp-meta">${m.bpm ? Math.round(m.bpm) + ' BPM' : '—'}</span>
+            <span class="djp-meta">${m.key || '—'}</span>
+            <button class="djp-btn" data-loada="${i}" title="Load onto DECK A">A</button>
+            <button class="djp-btn" data-loadb="${i}" title="Load onto DECK B">B</button>
+            <button class="djp-btn" data-queue="${i}" title="Feed AUTO-DJ's queue">Q</button>
+            <button class="djp-btn ${staged ? 'on' : ''}" data-stage="${i}" title="Park in the staging crate">🏷️</button>
+          </div>`;
+        }
+      }
+      listEl.innerHTML = html;
     }
     function renderRows(from, to) {                  // t113: the row factory — full renders and scroll appends share it
       const actKey = decks[activeDeck].key?.camelot || null;
@@ -1418,9 +1489,26 @@ export function createDjPro() {
         } else if (!inQ(autoQueue)) { autoQueue.push(it); toastIt(` queued for AUTO-DJ (${autoQueue.length})`); }
       });
       wire('data-stage', (i) => { const it = items[i]; if (!it) return; const k = crate.indexOf(it.id); if (k >= 0) crate.splice(k, 1); else crate.push(it.id); saveCrate(); renderList(); });
+      // t166: "＋ all" — queue a whole folder in one tap (dedup by id, same
+      // semantics as the per-track Q button)
+      listEl.querySelectorAll('[data-qall]').forEach(b => b.onclick = (e) => {
+        e.stopPropagation();
+        const idxs = b.dataset.qall.split(',').map(Number).filter(n => Number.isFinite(n));
+        let added = 0;
+        for (const i of idxs) {
+          const it = items[i]; if (!it) continue;
+          const inQ = (a) => a.some(x => x.id === it.id);
+          if (autoDj.on) {
+            if (!inQ(autoDj.queue)) autoDj.queue.push(it);
+            if (!inQ(autoQueue)) { autoQueue.push(it); added++; }
+          } else if (!inQ(autoQueue)) { autoQueue.push(it); added++; }
+        }
+        toastIt(` queued ${added} from folder (${autoQueue.length} in list)`);
+      });
       listEl.querySelectorAll('[data-i]').forEach(r => r.onclick = () => { selIdx = Number(r.dataset.i); paint(); });
     }
     listEl.addEventListener('scroll', () => {        // t113: near the bottom → append another chunk
+      if (listTab === 'folder') return;             // t166: the folder view renders whole — nothing to append
       if (listLimit >= Math.min(listTotal, LIST_CEIL)) return;
       if (listEl.scrollTop + listEl.clientHeight < listEl.scrollHeight - 320) return;
       let guard = 0;
@@ -1446,11 +1534,15 @@ export function createDjPro() {
       paint();
     }
     const autoQueue = [];                                  // t108: AUTO-DJ's feeding list
-    root.querySelector('#djp-search').oninput = resetList;   // t113: a new view starts at the top, one chunk
+    // t113: a new view starts at the top, one chunk — t166: folder rows
+    // re-derive from the live search text each time
+    const resetListView = () => { folderRows = computeFolderRows(); resetList(); };
+    root.querySelector('#djp-search').oninput = resetListView;
     root.querySelector('#djp-fkey').onchange = resetList;
     root.querySelector('#djp-fbpm1').oninput = resetList;
     root.querySelector('#djp-fbpm2').oninput = resetList;
     root.querySelector('#djp-tab-lib').onclick = () => { listTab = 'lib'; resetList(); };
+    root.querySelector('#djp-tab-folder').onclick = () => { listTab = 'folder'; folderRows = computeFolderRows(); resetList(); };
     // t108b: DANCE-FLOOR LIGHTS — the booth owns them now (moved out of the
     // jukebox menu per the owner). Prefs ride state.prefs.dance (server-side,
     // so they're remembered across reboots, not just reopens).

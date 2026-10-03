@@ -4,7 +4,7 @@
 //  Holds what /api/bootstrap gave us plus the current library, and fans out
 //  changes to whoever subscribed (3D scene, settings UI, …).
 // ─────────────────────────────────────────────────────────────────────────────
-import { api } from './api.js?v=1790065991054';
+import { api } from './api.js?v=1790983945165';
 
 export const state = {
   boot: null,       // /api/bootstrap payload (me, prefs, locks, defaults, tv…)
@@ -39,6 +39,11 @@ export const state = {
     if (patch.dance) boot.prefs.dance = { ...(boot.prefs.dance || {}), ...patch.dance };   // t86: dance-floor lights
     if (patch.sources !== undefined) boot.prefs.sources = patch.sources;
     if (Array.isArray(patch.guideFavs)) boot.prefs.guideFavs = patch.guideFavs;   // t128: favorite channels
+    // t165 (owner: "slider needs to stay where it's set"): the controls pref
+    // (look speed + pace) was silently DROPPED here — the local merge and the
+    // POST body both lacked it, so the settings UI said "saved" and nothing
+    // ever reached the server. It rides along like every other pref now.
+    if (patch.controls) boot.prefs.controls = { ...(boot.prefs.controls || { look: 0.55, base: 'walk' }), ...patch.controls };
     try {
       const saved = await api.savePrefs({
         theme: patch.theme ? boot.prefs.theme : undefined,
@@ -48,7 +53,8 @@ export const state = {
         tv: patch.tv ? boot.prefs.tv : undefined,
         dance: patch.dance ? boot.prefs.dance : undefined,
         sources: patch.sources !== undefined ? patch.sources : undefined,
-        guideFavs: Array.isArray(patch.guideFavs) ? patch.guideFavs : undefined   // t128
+        guideFavs: Array.isArray(patch.guideFavs) ? patch.guideFavs : undefined,   // t128
+        controls: patch.controls ? boot.prefs.controls : undefined   // t165: look speed + pace REALLY save
       });
       if (saved?.prefs) boot.mySavedPrefs = saved.prefs;
     } catch (e) {

@@ -24,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import crypto from 'node:crypto';
 import {
-  getConfig, saveConfig, deepMerge, defaultConfig, defaultPrefs
+  getConfig, saveConfig, deepMerge, defaultConfig, defaultPrefs, normalizeChannelId, RETIRED_CHANNEL_IDS
 } from '../lib/store.js';
 import {
   hashPassword, verifyPassword, findUser, publicUser, createSession, destroySession,
@@ -38,6 +38,7 @@ import { friendAdapter, findShareEntry, friendSourceIds, shareableWith, sectionK
 import fs from 'node:fs';                                 // t66: grabber spot validation
 import path from 'node:path';                             // t89: thumb cache dir
 import { DATA_DIR } from '../lib/store.js';                // t89: grabbed-file case art
+import { readCoverArt } from '../lib/tagmeta.js';         // t151: album covers embedded in the file tags
 import { CATALOG_SECTIONS } from '../lib/adapters/archive.js';
 import { GENRES as RADIO_GENRES } from '../lib/adapters/radio.js';
 import { proxyIptv, epgSnapshot, iptvStats } from '../lib/adapters/iptv.js';      // t123: the live TV proxy · t139: program data · t144: dedupe count
@@ -85,6 +86,25 @@ function localThumbPath(key) {
   if (!key) return null;
   const h = crypto.createHash('sha1').update('local:' + key).digest('hex');
   return path.join(DATA_DIR, 'thumbs', h + '.jpg');
+}
+
+// t151: a local album's cover — the folder's own cover art file first (the
+// convention everyone's music library already uses), then the picture
+// embedded in the track's tags. Returns a Buffer or null.
+async function localAlbumArt(key) {
+  const upstream = await streamUrlFor('local', key).catch(() => null);
+  const abs = String(upstream || '').startsWith('local-file:') ? String(upstream).slice('local-file:'.length) : '';
+  if (!abs) return null;
+  const dir = path.dirname(abs);
+  const names = ['cover.jpg', 'cover.png', 'folder.jpg', 'folder.png', 'front.jpg', 'front.png', 'albumart.jpg', 'albumart.png'];
+  for (const n of names) {
+    try {
+      const c = path.join(dir, n);
+      const st = fs.statSync(c);
+      if (st.isFile() && st.size > 64 && st.size < 4 * 1024 * 1024) return fs.readFileSync(c);
+    } catch {}
+  }
+  try { return readCoverArt(abs); } catch { return null; }
 }
 
 function readBody(req, limit = 256 * 1024) {
@@ -174,12 +194,21 @@ export async function handleApi(req, res, pathname) {
         tv: prefs.tv || { idleMode: '', itemId: '' },
         dance: prefs.dance || { movement: 1, speed: 1, ballSpin: 1, pattern: 'auto' },   // t86 · t93: movement, not brightness
         sources: locks.sources ? null : (prefs.sources ?? null),
-        guideFavs: Array.isArray(prefs.guideFavs) ? prefs.guideFavs : []   // t128: favorite channels
+        guideFavs: Array.isArray(prefs.guideFavs) ? prefs.guideFavs : [],  // t128: favorite channels
+        // t161: personal movement — look sensitivity + default speed tier
+        controls: {
+          look: Number.isFinite(+prefs.controls?.look) ? Math.min(3, Math.max(0.25, +prefs.controls.look)) : 0.55,   // t165: default 0.55×
+          base: ['walk', 'jog', 'run'].includes(prefs.controls?.base) ? prefs.controls.base : 'walk'
+        }
       };
       const status = await libraryStatus();
       const tvTitle = await resolveTvTitle(cfg).catch(() => null);
       return ok(res, {
         version: PKG.version,          // t96: the app's own version (notice compares against it)
+        community: {
+          discord: (typeof cfg.community?.discord === 'string' && /^https?:\/\//i.test(cfg.community.discord)) ? cfg.community.discord : '',        // t155: the help-desk PC
+          channelId: normalizeChannelId(cfg.community?.channelId)     // t159: the chat embed · t159b: pasted links normalize here too
+        },
         me: { ...publicUser(user), isGuest: !user },
         profileKey: key,
         prefs: effective,
@@ -255,13 +284,18 @@ export async function handleApi(req, res, pathname) {
       const item = await findItem(fSrc, fKey, { ...defaultView(cfg), stores: [] });   // t99: own view — the shared item is by definition ours
       if (!item || !shareableWith(entry, item, friendSourceIds(cfg))) { res.writeHead(403, { 'Content-Type': 'text/plain' }); res.end('not shared to you'); return true; }
       const upstream = await streamUrlFor(fSrc, fKey).catch(() => null);
+      // t154: a friend may SAVE a shared item (?dl=1) — same share check as
+      // streaming (already passed above), just with a save-this-file header
+      const isFDl = new URL(req.url, 'http://x').searchParams.get('dl') === '1';
+      const fExt = (/\.[a-z0-9]{1,5}$/i.exec(String(fKey || '')) || [''])[0];
+      const fDl = isFDl ? (String(item.title || 'media').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 120) || 'media') + fExt : '';
       if (String(upstream).startsWith('local-file:')) {
         const abs = String(upstream).slice('local-file:'.length);
-        streamLocalFile(req, res, abs, localAdapter.mimeFor(abs));
+        streamLocalFile(req, res, abs, localAdapter.mimeFor(abs), fDl);
         return true;
       }
       if (!upstream) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('no stream for this item'); return true; }
-      await proxyVideo(req, res, upstream);
+      await proxyVideo(req, res, upstream, fDl ? { dlName: fDl } : {});
       return true;
     }
     if (method === 'GET' && pathname.startsWith('/api/friend/poster/')) {
@@ -388,6 +422,13 @@ export async function handleApi(req, res, pathname) {
             : (prev.pattern ?? 'auto')
         };
       }
+      if (body.controls) {   // t161: personal movement — look sensitivity + speed tier
+        const c = body.controls, prev = prefs.controls || {};
+        prefs.controls = {
+          look: Number.isFinite(+c.look) ? Math.min(3, Math.max(0.25, +c.look)) : (+prev.look || 1),
+          base: ['walk', 'jog', 'run'].includes(c.base) ? c.base : (prev.base || 'walk')
+        };
+      }
       // personal shelf map (unitId → sectionKey; '' entries clear mappings)
       if (body.shelves && !cfg.locks.shelves) {
         prefs.shelves = sanitizeShelfMap({ ...(prefs.shelves || {}), ...body.shelves });
@@ -399,7 +440,7 @@ export async function handleApi(req, res, pathname) {
       // personal TV idle pick ('' = follow the store default)
       if (body.tv) {
         prefs.tv = {
-          idleMode: ['', 'standby', 'loop', 'item'].includes(body.tv.idleMode) ? body.tv.idleMode : '',
+          idleMode: ['', 'white', 'standby', 'loop', 'item'].includes(body.tv.idleMode) ? body.tv.idleMode : '',   // t150: 'white' = the projector screen, a first-class pick now
           itemId: /^[\w:-]{1,80}$/.test(body.tv.itemId || '') ? body.tv.itemId : ''
         };
       }
@@ -488,6 +529,9 @@ export async function handleApi(req, res, pathname) {
           if (it && denied.has(sectionKeyOfItem(it))) return fail(res, 403, 'That library is not shared with your account');
         }
       }
+      // t154: sources without a details API (some adapters) answer a clean
+      // 404 — a missing detail() must never crash the route into a 500
+      if (typeof adapter.detail !== 'function') return fail(res, 404, 'No details for this source');
       const detail = await adapter.detail(sc?.cfg || {}, key);
       if (!detail) return fail(res, 404, 'Not found');
       return ok(res, detail);
@@ -507,12 +551,30 @@ export async function handleApi(req, res, pathname) {
       // t89: GRABBER CASE ART — grabbed videos have no art upstream; the
       // first browser to visit grabs a frame and POSTs it (below). Cached
       // on disk, then served like any other poster.
+      // t151: LOCAL MUSIC gets its art SERVER-side, on demand: the album
+      // folder's own cover.jpg/folder.jpg first, then the picture embedded
+      // in the file's tags — whichever hits first is cached like any thumb.
       if (source === 'local') {
         const thumb = localThumbPath(key);
         if (thumb && fs.existsSync(thumb)) {
           res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
           fs.createReadStream(thumb).pipe(res);
           return true;
+        }
+        const li = await findItem('local', key).catch(() => null);
+        if (li?.type === 'album' && thumb) {
+          const buf = await localAlbumArt(key).catch(() => null);
+          if (buf) {
+            try {
+              fs.mkdirSync(path.dirname(thumb), { recursive: true });
+              const tmpA = thumb + '.tmp' + Date.now();
+              fs.writeFileSync(tmpA, buf);
+              fs.renameSync(tmpA, thumb);
+              res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+              res.end(buf);
+              return true;
+            } catch { /* unwritable cache → fall through to 404 */ }
+          }
         }
       }
       const url = await posterUrlFor(source, key, userView(getConfig(), readPrefs(profileKeyFor(req, res))?.sources));
@@ -559,6 +621,16 @@ export async function handleApi(req, res, pathname) {
       const _p = pathname.split('/').map(decodeURIComponent);
       const source = _p[3], key = _p.slice(4).join('/');   // t51: local keys contain '/'
       const isAudio = new URL(req.url, 'http://x').searchParams.get('audio') === '1';
+      // t154: ?dl=1 → Content-Disposition (SAVE instead of stream). Same
+      // access rules as playback — the guard below runs first for everyone.
+      const isDl = new URL(req.url, 'http://x').searchParams.get('dl') === '1';
+      let dlName = '';
+      if (isDl) {
+        const it = await findItem(source, key).catch(() => null);
+        const ext = (/\.[a-z0-9]{1,5}$/i.exec(String(key || '')) || [''])[0];
+        const base = String(it?.title || (String(key).split('/').pop() || 'media')).replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 120) || 'media';
+        dlName = base + ext;     // proxied sources may have no ext — proxyVideo adds one from the mime
+      }
       // t123: per-user access — a hidden library is a hard 403 on the STREAM,
       // not just invisible menus (dev tools must not reach it either)
       {
@@ -591,11 +663,11 @@ export async function handleApi(req, res, pathname) {
       if (!upstream) upstream = await streamUrlFor(source, key).catch(() => null);
       if (String(upstream).startsWith('local-file:')) {          // t61: grabber file → disk stream
         const abs = String(upstream).slice('local-file:'.length);
-        streamLocalFile(req, res, abs, localAdapter.mimeFor(abs));
+        streamLocalFile(req, res, abs, localAdapter.mimeFor(abs), dlName);
         return true;
       }
       if (!upstream) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('no stream for this item'); return true; }
-      await proxyVideo(req, res, upstream);   // works for audio too (Range proxy)
+      await proxyVideo(req, res, upstream, dlName ? { dlName } : {});   // works for audio too (Range proxy)
       return true;
     }
 
@@ -753,6 +825,26 @@ export async function handleApi(req, res, pathname) {
 
       // Whitelist-merge each section; masked secrets mean "keep current".
       const next = deepMerge(defaultConfig(), cfg);
+      // t155: the help-desk PC — the store's bug-report Discord invite
+      // (shown in the store; empty = the PC points at the owner instead)
+      if (incoming.community && typeof incoming.community === 'object') {
+        // t159: per-key merge — saving the invite must not wipe the channel id
+        // (and vice versa). Absent keys keep their current value.
+        next.community = { ...(cfg.community || {}) };
+        if (typeof incoming.community.discord === 'string')
+          next.community.discord = /^https?:\/\//i.test(incoming.community.discord.trim())
+            ? incoming.community.discord.trim().slice(0, 300)
+            : (cfg.community?.discord || defaultConfig().community.discord);   // t167: empty never blanks the GLOBAL chat
+        if (typeof incoming.community.channelId === 'string') {
+          // t159b: channel LINKS paste fine (discord.com/channels/… → the
+          // id), and a retired default id is swapped for the invite's real
+          // target so installs saved by b2r5 self-heal on their next save
+          let nc = normalizeChannelId(incoming.community.channelId);
+          if (RETIRED_CHANNEL_IDS.includes(nc)) nc = defaultConfig().community.channelId;
+          if (!nc) nc = cfg.community?.channelId || defaultConfig().community.channelId;   // t167: empty never blanks the GLOBAL chat
+          next.community.channelId = nc;
+        }
+      }
       // t96: version-notice controls (check kill-switch + feed URL override)
       if (incoming.version && typeof incoming.version === 'object') {
         next.version = {
@@ -835,7 +927,7 @@ export async function handleApi(req, res, pathname) {
             seenUrl.add(url);
             const epg = /^https?:\//.test(pk.epg || '') ? String(pk.epg).trim().slice(0, 500) : undefined;   // t139: optional EPG override (advanced/tests)
             packs.push({ label: String(pk.label || '').trim().slice(0, 24) || `Pack ${packs.length + 1}`, url , ...(epg ? { epg } : {}) });
-            if (packs.length >= 8) break;   // room for the known FAST world, and a spare
+            if (packs.length >= 40) break;   // t147b: room for every country pack + worldwide + presets + custom (the old cap of 8 silently ate country adds once Canada was in — a dead click)
           }
           next.iptv.packs = packs;
         } else if (next.iptv.playlistUrl) {
@@ -941,7 +1033,7 @@ export async function handleApi(req, res, pathname) {
       if (incoming.tv) {
         next.tv = {
           enabled: !!incoming.tv.enabled,
-          mode: ['standby', 'loop', 'url', 'item'].includes(incoming.tv.mode) ? incoming.tv.mode : 'standby',
+          mode: ['white', 'standby', 'loop', 'url', 'item'].includes(incoming.tv.mode) ? incoming.tv.mode : 'standby',   // t150: projector screen joins the admin picker
           url: String(incoming.tv.url || ''),
           itemId: String(incoming.tv.itemId || '')
         };

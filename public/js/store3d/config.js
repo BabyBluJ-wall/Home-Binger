@@ -131,7 +131,7 @@ export const TUNING = {
   posterConcurrency: 14,
 
   // First-person movement
-  player: { eyeHeight: 1.65, walkSpeed: 3.4, runSpeed: 6.0, radius: 0.34, lookSensitivity: 0.0023,
+  player: { eyeHeight: 1.65, walkSpeed: 3.4, runSpeed: 6.0, sprintSpeed: 8.8, radius: 0.34, lookSensitivity: 0.0023,
             zoomMin: 22, zoomMax: 70, zoomStep: 6 },   // scroll-wheel zoom (FOV degrees)
 
   // ── The three media case types, sized like REAL rental cases (scaled up

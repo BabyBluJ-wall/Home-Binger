@@ -166,3 +166,128 @@ export function readAudioTags(absPath) {
   } catch { return null; }
   finally { try { if (fd !== undefined) fs.closeSync(fd); } catch {} }
 }
+
+// ── t151: embedded cover art — the picture IN the file ──────────────────────
+// Returns a JPEG/PNG Buffer or null. Bounded reads, same doctrine as the tags.
+const IMG_OK = (b) => !!b && b.length > 64 && b.length < 4 * 1024 * 1024
+  && ((b[0] === 0xFF && b[1] === 0xD8) || (b[0] === 0x89 && b[1] === 0x50));
+
+function id3Picture(buf) {            // APIC (v2.3/2.4) · PIC (v2.2)
+  if (!buf || buf.length < 10 || buf[0] !== 0x49 || buf[1] !== 0x44 || buf[2] !== 0x33) return null;
+  const ver = buf[3];
+  const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);
+  const end = Math.min(buf.length, 10 + size);
+  let p = 10;
+  while (p < end - 6) {
+    let id, flen, hlen, off;
+    if (ver === 2) { id = buf.toString('latin1', p, p + 3); flen = (buf[p + 3] << 16) | (buf[p + 4] << 8) | buf[p + 5]; hlen = 6; off = p + 6; }
+    else { id = buf.toString('latin1', p, p + 4); flen = ver === 4 ? (((buf[p + 4] & 0x7f) << 21) | ((buf[p + 5] & 0x7f) << 14) | ((buf[p + 6] & 0x7f) << 7) | (buf[p + 7] & 0x7f)) : buf.readUInt32BE(p + 4); hlen = 10; off = p + 10; }
+    if (flen <= 0 || off + flen > buf.length) break;
+    if (id === 'APIC' || id === 'PIC') {
+      const body = buf.subarray(off, off + flen);
+      let q = 1;                                                    // [encoding]
+      if (id === 'PIC') q += 3;                                     // 3-char format
+      else { while (q < body.length && body[q] !== 0) q++; q++; }   // mime  
+      q++;                                                          // picture type
+      const enc = body[0];
+      if (enc === 1 || enc === 2) { while (q + 1 < body.length && !(body[q] === 0 && body[q + 1] === 0)) q += 2; q += 2; }
+      else { while (q < body.length && body[q] !== 0) q++; q++; }   // description  
+      const img = body.subarray(q);
+      return IMG_OK(img) ? Buffer.from(img) : null;
+    }
+    p += hlen + flen;
+  }
+  return null;
+}
+
+function flacPicture(buf) {           // metadata block type 6
+  if (!buf || buf.toString('latin1', 0, 4) !== 'fLaC') return null;
+  let p = 4;
+  while (p + 4 <= buf.length) {
+    const head = buf[p];
+    const last = head & 0x80, type = head & 0x7f;
+    const len = (buf[p + 1] << 16) | (buf[p + 2] << 8) | buf[p + 3];
+    const off = p + 4;
+    if (type === 6 && off + 8 <= buf.length) {
+      let q = off + 4;                                             // picture type
+      const mimeLen = buf.readUInt32BE(q); q += 4;
+      q += mimeLen;                                                // mime string
+      const descLen = buf.readUInt32BE(q); q += 4 + descLen;
+      q += 16;                                                     // w · h · depth · colors
+      if (q + 4 > buf.length) return null;
+      const dataLen = buf.readUInt32BE(q); q += 4;
+      const img = buf.subarray(q, Math.min(buf.length, q + dataLen));
+      return IMG_OK(img) ? Buffer.from(img) : null;
+    }
+    if (last || len <= 0) break;
+    p = off + len;
+  }
+  return null;
+}
+
+function mp4Cover(buf) {              // moov → udta → meta → ilst → covr → data
+  const out = {};
+  const save = { push: (i) => {} };
+  // reuse the existing atom walker shape, but return the covr payload
+  let moovOff = -1;
+  for (let i = 4; i < buf.length - 7; i++) {
+    if (buf[i] === 0x6d && buf[i + 1] === 0x6f && buf[i + 2] === 0x6f && buf[i + 3] === 0x76) {
+      const sz = buf.readUInt32BE(i - 4);
+      if (sz >= 8 && i - 4 + sz <= buf.length + 4096) { moovOff = i - 4; break; }
+    }
+  }
+  if (moovOff < 0) return null;
+  const findAtom = (start, end, type) => {
+    const hits = []; let p = start;
+    while (p < end - 7) {
+      let sz = buf.readUInt32BE(p);
+      const ty = buf.toString('latin1', p + 4, p + 8);
+      if (sz === 1) { const hi = buf.readUInt32BE(p + 8), lo = buf.readUInt32BE(p + 12); if (hi !== 0) break; sz = lo; }
+      if (sz < 8 || p + sz > end) { if (ty === type) hits.push([p + 8, Math.min(end, p + sz)]); break; }
+      if (ty === type) hits.push([p + 8, p + sz]);
+      p += sz;
+    }
+    return hits;
+  };
+  const moovEnd = moovOff + Math.min(buf.length - moovOff, buf.readUInt32BE(moovOff));
+  for (const [us, ue] of findAtom(moovOff + 8, moovEnd, 'udta'))
+    for (const [ms, me] of findAtom(us, ue, 'meta'))
+      for (const [is2, ie] of findAtom(ms + 4, me, 'ilst')) {
+        let p = is2;
+        while (p < ie - 7) {
+          let sz = buf.readUInt32BE(p);
+          const ty = buf.toString('latin1', p + 4, p + 8);
+          if (sz === 1) sz = buf.readUInt32BE(p + 12);
+          if (sz < 8 || p + sz > ie + 8) break;
+          if (ty === 'covr') {
+            const ds = p + 8;
+            if (buf.toString('latin1', ds + 4, ds + 8) === 'data') {
+              const dl = buf.readUInt32BE(ds);
+              const img = buf.subarray(ds + 16, Math.min(buf.length, ds + dl));
+              if (IMG_OK(img)) return Buffer.from(img);
+            }
+          }
+          p += sz;
+        }
+      }
+  return null;
+}
+
+export function readCoverArt(absPath) {
+  let fd;
+  try {
+    const st = fs.statSync(absPath);
+    if (!st.isFile() || st.size < 16) return null;
+    fd = fs.openSync(absPath, 'r');
+    const head = readChunk(fd, 0, MAX_HEAD, st.size);
+    if (!head) return null;
+    if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) return id3Picture(head);          // mp3
+    if (head.toString('latin1', 0, 4) === 'fLaC') return flacPicture(head);                          // flac
+    const ext = absPath.toLowerCase().split('.').pop();
+    if (ext === 'm4a' || ext === 'mp4' || head.toString('latin1', 4, 8) === 'ftyp') {                // mp4
+      return mp4Cover(head) || (() => { const tail = readChunk(fd, Math.max(0, st.size - MAX_TAIL), MAX_TAIL, st.size); return tail ? mp4Cover(tail) : null; })();
+    }
+    return null;
+  } catch { return null; }
+  finally { try { if (fd !== undefined) fs.closeSync(fd); } catch {} }
+}

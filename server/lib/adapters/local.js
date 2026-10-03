@@ -107,6 +107,24 @@ export const localAdapter = {
     try { const st = fs.statSync(abs); if (!st.isFile()) return null; } catch { return null; }
     return 'local-file:' + abs;
   },
+  // t154: the item modal asks every source for details — local files answer
+  // honestly from the shelf record + the folder they live in (no fabricated
+  // synopsis, no fake ratings)
+  async detail(cfg, key) {
+    const k = String(key || '');
+    const slash = k.indexOf('/');
+    const rel = slash > 0 ? k.slice(slash + 1) : '';
+    if (!rel) return null;
+    const name = rel.split('/').pop();
+    const folder = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+    return {
+      title: name.replace(/\.[a-z0-9]{1,5}$/i, ''),
+      year: null,
+      summary: `From this PC${folder ? ' — ' + folder : ''} (your own file)`,
+      runtime: null,
+      playUrl: null
+    };
+  },
   // Same resolution for the music path (?audio=1) — a file is a file
   async audioUrl(cfg, key) { return this.streamUrl(cfg, key); },
   mimeFor(abs) { return MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream'; }

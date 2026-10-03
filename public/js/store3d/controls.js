@@ -10,7 +10,7 @@
 //  • Collision: the player is a circle vs. every shelf AABB + the room walls.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1790065991054';
+import { LAYOUT, TUNING } from './config.js?v=1790983945165';
 
 const SPAWN = { x: 0, z: LAYOUT.room.l / 2 + 1.55 };   // t52: in the FRONT HALLWAY, just outside
                                                         // the store door — facing in (-z), as if you
@@ -29,18 +29,37 @@ export function createControls(camera, domElement, colliders) {
     touchMove: null,          // {x, z} joystick vector
     enabled: true,
     bobPhase: 0,
+    lookScale: 0.55,          // t161/t165: per-user look multiplier — default 0.55× (the owner's call: steady by default)
+    baseTier: 0,              // t161/t165: speed tier 0 walk · 1 jog · 2 run — ONE press of Shift cycles (t164: no more hold-to-jog)
     onLockChange: null, onClick: null
   };
+  const TIERS = ['walk', 'jog', 'run'];   // t161: the store got bigger — walk, jog AND run
+  const tierSpeed = (t) => t === 2 ? P.sprintSpeed : (t === 1 ? P.runSpeed : P.walkSpeed);
 
   const raycastCenter = new THREE.Vector2(0, 0); // crosshair ray (shared)
   const onClickHandlers = [];
 
-  // ── pointer lock ──
+  // ── pointer lock (t163: self-healing) ──
+  // The old behavior: ONE pointerlockerror (Chrome enforces a ~1.25 s
+  // cooldown on re-locking right after you press Esc) flipped lockBlocked
+  // PERMANENTLY → the whole session fell back to hold-the-button drag-look
+  // and menus fought the 3D click. Now a failure is TRANSIENT: drag-look
+  // bridges the cooldown gap, ONE auto-retry fires when it's safe, and the
+  // flag clears on its own — the next click grabs a real lock again.
+  let lockRetryTimer = null;
   function requestLock() {
     if (state.locked || state.lockBlocked || !state.enabled || isTouch()) return;
     const p = domElement.requestPointerLock?.();
     // Chrome returns a promise; older browsers undefined
-    if (p && p.catch) p.catch(() => { state.lockBlocked = true; });
+    if (p && p.catch) p.catch(() => lockFailed());
+  }
+  function lockFailed() {
+    state.lockBlocked = true;
+    if (lockRetryTimer) clearTimeout(lockRetryTimer);
+    // ONE timed clear, no auto-retry: drag-look bridges Chrome's ~1.25 s
+    // re-lock cooldown, then the NEXT click grabs a real lock again. (An
+    // auto-retry would loop forever inside lock-hostile embeds.)
+    lockRetryTimer = setTimeout(() => { state.lockBlocked = false; }, 1400);
   }
   domElement.addEventListener('click', () => {
     if (!state.enabled || isTouch()) return;
@@ -49,6 +68,7 @@ export function createControls(camera, domElement, colliders) {
   let lockFlipAt = 0;   // timestamp of the last lock-state CHANGE
   document.addEventListener('pointerlockchange', () => {
     state.locked = document.pointerLockElement === domElement;
+    if (state.locked) state.lockBlocked = false;   // t163: a real lock clears the fallback
     lockFlipAt = performance.now();      // the event right after a lock flip
     state.onLockChange?.(state.locked);  // often carries a huge bogus delta
   });
@@ -65,7 +85,7 @@ export function createControls(camera, domElement, colliders) {
     state.keys.clear();                             // no stuck walk keys
   });
   document.addEventListener('pointerlockerror', () => {
-    state.lockBlocked = true;
+    lockFailed();                       // t163: transient — never a permanent drag-look downgrade
     state.onLockChange?.(false);
   });
 
@@ -73,8 +93,8 @@ export function createControls(camera, domElement, colliders) {
   const applyLook = (dx, dy) => {
     // turning slows while zoomed in, so aiming feels the same at every zoom
     const zoomK = state.fov / state.fovBase;
-    state.yaw -= dx * P.lookSensitivity * zoomK;
-    state.pitch -= dy * P.lookSensitivity * zoomK;
+    state.yaw -= dx * P.lookSensitivity * state.lookScale * zoomK;
+    state.pitch -= dy * P.lookSensitivity * state.lookScale * zoomK;
     const lim = Math.PI / 2 - 0.05;
     state.pitch = Math.max(-lim, Math.min(lim, state.pitch));
   };
@@ -120,11 +140,13 @@ export function createControls(camera, domElement, colliders) {
       const wasDrag = state.dragging && state.dragMoved > 6;
       state.dragging = false;
       // In drag-look mode (pointer lock unavailable), a plain click selects.
-      if (!wasDrag && !state.locked && state.lockBlocked && state.enabled) fireClick();
+      // t163: never while a menu is open — clicks belong to the menu, not to
+      // the 3D world behind the crosshair (that made menus unusable).
+      if (!wasDrag && !state.locked && state.lockBlocked && state.enabled && !uiOpen()) fireClick();
     }
   });
   document.addEventListener('click', (e) => {
-    if (state.locked && state.enabled) fireClick();
+    if (state.locked && state.enabled && !uiOpen()) fireClick();   // t163: a menu owns the clicks while it's up
   });
 
   // ── scroll wheel = ZOOM (field of view) ──
@@ -160,7 +182,14 @@ export function createControls(camera, domElement, colliders) {
     // walk the avatar around UNSEEN under the fullscreen video (owner's bug)
     const blocked = isTyping(e) || uiOpen() || document.body.classList.contains('tv-fullscreen');
     if (KEYMAP[e.code] && !blocked) { state.keys.add(KEYMAP[e.code]); e.preventDefault(); }
-    if (!blocked && (e.code === 'ShiftLeft' || e.code === 'ShiftRight')) state.keys.add('run');
+    // t164 (owner): hold-to-jog is GONE. ONE press of Shift cycles the pace —
+    // walk → jog → run → walk. Holding it (auto-repeat) changes nothing, so
+    // there's no "hold to go fast" anymore. A toast rides along via the
+    // 'vb-speed' event so nobody has to guess what just changed.
+    if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !blocked && !e.repeat) {
+      state.baseTier = (state.baseTier + 1) % 3;
+      document.dispatchEvent(new CustomEvent('vb-speed', { detail: { tier: TIERS[state.baseTier] } }));
+    }
     // Q toggles the mouse: locked → free the cursor; free → grab it again.
     // (Esc still releases — browsers force it. Q is ignored while typing in
     // a settings field or while a menu is open.)
@@ -175,7 +204,6 @@ export function createControls(camera, domElement, colliders) {
   });
   document.addEventListener('keyup', (e) => {
     if (KEYMAP[e.code]) state.keys.delete(KEYMAP[e.code]);
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') state.keys.delete('run');
   });
 
   // ── touch: left = joystick, right = look, tap = select ──
@@ -236,7 +264,13 @@ export function createControls(camera, domElement, colliders) {
     { x0: -RW, x1: RW, z0: hZ0 + 0.05, z1: hZ1 - 0.05, padX: 1, padZ: 1 },                          // front hall
     { x0: -fw, x1: fw, z0: RD - 0.6, z1: hZ0 + 0.5, padX: 0, padZ: 0 },                           // store sliding-door lane (t48: OVERLAPS both rooms — no dead zone)
     { x0: dX0, x1: dX1, z0: dZ0, z1: dZ1 - 0.05, padX: 1, padZ: 1 },                                // dance hall
-    { x0: RW - 0.3, x1: dX0 + 0.4, z0: dzC - DAN.door.width / 2 + 0.15, z1: dZ1 + 0.05, padX: 0, padZ: 0 },  // hall↔dance pass (overlaps both)
+    // t164: hall↔dance pass. The old lane started at RW−0.3, but the hall's
+    // own padded edge stops the player at RW−radius — a 4 cm dead band where
+    // NO room contained you. Slow walking landed inside it and stalled at the
+    // door frame forever; a fast step jumped the band and sailed through.
+    // The lane now overlaps the hall's edge (and is clipped to the actual
+    // door opening, so the wall beside the door stays solid).
+    { x0: RW - 0.5, x1: dX0 + 0.4, z0: dzC - DAN.door.width / 2 + 0.13, z1: dzC + DAN.door.width / 2 - 0.13, padX: 0, padZ: 0 },
     { x0: dX0 + 0.05, x1: lX1, z0: lZ0 + 0.05, z1: dZ0 - 0.05, padX: 1, padZ: 1 },                  // DJ's library
     { x0: bdX - DAN.boothDoor.width / 2 + 0.15, x1: bdX + DAN.boothDoor.width / 2 - 0.15, z0: dZ0 - 1.6, z1: dZ0 + 1.6, padX: 0, padZ: 0 }  // booth-door pass (t51: OVERLAPS both rooms — no dead zone)
   ];
@@ -289,8 +323,19 @@ export function createControls(camera, domElement, colliders) {
     return next;
   }
 
+  // t163: any open UI panel TAKES THE MOUSE. While pointer-locked, opening a
+  // menu used to leave the cursor captured — the panel was unclicable until
+  // you pressed Esc (and Q is ignored while a menu is up, so Esc was the ONLY
+  // way out). The frame loop (and the debug hook) release the lock the moment
+  // a panel is up. Returns the live lock state for tests.
+  function lockHygiene() {
+    if (state.locked && uiOpen()) document.exitPointerLock?.();
+    return { locked: state.locked, lockBlocked: state.lockBlocked, dragging: state.dragging };
+  }
+
   // ── per-frame update ──
   function update(dt) {
+    lockHygiene();   // t163: menus always get a free cursor
     // movement intent — paused while any menu/form is open, so keys held
     // before a dialog appeared can't keep the player walking behind it
     let mx = 0, mz = 0;
@@ -307,7 +352,8 @@ export function createControls(camera, domElement, colliders) {
     let speed = 0;
     if (len > 0.01) {
       mx /= Math.max(1, len); mz /= Math.max(1, len);
-      speed = state.keys.has('run') ? P.runSpeed : P.walkSpeed;
+      // t164: the pace IS the tier Shift last picked — no boost, no cap math
+      speed = tierSpeed(state.baseTier);
       const s = Math.sin(state.yaw), c = Math.cos(state.yaw);
       const wx = mx * c + mz * s;
       const wz = -mx * s + mz * c;
@@ -377,6 +423,26 @@ export function createControls(camera, domElement, colliders) {
   return {
     update,
     syncCamera,
+    // t161: personal movement prefs (Settings → My Profile) — look-sensitivity
+    // multiplier + the default speed tier. Bad values fall back to defaults.
+    setPrefs(p) {
+      if (!p || typeof p !== 'object') return;
+      const look = +p.look;
+      if (Number.isFinite(look)) state.lookScale = Math.min(3, Math.max(0.25, look));
+      // t165: absent look → the 0.55× default, not 1× (state above starts there)
+      const t = TIERS.indexOf(String(p.base));
+      if (t > -1) state.baseTier = t;
+    },
+    debugControlInfo() {                     // tests: the live movement settings
+      return { lookScale: state.lookScale, base: TIERS[state.baseTier], now: TIERS[state.baseTier], speed: tierSpeed(state.baseTier) };
+    },
+    debugLockInfo: lockHygiene,             // t163 tests: the mouse-lock state + the menu-release check
+    debugLockTick: lockHygiene,
+    debugLook(dx, dy) {                      // tests: one real look step → yaw delta
+      const y0 = state.yaw;
+      applyLook(dx, dy);
+      return state.yaw - y0;
+    },
     debugStep(dx, dz) {                 // t48: walk ONE step through collide() —
       const next = { x: state.pos.x + dx, z: state.pos.z + dz };  // the real path tests must use
       collide(next);

@@ -8,18 +8,18 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1790065991054';
-import { buildRoom, buildTheater, buildJukebox } from './room.js?v=1790065991054';
-import { buildHall } from './hall.js?v=1790065991054';
-import { buildDance } from './dance.js?v=1790065991054';
-import { buildExterior } from './exterior.js?v=1790065991054';   // the world outside the door
-import { buildSignage } from './signage.js?v=1790065991054';
-import { createDjPro } from './djpro.js?v=1790065991054';
-import { buildTV } from './tv.js?v=1790065991054';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1790065991054';
-import { PosterAtlases } from './atlas.js?v=1790065991054';
-import { createControls } from './controls.js?v=1790065991054';
-import { createJukeAudio } from './jukeaudio.js?v=1790065991054';
+import { LAYOUT, TUNING } from './config.js?v=1790983945165';
+import { buildRoom, buildTheater, buildJukebox, buildHelpDesk } from './room.js?v=1790983945165';
+import { buildHall } from './hall.js?v=1790983945165';
+import { buildDance } from './dance.js?v=1790983945165';
+import { buildExterior } from './exterior.js?v=1790983945165';   // the world outside the door
+import { buildSignage } from './signage.js?v=1790983945165';
+import { createDjPro } from './djpro.js?v=1790983945165';
+import { buildTV } from './tv.js?v=1790983945165';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1790983945165';
+import { PosterAtlases } from './atlas.js?v=1790983945165';
+import { createControls } from './controls.js?v=1790983945165';
+import { createJukeAudio } from './jukeaudio.js?v=1790983945165';
 
 export function createScene(container, theme) {
   // ── renderer ──
@@ -71,7 +71,9 @@ export function createScene(container, theme) {
   scene.add(theater.group);
   const jukebox = buildJukebox(theme);
   scene.add(jukebox.group);
-  const deckTargets = theater.deckTargets, jukeTargets = jukebox.targets;
+  const helpdesk = buildHelpDesk(theme);                  // t155: bug-report PC, right of the theater door
+  scene.add(helpdesk.group);
+  const deckTargets = theater.deckTargets, jukeTargets = jukebox.targets, hdTargets = helpdesk.targets;
   const binTargets = theater.binTargets;
 
   // playback drives the house: lights dim + beam on when something rolls,
@@ -89,7 +91,7 @@ export function createScene(container, theme) {
   };
 
   const faces = computeFaces();
-  const colliders = [...shelfColliders(faces), ...theater.colliders, ...jukebox.colliders, ...dance.colliders];   // t51: DJ booth blocks feet
+  const colliders = [...shelfColliders(faces), ...theater.colliders, ...jukebox.colliders, ...helpdesk.colliders, ...dance.colliders];   // t51: DJ booth blocks feet · t155 the help-desk desk
   const controls = createControls(camera, renderer.domElement, colliders);
   controls.reset();
   let currentTheme = { ...theme };   // kept in sync so rebuilds use fresh colors
@@ -222,6 +224,7 @@ export function createScene(container, theme) {
   const PORTAL_TIP = { title: '🚪 Front entrance', year: null, type: null };
   const DECK_TIP = { title: '🎬 Theater player — bring a movie here', year: null, type: null };
   const JUKE_TIP = { title: '🎵 Jukebox — browse the music', year: null, type: null };
+  const PC_TIP = { title: '🖥 Help desk — bug reports & Discord', year: null, type: null };   // t155
   const BIN_TIP = { title: '📥 Return bin — drop your movie here', year: null, type: null };
 
   // Is the crosshair over the entry door? (own flag: shares `raycaster`)
@@ -236,6 +239,23 @@ export function createScene(container, theme) {
   // t41: HONEST CLICKS — walls and doors occlude (no feeding a tape through
   // the closed door), and the deck/return only answer inside the theater.
   let lastRecord = null;
+  // t160: is the camera's line of sight to a world point blocked by a wall
+  // or door? (the help-desk PC's live screen shows its chat only when the
+  // monitor is actually VISIBLE — never ghosting through the theater wall)
+  const _sightV = new THREE.Vector3();
+  function sightBlocked(to) {
+    _sightV.copy(to).sub(camera.position);
+    const d = _sightV.length();
+    if (d < 0.01) return false;
+    raycaster.set(camera.position, _sightV.normalize());
+    const prevFar = raycaster.far;   // the picker shares this raycaster (far 6.5) — put it back
+    raycaster.far = d - 0.01;        // only BETWEEN the eye and the target — walls behind it don't count
+    const hit = !!(raycaster.intersectObjects(theater.occluders || [], true)[0]
+      || raycaster.intersectObjects(hall.occluders || [], true)[0]
+      || raycaster.intersectObjects(dance.occluders || [], true)[0]);
+    raycaster.far = prevFar;
+    return hit;
+  }
   function pickSpecial() {
     controls.syncCamera();
     raycaster.setFromCamera(controls.ray, camera);
@@ -250,6 +270,7 @@ export function createScene(container, theme) {
     const dBin = inTheater ? (raycaster.intersectObjects(binTargets, false)[0]?.distance ?? Infinity) : Infinity;
     if (Math.min(dDeck, dBin) < wallD) return dBin < dDeck ? 'bin' : 'deck';
     if (raycaster.intersectObjects(jukeTargets, false)[0]?.distance < wallD) return 'jukebox';
+    if (raycaster.intersectObjects(hdTargets, false)[0]?.distance < wallD) return 'helpdesk';   // t155
     // t47: the DJ booth (laptop) and the vinyl in the DJ's library
     if (raycaster.intersectObjects(dance.boothTargets || [], true)[0]?.distance < wallD) return 'djbooth';
     const recHit = raycaster.intersectObjects(dance.recordTargets || [], false)[0];
@@ -280,6 +301,7 @@ export function createScene(container, theme) {
           ? (carried ? { ...BIN_TIP, title: `📥 Return “${carried.title.slice(0, 34)}”` } : BIN_TIP)
           : sp === 'djbooth' ? null   // t121: the booth is quiet on hover too — overlay removed (owner request; same treatment as the jukebox, t85). Click still opens it.
           : sp === 'record' ? { title: `💿 Spin “${(lastRecord?.title || 'that record').slice(0, 30)}”`, sub: 'plays on the jukebox' }
+          : sp === 'helpdesk' ? PC_TIP   // t155: the PC is NEW — it gets a tip until everyone knows it's there
           : sp === 'streetdoor' ? { title: '🧟 Zombie warning, Stay and party', sub: 'the party is inside' }   // t52 — the street door only
           : null;   // t85: the jukebox is quiet on purpose — hover overlay removed (owner request)
       if (specialHovered !== sp) { specialHovered = sp; api.onHover?.(tip); }
@@ -317,6 +339,7 @@ export function createScene(container, theme) {
     const proLv = djPro.getLevels();   // t64: the pro rig drives the floor when it's playing
     dance.update(dt, danceLevelsOverride ?? (proLv.live ? proLv : djAudio.getLevels?.()));   // t52+t54+t64
     jukebox.update?.(dt);
+    helpdesk.update?.(dt, camera, controls.state.pos, sightBlocked);   // t160: the PC's live screen needs the camera
     jukeAudio.update(camera);
     djPro.update(camera);   // t64: pro rig — wing gate, listener, loops, BPM
     if ((hudTick = (hudTick + 1) % 3) === 0) {         // t108: booth laptop = live monitor · t111: ~20fps is plenty (text + VU), and the queue rides along
@@ -363,6 +386,7 @@ export function createScene(container, theme) {
     onClick: null,
     onDeckClick: null,       // clicked the theater deck (payload: carried | null)
     onJukeboxClick: null,    // clicked the jukebox
+    onHelpDeskClick: null,   // t155: clicked the help-desk PC
     onBinClick: null,        // clicked the return bin (payload: carried | null)
     onCarryChange: null,     // picked up / put back a case
     controls, tv, camera,
@@ -477,6 +501,7 @@ export function createScene(container, theme) {
     },
     danceFakeLevels: (v) => { danceLevelsOverride = v; },   // t54 tests: drive the rig
     setDancePrefs: (p) => dance.setPrefs?.(p),              // t86: adjustable light engine
+    setControlPrefs: (p) => controls.setPrefs?.(p),         // t161: look sensitivity + speed tier
     refreshPosters: (items) => {                            // t89: grabber thumbs arriving late
       for (const it of items || []) atlases.refreshPoster(it);
       atlases.flush();
@@ -524,6 +549,7 @@ export function createScene(container, theme) {
       room.applyTheme(t);
       theater.applyTheme(t);
       jukebox.applyTheme(t);
+      helpdesk.applyTheme?.(t);
       signage.applyTheme(t);
       shelf?.applyTheme(t);
       hall.applyTheme?.(t);            // t119: the entry hall re-themes (was build-time only)
@@ -551,6 +577,12 @@ export function createScene(container, theme) {
     debugStep: (dx, dz) => controls.debugStep(dx, dz),   // t48: walk one REAL step (collision path)
     resetToSpawn() { controls.reset(); controls.syncCamera(); },   // t52: anti-stuck — back to the load-in point
     debugPickSpecial: () => pickSpecial(),     // tests: what would the crosshair hit?
+    debugWorldChat: () => helpdesk.debugWorldChat?.(),   // t160 tests: the PC's live-screen state
+    debugWorldChatTick: () => { controls.syncCamera(); helpdesk.update(0.016, camera, controls.state.pos, sightBlocked); },   // t160 tests: one deterministic world-screen evaluation (syncs the camera itself — rAF timing isn't guaranteed in the rig)
+    debugControlInfo: () => controls.debugControlInfo?.(),  // t161 tests: live movement settings
+    debugLockInfo: () => controls.debugLockInfo?.(),        // t163 tests: mouse-lock state + menu-release check
+    debugLockTick: () => controls.debugLockTick?.(),
+    debugLook: (dx, dy) => controls.debugLook?.(dx, dy),    // t161 tests: one look step → yaw delta
     // click under the crosshair → deck insert / jukebox / item pickup
     fireSelect() {
       if (pickPortal()) { api.onPortalClick?.(); return; }   // door (inert today)
@@ -561,6 +593,7 @@ export function createScene(container, theme) {
         return;
       }
       if (sp === 'jukebox') { api.onJukeboxClick?.(); return; }
+      if (sp === 'helpdesk') { api.onHelpDeskClick?.(); return; }   // t155
       if (sp === 'bin') { api.onBinClick?.(carried || null); return; }
       if (sp === 'djbooth') { api.onDjClick?.(); return; }              // t47: laptop → DJ menu
       if (sp === 'record') { api.onRecordClick?.(lastRecord || null); return; }   // spin a vinyl

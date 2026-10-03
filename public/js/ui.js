@@ -7,11 +7,11 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1790065991054';
-import { createCaseView } from './store3d/caseview.js?v=1790065991054';   // the 3D case in the item modal
-import { state } from './state.js?v=1790065991054';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1790065991054';
-import { placeholderDataUrl } from './store3d/textures.js?v=1790065991054';
+import { api } from './api.js?v=1790983945165';
+import { createCaseView } from './store3d/caseview.js?v=1790983945165';   // the 3D case in the item modal
+import { state } from './state.js?v=1790983945165';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1790983945165';
+import { placeholderDataUrl } from './store3d/textures.js?v=1790983945165';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -453,6 +453,46 @@ export function initUI(ctx) {
     }).catch(() => {});
   }
 
+  // ═══════════════ MOVEMENT (t161) — look sensitivity + speed tier ═══════════════
+  // One's hands aren't everyone's hands: the mouse-look multiplier and the
+  // default speed tier are personal, saved like every other preference.
+  const movementSection = () => {
+    const c = state.prefs?.controls || {};
+    const look = Number.isFinite(+c.look) ? Math.min(3, Math.max(0.25, +c.look)) : 0.55;   // t165: the default is 0.55×
+    const base = ['walk', 'jog', 'run'].includes(c.base) ? c.base : 'walk';
+    return `
+      <div class="section-title" style="margin-top:18px">Movement</div>
+      <div class="field"><label>Mouse look speed — <span id="mv-look-num">${look.toFixed(2).replace(/0$/, '')}×</span></label>
+        <input type="range" id="mv-look" min="0.25" max="3" step="0.05" value="${look}"
+               style="width:100%;accent-color:var(--vb-accent,#ffd23f)"></div>
+      <div class="hint" style="margin:-2px 0 12px">How fast the view turns when you move the mouse. Smaller = steadier, larger = quicker.</div>
+      <div class="field"><label>Walking speed</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${['walk', 'jog', 'run'].map(t => `<button class="btn small mv-speed" data-tier="${t}">${t === 'walk' ? '🚶 Walk' : t === 'jog' ? '🏃 Jog' : '💨 Run'}</button>`).join('')}
+        </div></div>
+      <div class="hint" style="margin:-2px 0 0">Your usual pace — in the store, one press of <b>Shift</b> switches pace on the fly (walk → jog → run).</div>`;
+  };
+  function wireMovement(root) {
+    const slider = root.querySelector('#mv-look');
+    if (slider) {
+      const num = root.querySelector('#mv-look-num');
+      const apply = (v) => { ctx.applyControlPrefs?.({ look: +v }); };   // instant — no save needed to feel it
+      slider.addEventListener('input', () => { apply(slider.value); if (num) num.textContent = (+slider.value).toFixed(2).replace(/0$/, '') + '×'; });
+      slider.addEventListener('change', async () => {
+        try { await state.updatePrefs({ controls: { look: +slider.value } }); toast('Look speed saved'); }
+        catch { toast('Could not save look speed', true); }
+      });
+    }
+    root.querySelectorAll('.mv-speed').forEach(b => b.onclick = async () => {
+      const tier = b.dataset.tier;
+      ctx.applyControlPrefs?.({ base: tier });
+      try { await state.updatePrefs({ controls: { base: tier } }); toast(tier === 'walk' ? 'Walking pace saved' : tier === 'jog' ? 'Jogging pace saved' : 'Running pace saved'); }
+      catch { toast('Could not save pace', true); }
+    });
+    const cur = (state.prefs?.controls?.base || 'walk');
+    root.querySelectorAll('.mv-speed').forEach(b => b.classList.toggle('on', b.dataset.tier === cur));
+  }
+
   function panelProfile(root) {
     const me = state.me();
     if (!me?.isGuest) {
@@ -478,7 +518,9 @@ export function initUI(ctx) {
         <div class="section-title" style="margin-top:20px">Start fresh</div>
         <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
         <div class="hint" style="margin-top:6px">Theme, shelves, shelf map, TV pick and dance floor lights all return to the store defaults — no reinstall needed.</div>
+        ${movementSection()}
 `;
+      wireMovement(root);
       root.querySelector('#name-save').onclick = async () => {
         try {
           await api.renameSelf(root.querySelector('#me-name').value.trim());
@@ -512,18 +554,25 @@ export function initUI(ctx) {
       <div class="section-title">Start fresh</div>
       <button class="btn" id="btn-reset-all">↺ Reset ALL my settings</button>
       <div class="hint" style="margin:6px 0 18px">Theme, shelves, shelf map, TV pick and dance floor lights all return to the store defaults — no reinstall needed.</div>
+      ${movementSection()}
       <div class="section-title" style="margin-top:18px">Sign in</div>
       <p class="hint" style="margin:0 0 14px">🔑 First time? The store manager account is
       <b>BabyBluJ</b> / <b>BluJNetwork</b> — sign in at the front entrance, then change it in ☰ Menu → Admin → Users.<br>🔑 Accounts live at the <b>front entrance</b> now —
       use <b>🚪 Back to front entrance</b> in the sidebar and sign in (or create an account) right
       at the front desk, then walk straight into your media. Admins get their panels in ☰ Menu
       once they're in.</p>`;
+    wireMovement(root);
   }
 
   // ═══════════════ ADMIN · ALL IN ONE PLACE (t82: server + users + policies under one tab) ═══════════════
   function panelAdmin(root) {
-    const SUBS = [['server', '🛰️ Server'], ['tv', '📺 Store TV'], ['users', '🧑‍💼 Users'], ['policies', '🔒 Policies']];   /* t142: the store-TV defaults moved here from My Theme (owner ask) */
-    let sub = panelAdmin.current || 'server';
+    // t147: the Server wall is gone — one screen per concern, the way every
+    // settings app does it. t147b (the owner's correction): ADDING channel
+    // packs stays in Settings (Free TV); the channel LIST is Guide business —
+    // nobody turns on a channel from Settings.
+    const SUBS = [['servers', '🛰️ Servers'], ['friends', '🤝 Friends'], ['free', '📺 Free TV'],
+      ['tv', '📺 Store TV'], ['users', '🧑‍💼 Users'], ['policies', '🔒 Policies']];
+    let sub = panelAdmin.current || 'servers';
     root.innerHTML = `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
         ${SUBS.map(([k, label]) => `<button class="btn small admin-sub" data-sub="${k}">${label}</button>`).join('')}
@@ -531,46 +580,35 @@ export function initUI(ctx) {
       <div id="admin-sub-body"></div>`;
     const body = root.querySelector('#admin-sub-body');
     const draw = () => {
-      root.querySelectorAll('.admin-sub').forEach(b => b.style.opacity = b.dataset.sub === sub ? '' : '.55');
+      root.querySelectorAll('.admin-sub').forEach(b => b.classList.toggle('on', b.dataset.sub === sub));
       body.innerHTML = '';
-      ({ server: panelServer, tv: panelTV, users: panelUsers, policies: panelPolicies }[sub] || panelServer)(body);
+      ({ servers: panelServer, friends: panelServer, free: panelServer, tv: panelTV, users: panelUsers, policies: panelPolicies }[sub] || panelServer)(body, sub);
     };
     root.querySelectorAll('.admin-sub').forEach(b => b.onclick = () => { sub = b.dataset.sub; panelAdmin.current = sub; draw(); });
     draw();
   }
 
   // ═══════════════ ADMIN · SERVER ═══════════════
-  // ═══════════════ LIVE TV GUIDE (everyone) ═══════════════
-  // Channels come from a DVR tuner/antenna on the connected media server.
-  // Each channel is also a 📺 VHS case on the shelves (sort by Library/Type).
+  // ═══════════════ LIVE TV (tuner channels) ═══════════════
+  // t147b (the owner's rule): NO channel list in Settings, ever. You WATCH
+  // channels in the Guide (press G) or from their 📺 cases on the shelves —
+  // Settings only says where tuner channels come from.
   function panelLiveTV(root) {
-    const items = (state.items || []).filter(i => i.type === 'live');
-    if (!items.length) {
+    const tuners = (state.items || []).filter(i => i.type === 'live' && i.source !== 'iptv');
+    if (tuners.length) {
       root.innerHTML = `
-        <p class="hint" style="margin:0 0 10px">No live channels are coming from your media server right now.</p>
-        <div class="locked-note">
-          Live TV needs a <b>tuner</b> on the server itself — in Plex:
-          <b>Settings → Live TV &amp; DVR</b> (an antenna, HDHomeRun, or IPTV tuner).
-          Once Plex/Jellyfin exposes channels, they appear here AND as 📺 cases
-          on the shelves. <b>Admin → Server → Test connection</b> reports how
-          many channels your server currently exposes.
-        </div>`;
+        <p class="hint" style="margin:0">${tuners.length} tuner channel${tuners.length > 1 ? 's' : ''} from your media server — watch them in the <b>Guide</b> (press <b>G</b> in the theater) or grab their <b>📺 cases</b> on the shelves.</p>`;
       return;
     }
     root.innerHTML = `
-      <p class="hint" style="margin:0 0 12px">${items.length} channels from your tuner — click one to put it on the store TV.</p>
-      ${items.map((it, i) => `
-        <div class="live-row" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--vb-line);border-radius:10px;margin-bottom:6px">
-          <b style="min-width:2.2em;text-align:right">${String(i + 1).padStart(2, '0')}</b>
-          <span style="flex:1">${esc(it.title.replace('📺 ', ''))}</span>
-          <button class="btn accent" data-live-play="${esc(it.id)}">▶ Play on TV</button>
-        </div>`).join('')}`;
-    for (const btn of root.querySelectorAll('[data-live-play]')) {
-      btn.onclick = () => {
-        const item = items.find(i => i.id === btn.dataset.livePlay);
-        if (item) { ctx.playItem(item); closeSettings(); toast(`Now on the store TV: ${item.title.replace('📺 ', '')}`); }
-      };
-    }
+      <p class="hint" style="margin:0 0 10px">No tuner channels connected — the Guide's <b>free channels</b> (Admin → <b>Free TV</b>) don't need one.</p>
+      <div class="locked-note">
+        Want <b>antenna/cable TV</b> in the Guide too? Live TV needs a <b>tuner</b> on the
+        server itself — in Plex: <b>Settings → Live TV &amp; DVR</b> (an antenna, HDHomeRun, or IPTV tuner).
+        Once Plex/Jellyfin exposes channels, they appear in the Guide AND as 📺 cases
+        on the shelves. <b>Admin → Servers → Test connection</b> reports how
+        many channels your server currently exposes.
+      </div>`;
   }
 
   // ═══════════════ MY VISUALIZER (TV music look) ═══════════════
@@ -580,13 +618,20 @@ export function initUI(ctx) {
     ['wave', 'Wave', 'one flowing spectrum line'],
     ['pulse', 'Pulse', 'rings breathing with the bass']
   ];
-  async function panelServer(root) {
+  async function panelServer(root, sub = 'servers') {
     let adminCfg;
     try { adminCfg = (await api.adminConfig()).config; }
     catch (e) { root.innerHTML = `<div class="locked-note">${esc(e.message)}</div>`; return; }
     const srcs = adminCfg.sources || { plex: false, jellyfin: false };
 
+    // t147: groups render ALL sections (hidden ones keep their values —
+    // display:none inputs read fine, so the one-draft save stays whole).
+    // t147b: the channel lineup lives in the FREE TV group — adding packs is
+    // Settings business; WATCHING channels is Guide business (no channel
+    // list, no play buttons — nothing to tune in here).
+    const G = (g) => (sub === g ? '' : ' hidden');
     root.innerHTML = `
+      <div class="srv-grp" ${G('servers')}>
       <p class="hint" style="margin:0 0 14px">Every source below is <b>independent</b> — switch one on and it stocks the shelves, switch it off and it's gone. Want a pure free-media store? Leave Plex, Jellyfin and Demo off and just use the free shelves.</p>
 
       <div class="section-title">Sources on the shelves</div>
@@ -647,7 +692,22 @@ export function initUI(ctx) {
         <button class="btn" id="btn-add-jf">+ Add another Jellyfin</button>
       </div>
 
-      <div class="section-title" style="margin-top:16px">🤝 Friends' stores — their shelves, in your store</div>
+      <div class="section-title" style="margin-top:16px">📁 Local files — no media server (file grabber)</div>
+      <div class="row2" style="align-items:center">
+        <div class="field"><label>Media spots — grab from as many folders as you like</label>
+          <div id="local-spots"></div>
+          <button class="btn" id="btn-add-spot" style="margin-top:6px">+ Add another spot</button></div>
+        <div class="field"><label>Shelve local files</label>
+          <label class="switch"><input type="checkbox" id="local-on" ${adminCfg.local?.on ? 'checked' : ''}><span class="track"></span></label></div>
+      </div>
+      <div class="hint" style="margin:-6px 0 14px">Each spot grabs <b>everything inside it and every folder nested inside</b>, recursively, as individual files — movies by file, tracks grouped by their folder, ebooks/PDFs indexed for the future library. Runs off this machine's disk: no media server, no network opened.</div>
+
+      <div class="section-title" style="margin-top:22px">📺 Live TV (tuner channels)</div>
+      <div id="livetv-section"></div>
+      </div>
+
+      <div class="srv-grp" ${G('friends')}>
+      <div class="section-title">🤝 Friends' stores — their shelves, in your store</div>
       <div class="hint" style="margin:-4px 0 10px">Add a friend's <b>Home Binger</b> with the address + friend code they give you. Their shared shelves appear as new sections — their media streams through <b>their</b> store, so nobody's logins ever leave home.</div>
       <div id="friend-store-list"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -662,8 +722,10 @@ export function initUI(ctx) {
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" id="btn-add-friend">+ Invite a friend</button>
       </div>
+      </div>
 
-      <div class="section-title" style="margin-top:16px">Free shelves — stack with anything above</div>
+      <div class="srv-grp" ${G('free')}>
+      <div class="section-title">Free shelves — stack with anything above</div>
       <div class="hint" style="margin:-4px 0 12px">Public-domain classics from the <b>Internet Archive</b>, live radio from <b>Radio-Browser</b>, and any podcast's RSS feed. Free, legal, no account. Nothing checked = that shelf stays off.</div>
 
       <div class="section-title">🎞️ Classics wing (Internet Archive)</div>
@@ -672,17 +734,32 @@ export function initUI(ctx) {
       <div class="section-title" style="margin-top:14px">📻 Radio wall (live stations)</div>
       <div id="radio-libraries" class="lib-list"><div class="hint">Loading genres…</div></div>
 
-      <div class="section-title" style="margin-top:14px">📺 Live TV (the theater's Guide)</div>
+      <div class="section-title" style="margin-top:14px">🎙️ Podcast rack (RSS)</div>
+      <div id="podcast-feeds" class="lib-list"></div>
+      <div class="row2" style="margin-top:6px">
+        <div class="field"><label>Podcast RSS URL</label>
+          <input type="url" id="podcast-url" placeholder="https://feeds.example.com/show.rss"></div>
+        <div class="field"><label>Nickname (optional)</label>
+          <input type="text" id="podcast-name" placeholder="e.g. Drive-In Discourse" maxlength="64"></div>
+        <div class="field"><label>&nbsp;</label>
+          <button class="btn" id="btn-add-podcast">+ Add feed</button></div>
+      </div>
+      <div class="hint" style="margin:-6px 0 14px">Any podcast works: Share → <b>Copy RSS URL</b> in your podcast app, paste here — <b>add as many as you like</b>; each gets its own labeled shelf. Newest episodes shelve as CDs in the rack. Untick a feed to park it without deleting it.</div>
+
+      <div class="section-title" style="margin-top:24px">📺 The Guide's channel lineup</div>
+      <div class="hint" style="margin:-4px 0 12px">The <b>free live TV channels</b> — everything you switch on here shows up when you press <b>G</b> in the theater. Nothing here touches the shelves.</div>
+
+      <div class="section-title">Curated free channels</div>
       <div class="hint" style="margin:-4px 0 8px">Free channels from the public <b>iptv-org</b> directory, curated to
-        officially-free sources (Pluto, Tubi, ABC, PBS, public broadcasters…). They play in the theater's
-        <b>GUIDE</b> (press <b>G</b> in the theater) — never on the shelves.</div>
+        officially-free sources (Pluto, Tubi, ABC, PBS, public broadcasters…). Tick the groups you want — unticked groups stay off.</div>
       <div id="iptv-libraries" class="lib-list"><div class="hint">Loading groups…</div></div>
       <div class="toggle-row" style="margin-top:8px">
         <div><div class="t-label">Show every channel (unverified)</div>
         <div class="t-sub">widens the Guide beyond the curated tier — includes streams nobody has vouched for</div></div>
         <label class="switch"><input type="checkbox" id="iptv-unverified" ${adminCfg.iptv?.unverified ? 'checked' : ''}><span class="track"></span></label>
       </div>
-      <div class="section-title" style="margin-top:14px">📦 Extra channel packs — more free live TV</div>
+
+      <div class="section-title" style="margin-top:14px">📦 Channel packs — more free live TV</div>
       <div class="hint" style="margin:-4px 0 8px">Each pack arrives in the Guide as its own <b>provider page</b>
         (Pluto TV, Samsung TV Plus, Tubi, The Roku Channel, Plex Free…) and every channel also folds into the
         Guide's <b>genre pages</b> (News · Movies · Kids · Sports…). <b>Duplicate channels are removed
@@ -701,34 +778,10 @@ export function initUI(ctx) {
         (<b>github.com/iptv-org/iptv</b>) publishes thousands of free channels as .m3u playlists — by country, by
         category, one big index. Copy any playlist URL and paste it under <b>＋ Add a pack</b> above. Your own TV
         provider may publish one too. Rule of thumb: only add playlists you have the right to watch.</div>
-
-      <div class="section-title" style="margin-top:14px">🎙️ Podcast rack (RSS)</div>
-      <div id="podcast-feeds" class="lib-list"></div>
-      <div class="row2" style="margin-top:6px">
-        <div class="field"><label>Podcast RSS URL</label>
-          <input type="url" id="podcast-url" placeholder="https://feeds.example.com/show.rss"></div>
-        <div class="field"><label>Nickname (optional)</label>
-          <input type="text" id="podcast-name" placeholder="e.g. Drive-In Discourse" maxlength="64"></div>
-        <div class="field"><label>&nbsp;</label>
-          <button class="btn" id="btn-add-podcast">+ Add feed</button></div>
       </div>
-      <div class="hint" style="margin:-6px 0 14px">Any podcast works: Share → <b>Copy RSS URL</b> in your podcast app, paste here — <b>add as many as you like</b>; each gets its own labeled shelf. Newest episodes shelve as CDs in the rack. Untick a feed to park it without deleting it.</div>
 
-      <div class="section-title" style="margin-top:14px">📁 Local files — no media server (file grabber)</div>
-      <div class="row2" style="align-items:center">
-        <div class="field"><label>Media spots — grab from as many folders as you like</label>
-          <div id="local-spots"></div>
-          <button class="btn" id="btn-add-spot" style="margin-top:6px">+ Add another spot</button></div>
-        <div class="field"><label>Shelve local files</label>
-          <label class="switch"><input type="checkbox" id="local-on" ${adminCfg.local?.on ? 'checked' : ''}><span class="track"></span></label></div>
-      </div>
-      <div class="hint" style="margin:-6px 0 14px">Each spot grabs <b>everything inside it and every folder nested inside</b>, recursively, as individual files — movies by file, tracks grouped by their folder, ebooks/PDFs indexed for the future library. Runs off this machine's disk: no media server, no network opened.</div>
-
-      <button class="btn accent" id="btn-save-server" style="margin-top:6px">Save &amp; stock the shelves</button>
-      <div id="test-result" style="margin-top:12px; font-size:13.5px"></div>
-
-      <div class="section-title" style="margin-top:22px">📺 Live TV (tuner channels)</div>
-      <div id="livetv-section"></div>`;
+      <button class="btn accent" id="btn-save-server">Save &amp; stock the shelves</button>
+      <div id="test-result" style="margin-top:12px; font-size:13.5px"></div>`;
 
     const out = root.querySelector('#test-result');
     // t62: the grabber's media spots — add as many folders as you like
@@ -839,7 +892,20 @@ export function initUI(ctx) {
     };
     loadStaticLibs('archive', '#archive-libraries', adminCfg.archive?.sections);
     loadStaticLibs('radio', '#radio-libraries', adminCfg.radio?.sections);
-    loadStaticLibs('iptv', '#iptv-libraries', adminCfg.iptv?.sections);   // t123: the Guide's groups
+
+    // ── t147b: the Guide's channel lineup (Free TV group) — curated groups,
+    //    packs with priority, find-more countries, live dedupe count ──
+    (async () => {
+      const box = root.querySelector('#iptv-libraries');
+      if (!box) return;
+      try {
+        const r = await api.adminLibraries({ source: 'iptv' });
+        const saved = adminCfg.iptv?.sections || [];
+        box.innerHTML = r.libraries.map(lib => `
+          <label class="lib-row"><input type="checkbox" value="${esc(lib.key)}" ${saved.includes(lib.key) ? 'checked' : ''}>
+          <b>${esc(lib.title)}</b><small>${esc(lib.type)}</small></label>`).join('');
+      } catch (e) { box.innerHTML = `<div class="locked-note">${esc(e.message)}</div>`; }
+    })();
     // t138: EXTRA CHANNEL PACKS — provider rows with presets + priority order
     const PACK_PRESETS = [
       { label: 'Pluto TV', url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_us.m3u' },
@@ -855,6 +921,7 @@ export function initUI(ctx) {
     ].map(p => ({ label: String(p.label || ''), url: String(p.url || '') }));
     const renderPacks = () => {
       const box = root.querySelector('#iptv-packs');
+      if (!box) return;
       box.innerHTML = packDrafts.map((p, i) => `
         <div class="row" data-pk="${i}" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
           <input type="text" data-pk-label placeholder="Provider name (e.g. Pluto TV)" value="${esc(p.label)}" style="width:190px" maxlength="24">
@@ -870,8 +937,7 @@ export function initUI(ctx) {
       box.querySelectorAll('[data-pk-del]').forEach(el => el.onclick = () => { packDrafts.splice(+el.closest('[data-pk]').dataset.pk, 1); renderPacks(); });
     };
     renderPacks();
-    const pkAdd = root.querySelector('#iptv-pack-add');
-    if (pkAdd) pkAdd.onclick = () => { packDrafts.push({ label: '', url: '' }); renderPacks(); };
+    root.querySelector('#iptv-pack-add')?.addEventListener('click', () => { packDrafts.push({ label: '', url: '' }); renderPacks(); });
     const pkPresets = root.querySelector('#iptv-pack-presets');
     if (pkPresets) {
       pkPresets.innerHTML = PACK_PRESETS.map(p => `<button type="button" class="btn" data-preset="${esc(p.url)}">＋ ${esc(p.label)}</button>`).join('');
@@ -965,6 +1031,7 @@ export function initUI(ctx) {
       const el = root.querySelector('#iptv-dedupe-live');
       if (el && n > 0) el.textContent = ` (${n} duplicate channels hidden right now)`;
     }).catch(() => {});
+
     if (adminCfg.plex.url) loadLibs('plex').catch(() => {});
     if (adminCfg.jellyfin.url) loadLibs('jellyfin').catch(() => {});
     // ── t87: EXTRA INSTANCES — unlimited Plex/Jellyfin connections ──
@@ -1180,13 +1247,15 @@ export function initUI(ctx) {
       archive: { sections: keptSections('#archive-libraries', adminCfg.archive?.sections) },   // t125: wipe-guarded
       radio: { sections: keptSections('#radio-libraries', adminCfg.radio?.sections) },         // t125: wipe-guarded
       iptv: { sections: keptSections('#iptv-libraries', adminCfg.iptv?.sections),              // t125: wipe-guarded
-        unverified: !!(root.querySelector('#iptv-unverified')?.checked),   // t123: the Guide
+        unverified: root.querySelector('#iptv-unverified')                  // the toggle lives here (Free TV);
+          ? !!root.querySelector('#iptv-unverified').checked
+          : (adminCfg.iptv?.unverified ?? false),                          // no box rendered → carry the saved value
         url: adminCfg.iptv?.url || '',                                     // t137: carry the base (partial-update safe)
         playlistUrl: '',                                                   // t138: superseded by packs (cleared so the legacy fold can't double it)
-        packs: packDrafts
+        packs: packDrafts                                                   // t147b: edited right here (Free TV)
           .map(p => ({ label: p.label.trim(), url: p.url.trim() }))
           .filter(p => p.url.startsWith('http://') || p.url.startsWith('https://'))
-          .map((p, i) => ({ label: p.label.slice(0, 24) || `Pack ${i + 1}`, url: p.url.slice(0, 500) })) },   // t138: the provider packs
+          .map((p, i) => ({ label: p.label.slice(0, 24) || `Pack ${i + 1}`, url: p.url.slice(0, 500) })) },
       podcasts: { feeds: podcastList },
       local: { on: !!(root.querySelector('#local-on')?.checked),
         spots: [...root.querySelectorAll('.local-path')].map(el => el.value.trim()).filter(Boolean) },   // t62: multi-spot grabber
@@ -1293,7 +1362,8 @@ export function initUI(ctx) {
       </div>
       <div class="section-title">Idle screen</div>
       <div class="radio-cards">
-        ${[['standby', 'Standby card', '"now playing: nothing"'],
+        ${[['white', 'Projector screen', 'blank white — ready for the reel'],
+           ['standby', 'Standby card', '"now playing: nothing"'],
            ['loop', 'Synthwave loop', 'built-in attraction channel'],
            ['url', 'Video URL', 'any looping mp4/webm link'],
            ['item', 'Library item', 'a music video / movie on repeat']]
@@ -1503,7 +1573,53 @@ export function initUI(ctx) {
         <div id="invite-card"></div>
         <div class="section-title" style="margin-top:18px">On the same Wi-Fi?</div>
         <div class="hint" style="margin:-4px 0 8px">No invite needed — anyone on the same Wi-Fi opens this address in any browser (phones too). Nothing to install.</div>
-        <div id="invite-box"><div class="hint">…</div></div>`;
+        <div id="invite-box"><div class="hint">…</div></div>
+        <div class="section-title" style="margin-top:18px">🖥 Help desk — bug reports</div>
+        <div class="hint" style="margin:-4px 0 8px">The help-desk PC (right of the theater door) opens this Discord
+        invite so anyone can report bugs or ask for help. Paste your server's invite link:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="hd-discord-input" type="url" placeholder="https://discord.gg/…"
+                 style="flex:1;min-width:220px;padding:8px 12px;border-radius:10px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.35);color:var(--vb-ink,#eef1ff);font:inherit">
+          <button class="btn small" id="hd-discord-save">Save invite</button>
+        </div>
+        <div class="hint" style="margin:10px 0 6px">The in-app chat embed shows this Discord channel — the one
+        the invite lands on. Easiest: in Discord, right-click the channel → <b>Copy Link</b> (or Copy Channel ID
+        with Developer Mode on) and paste it here — the link and the bare ID both work:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="hd-channel-input" type="text" placeholder="Channel ID — or its discord.com/channels/… link"
+                 style="flex:1;min-width:220px;padding:8px 12px;border-radius:10px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.35);color:var(--vb-ink,#eef1ff);font:inherit">
+          <button class="btn small" id="hd-channel-save">Save channel</button>
+        </div>`;
+      // t155: save the store's bug-report Discord invite (admin config)
+      const hdInp = root.querySelector('#hd-discord-input');
+      const hdCh = root.querySelector('#hd-channel-input');
+      if (hdInp || hdCh) {
+        try {
+          const cur = await api.adminConfig();
+          if (hdInp) hdInp.value = cur?.config?.community?.discord || '';
+          if (hdCh) hdCh.value = cur?.config?.community?.channelId || '';
+        } catch { /* leave blank — the admin types it */ }
+        if (hdInp) root.querySelector('#hd-discord-save').onclick = async () => {
+          const v = hdInp.value.trim();
+          if (v && !/^https:\/\//i.test(v)) { toast('Invite links start with https://', true); return; }
+          try {
+            await api.adminSaveConfig({ community: { discord: v } });
+            toast(v ? 'Help desk now points at your Discord' : 'Invite cleared');
+          } catch (e) { toast(e.message || 'Could not save', true); }
+        };
+        if (hdCh) root.querySelector('#hd-channel-save').onclick = async () => {
+          // t159b: a pasted discord.com/channels/<server>/<channel> link is
+          // as good as the bare id — no Developer Mode needed
+          const link = /^https?:\/\/(?:ptb\.|canary\.)?discord\.com\/channels\/(?:@me\/)?\d+\/(\d{5,25})/.exec(hdCh.value.trim());
+          const v = link ? link[1] : hdCh.value.trim();
+          if (v && !/^\d{5,25}$/.test(v)) { toast('Paste the channel ID — or right-click the channel in Discord → Copy Link and paste that', true); return; }
+          try {
+            await api.adminSaveConfig({ community: { channelId: v } });
+            if (v) hdCh.value = v;                        // show the normalized id back
+            toast(v ? 'Chat embed saved — the PC shows the channel' : 'Chat embed cleared');
+          } catch (e) { toast(e.message || 'Could not save', true); }
+        };
+      }
       // t81b: INLINE EDITORS — Electron (the desktop exe) does not support
       // window.prompt — it returns null instantly, so prompt-based flows are
       // DEAD in the exe while working in every browser (how it slipped through
@@ -1720,6 +1836,10 @@ export function initUI(ctx) {
 
   // ═══════════════ ITEM MODAL ═══════════════
   async function showItemModal(item) {
+    // t148: serial guard — this function awaits mid-body (cover art can be a
+    // slow external fetch), so a superseded open must never wire the buttons
+    // of a modal that has since been re-opened for something else
+    const myOpen = (showItemModal._seq = (showItemModal._seq || 0) + 1);
     const modal = $('#item-modal');
     $('#item-type').textContent = TYPE_LABELS[item.type] || 'Media';
     $('#item-title').textContent = item.title;
@@ -1758,6 +1878,7 @@ export function initUI(ctx) {
       cv.setSynopsis({ summary: item.summary || 'Details unavailable.' });
     }
 
+    if (myOpen !== showItemModal._seq) return;   // superseded — a newer modal owns the DOM
     // the big button: video cases come OFF the shelf (carry them to the
     // theater deck); music plays straight away on the big screen
     const tvBtn = $('#item-play-tv');
@@ -1772,12 +1893,89 @@ export function initUI(ctx) {
       }
       modal.classList.add('hidden');
     };
-    // ⏭ PLAY NEXT — queue it right after whatever's on now
+    // ⏭ PLAY NEXT — queue it right after whatever's on now (never for LIVE
+    // TV — the owner's rule: playlists are for shelved media only). The
+    // display resets for every open — this function awaits mid-body, so a
+    // sticky hide would leak into the next item's modal.
     const nextBtn = $('#item-play-next');
+    if (nextBtn) nextBtn.style.display = item.type === 'live' ? 'none' : '';
     if (nextBtn) nextBtn.onclick = () => {
       const r = ctx.playNext(item);
       toast(r === 'now' ? `▶ Playing now: ${item.title}` : `⏭ Up next on the store TV: ${item.title}`);
       modal.classList.add('hidden');
+    };
+    // ⬇ DOWNLOAD (t154) — file-backed items only: your own movies/music and
+    // friends' shared shelves save through the same route that streams them
+    // (a friend's copy downloads FROM THEIR server, with their permission —
+    // the token rules are identical). Live TV/radio/podcasts never download.
+    const dlBtn = $('#item-download');
+    const dlOk = ['movie', 'show', 'musicvideo', 'album'].includes(item.type)
+      && !['iptv', 'radio', 'podcast', 'demo'].includes(String(item.source || ''));
+    if (dlBtn) {
+      dlBtn.style.display = dlOk ? '' : 'none';
+      dlBtn.onclick = () => {
+        const q = item.type === 'album' ? '?audio=1&dl=1' : '?dl=1';
+        const a = document.createElement('a');
+        a.href = `/api/play/${encodeURIComponent(item.source)}/${encodeURIComponent(item.key)}${q}`;
+        a.download = '';
+        document.body.appendChild(a); a.click(); a.remove();
+        toast(`⬇ Saving “${item.title}” to your downloads`);
+        modal.classList.add('hidden');
+      };
+    }
+  }
+
+  // ── t155/t168: THE HELP-DESK PC — the bug-report Discord chat, front and
+  // center. t168 (owner): the UI is mainly the chat itself — the old
+  // invite-link row is GONE (the wizcord embed carries its own sign-in, so a
+  // second link in our chrome was redundant noise).
+  function openHelpDesk() {
+    const modal = $('#helpdesk-modal'); if (!modal) return;
+    const chat = $('#hd-chat'); if (!chat) return;
+    const wchat = document.getElementById('hd-world-chat');
+    if (wchat) wchat.style.display = 'none';   // t160: the world screen yields to the enlarged view (sync — no frame needed)
+    const channelId = state.boot?.community?.channelId || '';
+    // t159: the #bug-reports channel, IN the app — past bugs, send one, reactions
+    chat.innerHTML = channelId
+      ? `<div class="hd-chat-bar">
+           <span class="hint">Live from the store's Discord — sign in once to send and react.</span>
+           <button class="btn small" id="hd-reload" title="Re-fetch the chat">↻ Reload</button>
+           <button class="btn small accent" id="hd-signin">🔑 Sign in to Discord</button>
+         </div>
+         <div class="hd-chat-frame">
+           <iframe src="https://wizcord.io/iframe?channelId=${esc(channelId)}" title="Bug reports chat"
+             allow="clipboard-write; fullscreen" referrerpolicy="no-referrer"></iframe>
+         </div>`
+      : `<div id="hd-chat-fallback">The chat isn't configured yet — the store owner can add the bug-report
+         channel in <b>☰ Menu → Admin → Users</b>.</div>`;
+    modal.classList.remove('hidden');
+    document.exitPointerLock?.();
+    // t159b: Discord's login can't complete INSIDE a frame (Discord refuses
+    // to be framed), so the embed alone could never sign anyone in. The
+    // button opens the SAME chat page as a real window: in the desktop app
+    // that's an in-app window sharing the app's session (desktop/main.cjs
+    // routes it), so the login STICKS and the embed reconnects here; in a
+    // plain browser it's a normal tab with the same cookies. Either way,
+    // closing it reloads the embed.
+    const reloadChat = () => {
+      const ifr = chat?.querySelector('iframe');
+      if (ifr && channelId) ifr.src = `https://wizcord.io/iframe?channelId=${encodeURIComponent(channelId)}&t=${Date.now()}`;
+    };
+    const rl = chat?.querySelector('#hd-reload');
+    if (rl) rl.onclick = reloadChat;
+    const si = chat?.querySelector('#hd-signin');
+    if (si) si.onclick = () => {
+      const pop = window.open(`https://wizcord.io/iframe?channelId=${encodeURIComponent(channelId)}`,
+        'hbWizcordLogin', 'width=900,height=880');
+      if (!pop) { toast('The window was blocked — allow pop-ups for this app, then try again', true); return; }
+      toast('In the window that opens: click “Login with Discord” and sign in. Close it and the chat reconnects here');
+      const t0 = Date.now();
+      const iv = setInterval(() => {
+        let closed = false;
+        try { closed = !!pop.closed; } catch { /* .closed stays readable cross-origin */ }
+        if (closed) { clearInterval(iv); reloadChat(); return; }
+        if (Date.now() - t0 > 10 * 60 * 1000) clearInterval(iv);   // stop watching after 10 min
+      }, 700);
     };
   }
   $('#item-modal').addEventListener('click', (e) => { if (e.target.id === 'item-modal') $('#item-modal').classList.add('hidden'); });
@@ -2002,31 +2200,52 @@ export function initUI(ctx) {
   const searchResults = $('#side-search-results');
   if (searchInput) {
     const TYPE_ICON = { movie: '🎬', show: '📺', album: '💿', musicvideo: '🎤', episode: '🎙️', radio: '📻', live: '📡' };
+    // t156: the shelf-search menu — up to 40 hits with a count line, and full
+    // keyboard control (↑/↓ pick, Enter open) so the scrollbar is optional
+    let kbIdx = -1;
+    const paint = () => {
+      searchResults.querySelectorAll('.search-row').forEach((r, i) => r.classList.toggle('kbd-pick', i === kbIdx));
+      const pick = searchResults.querySelectorAll('.search-row')[kbIdx];
+      if (pick) pick.scrollIntoView({ block: 'nearest' });
+    };
+    const openRow = (row) => {
+      const item = (state.items || []).find(i => i.id === row.dataset.searchId);
+      searchResults.classList.add('hidden');
+      searchInput.value = '';
+      if (item) showItemModal(item);
+    };
     searchInput.addEventListener('input', () => {
       const q = searchInput.value.trim().toLowerCase();
       if (q.length < 2) { searchResults.classList.add('hidden'); searchResults.innerHTML = ''; return; }
-      const hits = (state.items || [])
-        .filter(i => (i.title || '').toLowerCase().includes(q))
-        .slice(0, 12);
-      searchResults.innerHTML = hits.length
-        ? hits.map(i => `
+      const all = (state.items || []).filter(i => (i.title || '').toLowerCase().includes(q));
+      const hits = all.slice(0, 40);
+      kbIdx = -1;
+      searchResults.innerHTML = (hits.length
+        ? `<div class="side-search-count">${all.length} on the shelves${all.length > hits.length ? ' — showing the first ' + hits.length : ''}</div>` +
+          hits.map(i => `
           <button class="search-row" data-search-id="${esc(i.id)}">
             <span>${TYPE_ICON[i.type] || 'MediaType'}</span>
             <span class="search-title">${esc(i.title)}</span>
             <small>${[i.year, (i.sectionTitle || '')].filter(Boolean).join(' · ')}</small>
           </button>`).join('')
-        : '<div class="search-row" style="cursor:default">No matches on the shelves.</div>';
+        : '<div class="search-row" style="cursor:default">No matches on the shelves.</div>');
       searchResults.classList.remove('hidden');
       searchResults.querySelectorAll('[data-search-id]').forEach(row => {
-        row.onclick = () => {
-          const item = (state.items || []).find(i => i.id === row.dataset.searchId);
-          searchResults.classList.add('hidden');
-          if (item) showItemModal(item);
-        };
+        row.onclick = () => openRow(row);
       });
     });
     searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { searchInput.value = ''; searchResults.classList.add('hidden'); searchInput.blur(); }
+      if (e.key === 'Escape') { searchInput.value = ''; searchResults.classList.add('hidden'); searchInput.blur(); return; }
+      const rows = [...searchResults.querySelectorAll('[data-search-id]')];
+      if (!rows.length || searchResults.classList.contains('hidden')) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        kbIdx = e.key === 'ArrowDown' ? Math.min(kbIdx + 1, rows.length - 1) : Math.max(kbIdx - 1, 0);
+        paint();
+      } else if (e.key === 'Enter' && kbIdx >= 0) {
+        e.preventDefault();
+        openRow(rows[kbIdx]);
+      }
     });
   }
 
@@ -2268,5 +2487,5 @@ export function initUI(ctx) {
 
   return {
     updateCarry,
-    openDj, toast, openSidebar, closeSidebar, openSettings, closeSettings, showItemModal, updateSidebar };
+    openDj, toast, openSidebar, closeSidebar, openSettings, closeSettings, showItemModal, openHelpDesk, updateSidebar };
 }

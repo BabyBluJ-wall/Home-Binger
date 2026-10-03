@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  guide.js — the TV GUIDE · t139h: the owner's pick — BEST OF BOTH
-//  (classic mechanics + the new layout; swap via /home/user/guide-variants/swap.sh)
+//  (classic mechanics + the new layout; swap via guide-variants/swap.sh (dev workbench))
 // ─────────────────────────────────────────────────────────────────────────────
 //   · FULL SCREEN: the classic mechanics — the video keeps its EXACT size
 //     and just slides left of the dock (never stopped, reloaded, resized,
@@ -21,7 +21,8 @@
 //     always visible), instant search (name / number / show), ☆ favorites
 //     that survive pack regeneration, honest ● LIVE when no data exists
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1790065991054';
+import { state } from './state.js?v=1790983945165';
+import { ytId, ytPlaylistId } from './yt.js?v=1790983945165';   // t152: pasted link → the store TV · t157: playlists too
 
 window.__GUIDE_VARIANT = 'hybrid';   // the suite reads this (variant-aware checks)
 
@@ -64,9 +65,17 @@ let clockTimer = null;        // t139g: the auto-advancing 60s clock (ended show
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// t147b (the owner's rule): the channel LIST lives in the Guide — every live
+// channel rides it, the free packs AND any tuner channels from Plex/Jellyfin.
+// Tuner rows carry no program data; they show an honest ● LIVE.
 function channels() {
-  return (state.items || []).filter(i => i.source === 'iptv' && i.type === 'live');
+  return (state.items || []).filter(i => i.type === 'live');
 }
+
+// t147b: tuner/server channels carry the 📺 shelf prefix in their titles and
+// name their source (Plex, Jellyfin) instead of a pack provider
+const chName = (it) => String(it.title || '').replace(/^📺\s*/, '');
+const chProv = (it) => it.provider || (it.source && it.source !== 'iptv' ? it.source[0].toUpperCase() + it.source.slice(1) : 'Directory');
 
 // ── t138: the page bar = GENRE pages (the paper guide's sections) ────────────
 const GENRE_ORDER = ['News', 'Movies', 'Series', 'Entertainment', 'Kids', 'Anime',
@@ -91,7 +100,7 @@ function pagesOf(items) {
 function providersOf(items) {
   const map = new Map();                       // label → count
   for (const it of items) {
-    const p = it.provider || 'Directory';
+    const p = chProv(it);
     map.set(p, (map.get(p) || 0) + 1);
   }
   return [...map.entries()];
@@ -177,8 +186,8 @@ export function initGuide(appCtx) {
         <button id="guide-close" class="hud-btn">✕</button>
       </div>
       <div class="guide-searchrow">
-        <input id="guide-search" type="search" autocomplete="off" spellcheck="false" maxlength="60"
-          placeholder="Search channels — name, number, or show">
+        <input id="guide-search" type="search" autocomplete="off" spellcheck="false" maxlength="200"
+          placeholder="Search channels — or paste a YouTube link and press Enter">
       </div>
       <div id="guide-prov" class="guide-cats"></div>
       <div id="guide-cats" class="guide-cats"></div>
@@ -200,6 +209,8 @@ export function initGuide(appCtx) {
 
   modal.addEventListener('click', (e) => { if (e.target === modal) closeGuide(); });
   modal.querySelector('#guide-close').onclick = closeGuide;
+  // t147: the channel lineup lives IN the Guide now (moved out of Settings).
+  // ⚙ shows for admins only; guests never see it.
 
   // ── t139g: ONE capture-phase listener — complete key isolation while the
   // Guide is open (the spec's avatar-freeze: WASD/arrows/space/numbers never
@@ -231,7 +242,29 @@ export function initGuide(appCtx) {
       closeGuide(); return;
     }
     if (inSearch) {   // the input owns its keys; Enter watches
-      if (e.key === 'Enter') { e.preventDefault(); playSel(); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // t157: PLAYLIST links (and watch-links carrying &list=) play the
+        // whole playlist — checked BEFORE the plain video match
+        const pl = ytPlaylistId(e.target.value);
+        if (pl) {
+          if (!document.body.classList.contains('fs-guide')) closeGuide();
+          ctx.playYouTube?.(pl.videoId, pl.list);
+          return;
+        }
+        // t152: a pasted YouTube link plays on the store TV — our controls,
+        // no YouTube overlay. Anything else tunes channels as always.
+        const yid = ytId(e.target.value);
+        if (yid) {
+          // close the windowed guide FIRST (t145 doctrine: a windowed tune
+          // closes it) — otherwise the video's fullscreen entry docks the
+          // guide beside it and Esc's first press closes the guide, not the video
+          if (!document.body.classList.contains('fs-guide')) closeGuide();
+          ctx.playYouTube?.(yid);
+          return;
+        }
+        playSel();
+      }
       return;
     }
     if (e.key === 'g' || e.key === 'G') { e.preventDefault(); closeGuide(); return; }
@@ -311,7 +344,7 @@ export function fitFsDock() {
 export function openGuide() {
   const items = channels();
   if (!items.length) {
-    ctx.toast?.('No live TV yet — the admin can turn it on in Admin → Media', true);
+    ctx.toast?.('No live TV yet — ask the store admin to add channel packs', true);
     return;
   }
   favs = new Set(Array.isArray(state.prefs?.guideFavs) ? state.prefs.guideFavs : []);   // t128
@@ -524,7 +557,7 @@ function runSearch(qRaw) {
   const pageKeys = new Set(g.items);
   flat = pool.filter(it => {
     if (g.key !== 'all' && !pageKeys.has(it)) return false;
-    if (String(it.title || '').toLowerCase().includes(q)) return true;
+    if (chName(it).toLowerCase().includes(q)) return true;
     if (it.chno && String(it.chno) === q.replace(/\D/g, '')) return true;
     const e = epgOf(it);
     if (e && String(e.now?.t || '').toLowerCase().includes(q)) return true;
@@ -579,11 +612,11 @@ function rowHTML(it, idx) {
       <span class="guide-num">${esc(num)}</span>
       ${logo}
       <span class="guide-mid">
-        <span class="guide-name">${esc(it.title)}</span>
+        <span class="guide-name">${esc(chName(it))}</span>
       </span>
       <span class="guide-now">${nowCell}</span>
       ${nextCell}
-      <span class="guide-prov">${esc(it.provider || 'Directory')}</span>
+      <span class="guide-prov">${esc(chProv(it))}</span>
       <button class="guide-star${favs.has(it.id) ? ' on' : ''}" data-star="${esc(it.id)}" title="Favorite (F)">${favs.has(it.id) ? '★' : '☆'}</button>
     </div>`;
 }
@@ -661,7 +694,7 @@ function renderSyn() {
       ${prog?.d ? `<p class="syn-desc">${esc(prog.d)}</p>` : ''}
       ${e.next?.t && !selNext ? `<button class="syn-nextbtn" data-synnext="1">Next: ${esc(e.next.t)} ›</button>` : ''}`;
   } else {
-    inner = `<div class="syn-now"><span class="syn-label">LIVE</span><span class="syn-title">${esc(it.title)}</span>
+    inner = `<div class="syn-now"><span class="syn-label">LIVE</span><span class="syn-title">${esc(chName(it))}</span>
       <span class="syn-time">No published schedule for this channel.</span></div>`;
   }
   syn.innerHTML = `
@@ -669,8 +702,8 @@ function renderSyn() {
       <button class="syn-close" data-synclose="1" title="Close the channel info">✕</button>
       ${it.logo ? `<img class="syn-logo" src="${esc(it.logo)}" alt="" onerror="this.style.display='none'">` : ''}
       <div class="syn-chan">
-        <span class="syn-name">${esc(it.title)}</span>
-        <span class="syn-meta">${esc(it.provider || 'Directory')}${it.chno ? ` · Ch ${esc(it.chno)}` : ''}</span>
+        <span class="syn-name">${esc(chName(it))}</span>
+        <span class="syn-meta">${esc(chProv(it))}${it.chno ? ` · Ch ${esc(it.chno)}` : ''}</span>
       </div>
       ${inner}
       <div class="syn-actions">
@@ -693,7 +726,7 @@ function renderFoot() {
   const it = flat[sel];
   if (!it) { foot.innerHTML = ''; return; }
   const e = epgOf(it);
-  const left = [`<b>${esc(it.title)}</b>`, esc(it.provider || 'Directory')];
+  const left = [`<b>${esc(chName(it))}</b>`, esc(chProv(it))];
   if (it.chno) left.push(`Ch ${esc(it.chno)}`);
   if (atTime) left.unshift(`At ${hhmm(atTime)}`);   // t140: the time-travel context
   const watch = `<button class="syn-btn primary foot-watch" data-footwatch="1" title="Watch this channel">▶ Watch</button>`;   // t143: fs tunes from the footer (the card is theater-only now)
@@ -768,7 +801,7 @@ function playSel() {
       clearInterval(check);
       if (!liveOk) {
         offline.add(it.id);
-        ctx.toast?.(`“${it.title}” seems offline — flipping past it`, true);
+        ctx.toast?.(`“${chName(it)}” seems offline — flipping past it`, true);
         if (Date.now() - t0 > 12000) {
           const nxt = flat[(sel + 1) % flat.length];
           if (nxt && nxt.id !== it.id) { sel = (sel + 1) % flat.length; ctx.playItem?.(nxt); }

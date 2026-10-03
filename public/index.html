@@ -21,7 +21,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Home Binger — Be Kind, Rewind</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230a0f2e'/><text x='32' y='42' font-size='34' text-anchor='middle' fill='%23ff3ea5' font-family='sans-serif' font-weight='900' font-style='italic'>HB</text></svg>">
-<link rel="stylesheet" href="/css/style.css?v=1790065991054">
+<link rel="stylesheet" href="/css/style.css?v=1790983945165">
 </head>
 <body class="overlay-open">
 
@@ -60,6 +60,7 @@
         <button id="fs-play" class="hud-btn" title="Play / Pause">⏸</button>
         <button id="fs-fwd" class="hud-btn" title="Forward 10 seconds">10⏩</button>
         <button id="fs-next" class="hud-btn" title="Next">⏭</button>
+        <button id="fs-cc" class="hud-btn" title="Closed captions on/off">CC</button>
         <input id="fs-vol" type="range" min="0" max="100" value="25" title="Volume">
         <span id="fs-time">0:00 / 0:00</span>
       </div>
@@ -116,6 +117,7 @@
     </nav>
     <div class="sidebar-foot">
       <button id="btn-leave-store" class="btn wide" style="margin-bottom:8px">🚪 Back to front entrance</button>
+      <div id="side-version" class="side-version">Home Binger™</div>
       <div class="sidebar-tm" title="Trademarks &amp; credits — see TRADEMARKS.md in the app folder">Home Binger™ · The CordCut Co-op™ · TCC™<br><span>© 2026 BluJ Productions. All rights reserved.</span></div>
     </div>
   </aside>
@@ -156,11 +158,31 @@
           <div class="item-actions">
             <button id="item-play-tv" class="btn accent">📺 Play on the store TV</button>
             <button id="item-play-next" class="btn">⏭ Play next</button>
+            <button id="item-download" class="btn">⬇ Download</button>
             <a id="item-play" class="btn hidden" target="_blank" rel="noopener">↗ Open on media server</a>
           </div>
           <div id="item-source-badge" class="item-source-badge"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- t155/t159: THE HELP-DESK PC — click the PC by the theater door.
+       The store's #bug-reports chat is embedded (read past bugs, send one,
+       see reactions) + the invite link + the report format. -->
+  <div id="helpdesk-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close hud-btn">✕</button>
+      <h2 style="margin:0 0 4px">🖥 Bug reports — live from Discord</h2>
+      <div id="hd-chat"></div>
+      <details class="hd-report">
+        <summary>🐞 How to write a bug report that gets fixed</summary>
+        <ol>
+          <li><b>What you did</b> — the steps, so anyone can repeat them</li>
+          <li><b>What happened</b> vs. <b>what you expected</b></li>
+          <li><b>Where you tested</b> — this PC app, a phone browser, a friend's invite…</li>
+        </ol>
+      </details>
     </div>
   </div>
 
@@ -172,7 +194,7 @@
       <div class="help-grid">
         <div><b>W A S D</b><span>walk (arrows work too)</span></div>
         <div><b>Mouse</b><span>look around</span></div>
-        <div><b>Shift</b><span>jog</span></div>
+        <div><b>Shift</b><span>switch pace (walk · jog · run)</span></div>
         <div><b>Click a case</b><span>details &amp; "Play on the store TV"</span></div>
         <div><b>Q</b><span>release / re-grab the mouse (Esc works too)</span></div>
         <div><b>Scroll</b><span>zoom in / out</span></div>
@@ -228,8 +250,8 @@
     </div>
   </div>
 
-  <script src="/js/vendor/resonance-audio.min.js?v=1790065991054"></script>
+  <script src="/js/vendor/resonance-audio.min.js?v=1790983945165"></script>
   <script src="/vendor/hls.min.js"></script>
-  <script type="module" src="/js/main.js?v=1790065991054"></script>
+  <script type="module" src="/js/main.js?v=1790983945165"></script>
 </body>
 </html>
