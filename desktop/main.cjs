@@ -11,6 +11,11 @@
 //  self-contained and never installs or modifies anything on the system.
 // ─────────────────────────────────────────────────────────────────────────────
 const { app, BrowserWindow, Menu, shell } = require('electron');
+
+// t152: the store's YouTube playback (and any embedded stream) may start
+// without a prior click — the Guide's Enter key IS the gesture, but the
+// embedded player can't see it. Harmless for everything else.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 const net = require('node:net');
 const http = require('node:http');
 const path = require('node:path');
@@ -19,8 +24,27 @@ const fs = require('node:fs');
 
 // t96: external links (e.g. the version notice's "Get it") open in the user's
 // own browser — the app window never navigates away from the store.
+// t159b: EXCEPTION — the in-app chat's Discord login. The chat embed
+// (wizcord.io) signs in through a popup to wizcord.io/auth/discord →
+// discord.com, and Discord's login/OAuth pages refuse to run inside a frame.
+// Sending those popups to the SYSTEM browser logged people in "somewhere
+// else": the cookies landed in the browser, never in the app, and the embed
+// stayed signed out (owner report). So wizcord.io + discord.com popups open
+// as IN-APP child windows that share this app's session — the login sticks,
+// and the embed reconnects. Everything else still goes to the user's browser.
 app.on('web-contents-created', (_e, wc) => {
   wc.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(url);
+      const inApp = (u.protocol === 'https:' || u.protocol === 'http:')
+        && (/(^|\.)wizcord\.io$/i.test(u.hostname) || /(^|\.)discord\.com$/i.test(u.hostname));
+      if (inApp) {
+        return { action: 'allow', overrideBrowserWindowOptions: {
+          width: 940, height: 900, autoHideMenuBar: true,
+          backgroundColor: '#0b0e1a', title: 'Home Binger — sign in'
+        } };
+      }
+    } catch { /* unparsable URL — fall through to the browser path */ }
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
