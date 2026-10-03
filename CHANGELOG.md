@@ -1,3 +1,61 @@
+## 2026-10-02 — 1.15.0: the community update — chat, comfort, and a booth for DJs
+
+- **The store's Discord, built in for everyone.** The help-desk PC now
+  shows the live bug-report chat right on its monitor — like a real PC
+  running Discord — with click-to-enlarge. Every copy ships with the
+  store's Discord as the default chat; owners can point their own
+  server at it instead.
+- **A mouse that behaves.** Lock hiccups heal on their own (no more
+  silent fallback to hold-the-button looking), menus always get a free
+  cursor the moment they open, and menu clicks never leak into the 3D
+  store behind them.
+- **Movement, your way.** Look-speed slider that actually SAVES (new
+  default 0.55× — calmer for new visitors), one press of Shift cycles
+  walk → jog → run, and three paces for a store that keeps growing.
+- **A world with edges.** The theater's movie screen is solid now, and
+  the dance-hall door no longer snags when you walk through slowly.
+- **Long shows stay on.** Live TV heals itself through stream hiccups
+  and silent freezes — no more black screen mid-movie.
+- **DJs pick their set at the booth.** A new Folders tab lists your own
+  local music by folder, with one-tap "queue the whole folder" for
+  AUTO-DJ.
+
+## 2026-09-23 — 1.10.1 BETA 2 (t146–t147): smoother walks, sharper Guide, tidier Settings
+
+- **Not a new version — a better 1.10.1.** Two passes on top of the
+  public release: a performance fix for walking through the theater,
+  and the full UI polish pass.
+- **t146 — the theater glides past its billboards now:** the idle
+  "now showing" screens were re-rendering every frame even when you
+  couldn't see them. Now: screens behind you or off-screen paint zero,
+  distant ones throttle down, and the static headline text is drawn
+  once and cached. Worst-case walk stutter cut by more than half on
+  our slowest test rig; movies and live TV playback are untouched.
+- **t147 — the polish pass:**
+  - **The TV Guide reads better:** bigger channel names and category
+    pills, tighter spacing top and sides. The full-screen guide keeps
+    its proven layout, untouched.
+  - **Settings is organized like a real app:** the admin section is six
+    clear pages — Servers, Friends, Free TV, Store TV, Users, Policies
+    — with Save always in reach instead of a scrolling hunt.
+  - **You watch channels in the Guide, period:** Settings no longer
+    lists channels or plays them — the old "Live TV" list in Admin →
+    Servers (which had grown to list every Guide channel with a play
+    button) is gone. Tuner channels from your own Plex/Jellyfin now
+    appear in the Guide itself (press G), alongside their 📺 cases on
+    the shelves.
+  - **Adding channels stays where you'd expect:** Settings → Admin →
+    Free TV — curated groups, provider packs, one-click countries,
+    worldwide bundles, and the live duplicate-remover count, all on the
+    Free TV page with one Save.
+  - **Fixed: country packs silently stopped at 8.** The server capped
+    channel packs at 8 without telling you — save Canada first and
+    every later country add was quietly dropped. The cap is now 40
+    (every country + worldwide + presets, with room to spare).
+- Suite: 157/157 (new checks: t146 pacing, t147 typography, tuner
+  channels in the Guide, no channel list or play buttons anywhere in
+  Settings, the pack cap).
+
 ## 2026-09-23 — v1.10.1 PUBLIC RELEASE: the Live TV update (t134–t145)
 
 - **The line in one sentence:** every free TV service in one Guide —

@@ -1,12 +1,38 @@
 # 📼 Home Binger™
 
+
 <p align="center">
   <img src="docs/og-home-binger.png" alt="Home Binger — a walkable 3D video store with VHS and DVD shelves, real cover art, jukebox, and theater doors" width="960">
 </p>
 
 **The 3D Storefront for The CordCut Co-op™ (TCC™)** — a self-hosted, walkable 3D video store with a movie theater and a neon dance hall, stocked from your own Plex, Jellyfin, or any folder on your server. Free for anyone to use and modify, **not for sale**: licensed under [CC BY-NC-SA 4.0](LICENSE). Made with 💙 by **BluJ Productions** — owner-directed, owner-designed, and ear-tested by BluJ; engineered with AI assistance by [Arena.ai](https://arena.ai)'s Agent Mode (full story in [`docs/CREDITS.md`](docs/CREDITS.md)).
 
-## ✨ What's new in 1.10.0
+## ✨ What's new in 1.15
+
+**💬 The store's Discord, built in for everyone.** The help-desk PC's
+monitor now shows the live bug-report chat right on its screen — like a
+real PC running Discord — and clicking the PC opens it big. Every copy
+ships with the store's Discord as the default chat; owners can point
+their own server at it instead.
+
+**🖱️ A mouse that behaves.** Lock hiccups heal on their own (no more
+silent fallback to hold-the-button looking), and menus always get a
+free cursor the instant they open.
+
+**🏃 Movement, your way.** A look-speed slider that actually SAVES
+(default a calm 0.55×), and ONE press of Shift cycles
+walk → jog → run.
+
+**🧱 A world with edges.** The theater's movie screen is solid now, and
+the dance-hall door no longer snags when you walk through slowly.
+
+**📺 Long shows stay on.** Live TV heals itself through stream hiccups
+and silent freezes — no more black screen mid-movie.
+
+**🎧 DJs pick their set at the booth.** A new Folders tab lists your own
+local music by folder, with one-tap "queue the whole folder" for AUTO-DJ.
+
+### Earlier — 1.10.0: the TV Guide update
 
 <p align="center">
   <img src="docs/whats-new/entry-neon.png" alt="Home Binger's neon entry screen — press Enter the store to walk in" width="880">

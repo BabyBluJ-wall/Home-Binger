@@ -2,7 +2,7 @@
 
 *From a single video-store room to a full media building. Updated every turn.*
 
-**Current phase: 1.10.0 BUILT FOR OWNER TESTING** (updated 2026-09-12) — the one box (jukebox fix + Friends Update + live TV Guide + per-user libraries + phone Simple Mode + friend invites) is in the owner's hands for real-machine review; ships after the review + the one-friend gate
+**Current phase: 1.15.0 SHIPPED (2026-10-02)** — the community update: the store's Discord chat on the help-desk PC's screen (global default for every install), self-healing mouse lock + look-speed slider that saves (0.55× default) + one-press Shift pacing, solid theater screen + clean dance-hall door, self-healing live TV, and the DJ booth's folder picker. 182/182. Next: Windows invite test → radio genre picker + Easy Start wizard → rung 2 → W1 → DLC LAST.
 
 ---
 
