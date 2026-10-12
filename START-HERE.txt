@@ -10,10 +10,17 @@ WILL IT RUN ON MY MACHINE?
   • Graphics: any GPU with WORKING drivers — Intel HD is fine. If your
     drivers are broken/missing the app still runs but the start screen
     can sit for 30–60 seconds. Updating the graphics driver fixes it.
-  • ~1 GB free disk. Internet NOT required (only for the free online
-    shelves/radio or Plex/Jellyfin).
+    The Graphics dial (Settings → My Theme) on Auto steps the picture
+    down on weaker machines all by itself.
+  • ~1 GB free disk (the app unpacks to ~330 MB). Internet NOT required
+    (only for the free online shelves/radio, the music station, or
+    watch parties).
   • The DJ booth is the most demanding room — on older machines it may
     dip during playback there. The store and theater run everywhere.
+  • HOSTING a watch party is the biggest job (capture + encode while
+    the store runs): any Intel HD 530+ or dedicated GPU handles it, and
+    budget roughly 1.2–4.5 Mbps of UPLOAD per viewer (pick Saver on
+    thin links). Watching a party as a guest: anything goes.
 
 PICK YOUR PATH
 ──────────────

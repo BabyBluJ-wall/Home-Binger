@@ -139,9 +139,14 @@ Movies shelve as VHS sleeves and DVD cases, TV as per-episode DVD sets grouped b
 | **CPU** | dual-core, ~2015+ | quad-core+ |
 | **RAM** | 4 GB | 8 GB |
 | **GPU** | any GPU with working drivers (DX11 era) | Intel HD 530+ or dedicated |
-| **Disk** | ~1 GB free | — |
+| **Disk** | ~1 GB free (the app unpacks to ~330 MB) | — |
+| **Internet** | not required — local media + the file grabber work fully offline | needed for the free live TV/radio shelves, the music station, watch parties |
 
-Node/browser mode: the same table, but the browser carries the graphics — any current Chrome, Edge, or Firefox with WebGL2. Two honest notes: **GPU drivers matter more than GPU power** (broken drivers fall back to software rendering — it works, but the start screen can take 30–60 s), and the heaviest moments are the DJ booth and high-bitrate video. Port **8181** (the exe politely takes 8182+ if it's busy).
+Measured, not guessed: the whole 3D app draws about **0.4–0.6 GB of memory** (store idle → game room with panels open), even with software rendering — a 4 GB machine runs it, and 8 GB makes everything roomy. Three honest notes: **GPU drivers matter more than GPU power** (broken drivers fall back to software rendering — it works, but the start screen can take 30–60 s), the heaviest moments are the DJ booth and high-bitrate video, and the **Settings → Graphics dial** on Auto steps the render resolution down on weaker machines all by itself.
+
+**Hosting a watch party** is the one genuinely demanding job: your PC captures and encodes its screen while running the store. Any GPU with hardware video encoding (Intel HD 530+ / 6th-gen and up, or any dedicated card) shrugs at it; a 2015 dual-core without that will want **Saver** quality (720p30). Budget **~1.2–4.5 Mbps of upload per viewer** (that's what the quality caps are for). Watching as a guest works on anything that plays YouTube.
+
+Node/browser mode: the same table, but the browser carries the graphics — any current Chrome, Edge, or Firefox with WebGL2. Port **8181** (the exe politely takes 8182+ if it's busy).
 
 ## ⚙️ For self-hosters
 
