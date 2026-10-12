@@ -11,7 +11,7 @@ A self-hosted, walkable 3D video store stocked from your own <b>Plex</b>, <b>Jel
   <a href="https://github.com/BabyBluJ-wall/Home-Binger/releases"><img src="https://img.shields.io/badge/release-2.0.0-ffd23f?style=flat-square" alt="release 2.0.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-00e5ff?style=flat-square" alt="license CC BY-NC-SA 4.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20Docker%20%C2%B7%20Node.js-ff5c74?style=flat-square" alt="Windows, Docker, Node.js">
-  <a href="https://discord.gg/rbq2m9zZBs"><img src="https://img.shields.io/badge/Discord-join%20the%20store-5865F2?style=flat-square" alt="Discord"></a>
+  <a href="https://discord.gg/pB4HKjQGaX"><img src="https://img.shields.io/badge/Discord-join%20the%20store-5865F2?style=flat-square" alt="Discord"></a>
 </p>
 
 Free for anyone to use and modify, **not for sale** — licensed under [CC BY-NC-SA 4.0](LICENSE). Made with 💙 by **BluJ Productions** — owner-directed, owner-designed, ear-tested by BluJ; engineered with AI assistance by [Arena.ai](https://arena.ai)'s Agent Mode (full story in [`docs/CREDITS.md`](docs/CREDITS.md)).
