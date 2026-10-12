@@ -21,8 +21,8 @@
 //     always visible), instant search (name / number / show), ☆ favorites
 //     that survive pack regeneration, honest ● LIVE when no data exists
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1790983945165';
-import { ytId, ytPlaylistId } from './yt.js?v=1790983945165';   // t152: pasted link → the store TV · t157: playlists too
+import { state } from './state.js?v=1791834263993';
+import { ytId, ytPlaylistId } from './yt.js?v=1791834263993';   // t152: pasted link → the store TV · t157: playlists too
 
 window.__GUIDE_VARIANT = 'hybrid';   // the suite reads this (variant-aware checks)
 

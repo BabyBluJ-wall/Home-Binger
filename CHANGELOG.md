@@ -1,3 +1,592 @@
+# Home Binger — Change Log
+
+## 2026-10-12 — 2.0.0 (build 33): the version graduation
+
+The owner's call, and the end of a confusing line: the work labeled
+1.50 internally never shipped publicly (the last public release was
+v1.15), and "1.50" reads as "1.5" — which would place it BEFORE the
+v1.6 releases. The whole line ships as **2.0.0**; the entries below
+are renumbered to match. Going forward: **2.x = updates and bug
+fixes; 3.0 = the library megaproject.**
+
+- Version updated everywhere it lives: `package.json` (the single
+  source the app reads — the sidebar badge and the new-version notice
+  both follow it), the README badge and section heading, this
+  changelog, ROADMAP, and the release runbook + release notes for the
+  v2.0 GitHub release (UPLOAD-STEPS.txt, RELEASE-NOTES-v2.0.md).
+
+## 2026-10-12 — 2.0.0 (build 32): the README, condensed — and built to be found
+
+- **884 lines → 202.** The README is now a tight tour: four rooms, the
+  watch-together feature, the panels, one quick-start that covers all
+  three install paths, and the tables that earn their space (sources,
+  requirements, controls, troubleshooting). The old version-by-version
+  galleries and the click-by-click walkthrough moved out (the history
+  lives here; the hand-holding lives in START-HERE.txt in the zip).
+  Like items stay compiled together, and the honest wording survives
+  ("mostly ad-free — fewer ads, not zero").
+- **Fresh Watch-with-me photo** — the panel changed in build 31 (the
+  labeled anyone-link / same-Wi-Fi-link layout with the room code);
+  the README photo now shows it, LAN-swapped link and all.
+- **Findability pass (t202):** release/license/platform/Discord badges,
+  a Releases link on the download path, doc links checked, the project
+  tree updated (party.js, wwremote.js, the watch page, 193-check suite).
+  Eight superseded whats-new gallery images removed from docs/ — every
+  image the README references exists, exactly once.
+- The repo-side checklist (description, topics, social preview,
+  release assets, Discussions) is in DELIVERY.md — those are GitHub
+  settings, not files.
+
+## 2026-10-12 — 2.0.0 (build 31): share with ANYONE — no Tailscale required
+
+The owner's report: the watch-together "only works with people using
+Tailscale… still wouldn't load on my phone even on the same Wi‑Fi…
+off Wi‑Fi needed Tailscale." Three causes, all found and fixed (t201):
+
+- **The copied "same Wi‑Fi" link said `localhost`** — built from the
+  browser's own address, so a phone opening it asks ITSELF for the
+  page. That's why it wouldn't load even on the same Wi‑Fi. The panel
+  now asks the server for its real LAN address (`/api/netinfo`, authed)
+  and puts THAT in the link — and labels it honestly ("only for people
+  on your Wi‑Fi / network"). The Copy button refuses to hand out a
+  localhost link while the address is still loading — the moment of
+  "still finding your network address" instead of a dead link.
+- **The "anyone" link was a dead URL** — the public guest page is
+  published by the repo's GitHub Pages workflow, but Pages was never
+  enabled (it 404s today). The panel now CHECKS, live, and says so
+  when it isn't published yet, with the exact one-time fix (repo →
+  Settings → Pages → Source: "GitHub Actions"). The README explains
+  both links.
+- **The connection had no relay fallback** — WebRTC with plain STUN
+  can't cross symmetric NATs and cellular CGNAT, which is exactly when
+  a VPN "fixed" it. Both peers now carry STUN (Google + Cloudflare)
+  plus Open Relay's free public TURN (UDP 80/443 + TCP 443), so guests
+  on home routers and phone data connect without installing anything.
+- **Chat apps that strip the `#code` from a shared link** no longer
+  strand the guest: the watch page now has a "type the room code" box
+  — open the page, enter the six characters, watch. As close to the
+  big watch-together sites as it gets: link → name → live.
+
+## 2026-10-11 — 2.0.0 (build 30): watch-with-me, tuned for real networks
+
+The owner's report: watching together "just keeps making everyone
+buffer." Two bench-vs-world gaps, both fixed (t200):
+
+- **The guest player's jitter buffer was pinned to 40 ms** — tuned on
+  the suite's loopback, where there is no jitter. On real Wi‑Fi and
+  cellular every spike past it starved the decoder and the picture
+  froze. It now starts at a live-feel **200 ms and learns**: each time
+  the video waits, it thickens by 150 ms up to 700 ms — steady on rough
+  links, still sub-second.
+- **The host's share now carries a bitrate ceiling per tier** (1080p60
+  ≈ 4.5 Mb/s · 900p60 ≈ 3 · 720p30 ≈ 1.2), applied to every outgoing
+  call, with balanced degradation (resolution yields before framerate)
+  — so WebRTC adapts DOWN from a sane cap instead of overdriving a thin
+  uplink. The guest page now shows the honest numbers beside the ping:
+  resolution · fps · bitrate, read from the inbound stats.
+- **The theater's stall gate.** A buffering guest used to pause the
+  whole room — by design, but one struggling phone froze everyone all
+  night. The first three stalls (per guest, per five minutes) still
+  pause the group; past that the guest rides **solo**: the party plays
+  on, their marquee says so honestly, and their screen re-syncs the
+  moment the connection steadies.
+- **Honest wording (owner's call):** the README no longer says
+  "ad-free" flat-out — YouTube is **mostly** ad-free here (the embed
+  lane plus the app's blocker stop most ads; a few ride the video pipes
+  themselves, where no blocker can reach).
+
+## 2026-10-11 — 2.0.0 (build 29): the README, re-photographed and regrouped
+
+- **A fresh photo tour (t199).** Every room and panel re-shot from a
+  real signed-in session: the entry screen, the store's central aisle,
+  the theater mid-movie (a real title on the big screen), and — for
+  the first time — the **game room**, the **Watch-with-me panel**, the
+  **player panel**, and **Settings → My Theme**. The building tour now
+  covers all **four** spaces (it said three); the news section compiles
+  like items together — the game room in one place, the music story in
+  one place, watch-together in one place, tuning & comfort in one
+  place — and catches up to builds 27–28 (the mouse-capture fix, the
+  Error 153 fix).
+- **Cleared out:** six debug screenshots from the sign-tuning round and
+  three unreferenced images from docs/ (a duplicate social preview and
+  two superseded guide shots). Every image the README references now
+  exists, exactly once.
+
+## 2026-10-11 — 2.0.0 (build 28): Error 153 fixed — the den plays again
+
+- **YOUTUBE ERROR 153 IN THE DEN, FIXED (t198).** YouTube stopped
+  playing its own embed player when the embed URL is loaded as a
+  top-level document — which is exactly how the den's panel loaded it
+  since build 25 ("Video player configuration error 153"). The panel
+  now loads a tiny page FROM YOUR OWN SERVER that mounts the very same
+  official player the way YouTube expects — inside a real page, the
+  shape the theater has used all along (and the theater never broke).
+  Picks, watch-page conversions, and playlists all ride the new lane.
+  The embed-blocked fallback got smarter too: it used to look for a
+  video element, but Error 153's screen mounts one that never plays —
+  the page now reports actual player errors, so a video that refuses
+  embedding drops to the real watch page instead of staring at you.
+- **Verified on the bench:** the bare embed URL fails with 153 in every
+  top-level combination; the same player inside a served page plays
+  (two videos, real playback). The full app was driven end-to-end in
+  Electron: the panel opens, the wrapper loads, the player bridge
+  answers (title, video id, play/pause/volume), and when YouTube
+  refuses a video the panel falls back to the real watch page — no
+  error screens anywhere.
+
+## 2026-10-11 — 2.0.0 (build 27): the mouse captures again
+
+- **MOUSE CAPTURE FIXED (t196).** Build 26's screen-share guard was too
+  strict: it granted only capture permission and quietly denied
+  everything else Electron routes through the same door — including
+  POINTER LOCK, which is why clicking the store stopped capturing the
+  mouse for walking and looking around. The guard now grants the app's
+  ordinary machinery (mouse capture, full screen, the copy-link
+  buttons, the Widevine DRM the den's music needs) and still keeps
+  camera/microphone/screen capture limited to the app itself — plus
+  Discord's microphone, so voice in the Discord dock keeps working.
+  Verified on the real desktop app: the lock was refused with a
+  SecurityError before the fix and engages after it.
+
+## 2026-10-11 — 2.0.0 (build 26): anyone with a link can watch
+
+- **WATCH PARTY, REBUILT — share your screen to any browser (t195).**
+  The old remote rooms needed friends to install Home Binger first.
+  The new one shares YOUR window instead: click **🌐 Share this Home
+  Binger — live, in any browser** and you get a six-character code plus
+  two links — send either. Guests open it in ANY browser (a phone
+  counts), type a display name, and they're watching your whole Home
+  Binger live — theater, den, game room, whatever you're doing — with
+  your system's sound. No install, no account. Sound starts muted
+  (browser rule) and one tap turns it up. The guest page is a player —
+  picture, sound, roster, leave — and nothing else.
+- **The Watch-with-me panel is a dock now (the full-screen bug).** The
+  old pop-over vanished behind the full-screen movie — the new panel
+  slides in from the right edge, sits above everything, and the movie
+  yields it width while it's open. A LIVE bar (with a Controls button)
+  stays on screen while you share and the panel is closed.
+- **The host stays in charge.** You see everyone's names as they join
+  (up to six), the room code is on the theater sign while you share,
+  and quality is a menu — High 1080p60, Balanced 900p60, or Data Saver
+  720p30 — switchable mid-share. `hb://` deep links now open the guest
+  page in the default browser, so one click works even for people
+  without the app.
+- **Two links, on purpose.** The web link (github.io) works for anyone
+  once Pages is switched on; the server link works for friends who can
+  already reach your Home Binger (remote access / invite). Both are in
+  the panel with copy buttons.
+- **It holds on flaky networks.** Guests re-dial silently until the
+  deadline, a host that drops off the signaling network re-claims the
+  same room code, and a dead-looking connection gets a probation before
+  anyone's kicked off the roster. The receiver keeps its jitter buffer
+  short, so it feels live, not buffered.
+- **What DIDN'T change:** the app-to-app theater sync from build 24 has
+  its own section in the same panel, and the in-store party works
+  exactly as before.
+
+## 2026-10-11 — 2.0.0 (build 25): the den plays ad-free
+
+- **THE EMBED LANE — the den's YouTube now plays through the official
+  embed player (t194).** The owner's report was right: the network-layer
+  adblock can't clear the den, because YouTube serves many ads from the
+  SAME googlevideo hosts as the video itself — nothing URL-shaped left
+  to block. The ad-free path that survives is the official embed player
+  — the exact lane the theater has always used (and the owner has never
+  seen an ad there). The panel keeps youtube.com for browsing — home,
+  search, channels — but the moment a watch page opens (a click, a
+  Shorts link, a youtu.be paste, a playlist), the view swaps to the
+  official embed of that video, playlists included so music chains.
+  Embed-blocked videos (rare) are detected — no player within 9 s — and
+  fall back to the real watch page once per video; the blocker stays
+  armed there. While the embed plays, its title feeds the panel bar AND
+  the den's monitor paints NOW PLAYING, and ↗ opens the video's real
+  page. Guide picks play in the embed too. (The yt-dlp route a friend
+  suggested — solving YouTube's bot challenges to pull raw streams —
+  was declined: it breaks YouTube's terms and saves copies of videos.
+  This is its sanctioned equivalent.)
+## 2026-10-10 — 2.0.0 (build 24): watch together, anywhere
+
+- **REMOTE WATCH ROOMS — Watch with me now works across the internet
+  (t193).** Friends on their own Home Binger, on their own networks, can
+  watch with you: start a YouTube title on your theater screen, click
+  Watch together → 🌐 Create a remote room, and send them the room code
+  (or the `hb://` link — it launches their app straight into the join
+  box). Their theater screen syncs to yours with the same SyncPlay
+  scheme the in-store party uses — gentle rate-nudges inside 1.5 s, a
+  hard seek only when it must, the group waits while someone buffers.
+  It's peer-to-peer (WebRTC data channels); the only outside service is
+  PeerJS's free public broker for the handshake, which sees offers, never
+  content — no server of ours in the loop. YouTube titles only, so
+  everyone streams with their own access. Channels that hiccup
+  (flaky NATs) are re-dialed automatically.
+- **The den's VIZ monitor is GONE (t193).** It never worked properly and
+  sat half-hidden behind the desk and chair — removed, monitor, canvas,
+  and settings. The battle station now has three monitors: Discord ·
+  music (YouTube) · Steam. The theater TV's visualizer is a separate
+  feature and stays.
+- **The neon angel sign sits lower (t193).** The wing top now rides just
+  above the topmost interior line of the outline — the owner asked, the
+  sign listened. Halo, horns, and tail moved with it.
+- **Native YouTube ad blocking, strengthened (t193).** More ad/tracker
+  hosts blocked at the network layer, more ad paths, more layout slots
+  hidden, and the skipper now taps harder and longer. Pie.org-style, all
+  in-app; playback itself is never touched.
+
+## 2026-10-10 — 2.0.0 (build 23): Auto graphics — smaller machines stay smooth
+
+- **The Graphics dial grows an AUTO mode, and it's the new default
+  (t192).** Auto watches the REAL frame time (not the capped game clock)
+  and steps the render resolution to fit the machine: a rolling 90-frame
+  average over 24 ms steps down (Quality → Balanced → Performance), three
+  consecutive fast windows step back up. Decisions run every 90 frames
+  with a cooldown so it never oscillates, and tab-switch pauses don't
+  count. Manual modes still win when you pick one — Auto is just what a
+  fresh device starts on. The owner's ask: less capable machines should
+  run this.
+- **The frame loop got cheaper for everyone (t192).** The occlusion test
+  behind "is the TV / the help-desk PC screen visible" raycasts four full
+  rooms recursively — and it ran every single frame during playback. It's
+  now cached per target for 100 ms (~10 Hz instead of the display's full
+  refresh rate): identical behavior a frame late at worst, and the single
+  heaviest CPU item in the loop is gone.
+- **The Ctrl+Shift+L look log is REMOVED, as promised (t192).** The
+  owner's second log confirmed the jump guards working (5 drops with
+  reasons, big turns 30 → 2, every exit-lock a legit UI action) — the
+  diagnostic did its job and is stripped from the app. The stable-look
+  guards themselves stay.
+
+## 2026-10-10 — 2.0.0 (build 22): the look decoded — pixel-domain jump guards
+
+- **Stable look, round two (t191) — decoded from the owner's actual look
+  log.** The build-21 log showed the mechanism precisely: the pointer lock
+  never failed, nothing else touched the camera — but the input pipeline
+  stalls and Chrome then flushes stall-coalesced events as bursts (runs of
+  identical clamped 160 px deltas, ~900 px single outliers), and the
+  rad-based burst guard was dead at the owner's 0.55× look scale (and half
+  that zoomed — it needed ~1000-1700 px to trip). Each burst frame applied
+  the 30 rad/s cap = 17° per frame for several frames: the jump. Two more
+  finds: the render loop's dt is capped at 0.05 s, so hitch detection
+  never saw a real stall. The drops now decide in PIXELS, immune to
+  sensitivity and zoom: one frame's accumulated delta over 500 px, or
+  three-or-more clamp-hit events in one frame (>30,000 px/s — no real hand,
+  exactly the stall signature) → the whole queue is dropped. The pump keeps
+  its own true clock (real frame gaps > 100 ms now logged as framegap —
+  the capped dt hid them), and a ~900 px outlier no longer raises the
+  outlier baseline for the next one. Real flicks verified unaffected.
+- **The Ctrl+Shift+L look log ships one more round** — after the owner
+  confirms the fix on their machine, the next build removes it entirely.
+
+## 2026-10-10 — 2.0.0 (build 21): the view stops jumping, the sign sits at user height
+
+- **Stable look (t190).** The owner's report — the view randomly jumped
+  while moving, ever since the logo and the neon sign went in — traced to a
+  stall pattern: on a hitched frame Chrome flushes a whole queue of pointer
+  events at once, and the old per-event clamp let the queue sum into a
+  200°+ swing. Mouse deltas now accumulate in a pending buffer applied ONCE
+  per frame with a 30 rad/s turn cap; a hitched frame (dt > 0.12 s) or a
+  burst signature (≥ 4 events > 1.2 rad in one frame) drops the queue —
+  the view FREEZES through a stall instead of teleporting. The per-event
+  spike clamp also tightened 260 → 160 px. Real flicks (spread over frames)
+  are unaffected.
+- **A temporary diagnostic ships with this build** (it comes out in the
+  next one, once the fix is confirmed on the owner's machine):
+  **Ctrl+Shift+L** copies/toggles a look log — every drop, clamp, lock
+  change, frame gap, and any unexplained view move, with timestamps.
+- **The angel-demon set rides lower (t190).** The owner: outline, horns,
+  halo and tail down, anchored to the interior feather lines — user
+  height. Solved geometrically: everything but the lines drops 13 cm so
+  the lines center in the wings (core offset 0.006 m), and the lowest
+  feather line was reshaped to clear the outline everywhere (min
+  line-to-outline clearance 0.064 m — it had been poking through both the
+  inner edge and the tip notch). Wings now span y 0.88–3.27, the halo
+  3.40–3.75, horns to 3.68, the tail 0.69–1.59 on the 4.27 m wall.
+- **Scrub leftovers the owner flagged:** the sidebar's My Connections label
+  and the den's music-monitor hover tip no longer name the removed
+  YouTube-search feature ("Steam library · account link" / "🎵 Music
+  monitor — YouTube, click to browse & play").
+
+## 2026-10-10 — 2.0.0 (build 20): the angel-demon set REDESIGNED from the reference photos
+
+- **The wall sign is rebuilt as the assembled SIGN, not the print layout
+  (t189).** The t186–t188 passes derived their geometry from the reference
+  STLs' flat-pack arrangement — which is why they read as a fan of blades
+  converging on one root. The reference PHOTOS show the real composition,
+  and the sign is now that: **two tall hanging feathered wings** (each
+  ~2.4 m tall × 1.2 wide, roughly 2:1) drawn as **narrow neon tube
+  outlines with dark open interiors** — rounded shoulder domes, gently
+  curved inner edges, scalloped feather tips (longest at the bottom),
+  three selective interior feather lines — with a **deliberate open
+  photo-backdrop gap between them**; a **real closed oval RING halo**
+  (a torus, wider than tall, hollow) floating detached above the gap;
+  **two tapered horn strokes** above the wing shoulders, outside the
+  halo; and a **slender curved demon tail with an arrow tip** below the
+  wing tips. Every curve is original Bézier work in the app's own Three.js
+  — no STL data, no extracted geometry (the Cults set stays a paid
+  personal-use reference), no "SORRY MOM" lettering. Composition: 3.07 m
+  wide × 3.06 m tall (tail bottom 0.82 → halo top 3.88 on the 4.27 m
+  wall, clear of the crown and skirting trim). Same RGB clock as the room
+  (`ledMat`/`rgbMats`), steady-lights safe, no per-feather lights.
+- **Verified:** measured bounds (wing aspect 1.97, gap half-width 0.33 m,
+  halo hollow ring, horns clear of the halo by 0.26 m, tail centered
+  under the gap and below the tips); glow-reduced head-on pixel audit —
+  wing regions ~10% bright (tube outlines, not filled panels), wing
+  interiors 6%, the open gap 1.3%; RGB hue advances; zero console
+  errors. Suite 190/190.
+
+## 2026-10-10 — 2.0.0 (build 19): the angel-DEMON set matches, the den stops stuttering
+
+- **The set now includes the HORNS and matches the reference (t188).** Third
+  pass, and the honest one about method: every piece of the purchased
+  reference — the nine wing blades, the center aureola, the **devil horns**,
+  the two cola strokes — was measured directly (medial axis + outline
+  extents along it) and re-derived as a **spine-and-profiles sweep**: a
+  cubic-Bézier centerline from the shared root with independent
+  upper/lower boundary profiles (the reference's ends are one-sided
+  diagonal cuts — the thing the earlier single-width rebuilds could never
+  show). Twenty fitted numbers per piece, **no model data ships**. The
+  horns rise with the halo at center — the angel-demon duality. Per-piece
+  silhouette match 0.88–0.95; the composed wing 0.96.
+- **The den's look-around stutter, fixed at the source (t188).** The
+  owner's report — glitchy when looking around, resolution changes
+  nothing — pointed at CPU-side work, and there were three piles of it.
+  One: all FOUR den screens repainted together at the music cadence (~30
+  fps) even though only VIZ + the music screen animate — the static
+  Discord + Steam screens now paint on a 1 s heartbeat (and only when the
+  den is actually on screen — a frustum gate). Two: hover picking
+  raycast all four rooms' full wall sets twice every 90 ms — the wall
+  answer is now computed once per tick and shared. Three: a perfectly
+  still aim kept raycasting anyway — a still crosshair now reuses the
+  last pick (fresh at least every half-second). Net: roughly half the
+  per-tick picking cost, 2–4× less canvas + texture-upload work, zero
+  behavior change.
+- **Discord and Watch-with-me are SEPARATE buttons (t188).** The theater
+  remote and the full-screen HUD each carry their own pair now: 💬 docks
+  the Discord panel, 👀 opens the watch-with-me chooser. (Was one button
+  doing watch-with-me with a Discord title.)
+- **Sweep-out, per the owner (t188):** the Settings hint about dance-floor
+  lights living in the DJ booth, and the one pointing admins at Admin →
+  Store TV, are gone; and the last "YouTube search" mentions in My
+  Connections and Admin → Servers are scrubbed.
+
+## 2026-10-10 — 2.0.0 (build 18): the angel set matches the reference sign
+
+- **The wings look like the model now (t187).** The owner's verdict on the
+  first rebuild — "make it resemble the model" — sent the purchased
+  reference back to the measuring bench, piece by piece. The finding: the
+  sign is not barbed tubes at all. It is a fan of **nine solid sweeping
+  blades per wing**, each rooted at one convergence point, tapering from a
+  thin quill to a broad dome and cut diagonally to a sharp tip; a big
+  **center aureola sweep** rising between the wings; and **two tail
+  strokes** running flat under the wing. The pieces overlap like layered
+  acrylic, so the wings read as solid sweeping masses in the classic wide
+  photo-op proportion (~2.4:1). The app's set is now exactly that: every
+  piece a parametric sweep fitted to the reference — nine numbers per
+  piece, hand-derived, **no model data ships** (the license is
+  personal-use; the app distributes). Roots converge like the model,
+  blades ride the room's RGB clock, and the whole set is steady-lights
+  safe.
+
+## 2026-10-09 — 2.0.0 (build 17): watch-together nights, photosensitive comfort, keyless music
+
+- **👀 Watch with me — synced theater nights (t186).** The theater's 💬
+  button (remote or full-screen HUD) opens **Watch with me**: the host
+  plays a title and clicks **Watch together**, and everyone else in the
+  theater sees the 🎬 marquee and a Join bar — their screen then follows
+  the host's. The sync is the SyncPlay technique: inside a tenth of a
+  second nothing happens, within 1.5 s the playback rate gently nudges
+  1.05× / 0.95× (imperceptible), beyond that a hard seek. A buffering
+  guest pauses the whole group until their buffer refills; the host is
+  the single writer of the schedule; the host leaving (or ending it)
+  finishes the night, and guests who walk out of the theater step out of
+  the party. A Discord shortcut rides along in the same popover for chat
+  and voice beside the movie.
+- **🕯️ Photosensitive comfort (t186).** A new switch in Settings → My
+  Theme calms every flashing effect — the game room's RGB, the VIZ
+  screen, and the dance floor all drift softly instead of strobing with
+  the music. The lights stay lit but slow; beat-driven flashes never
+  fire. Applies instantly and saves to your profile.
+- **The angel set, rebuilt like the reference sign (t186).** The owner
+  bought the classic neon sign set as the reference, and the den's wall
+  art now matches it: **nine barbed feathers per wing** fanned in the
+  sign's pattern (each feather one merged neon tube — shaft, barbs and
+  all — with a wispy under-layer), the **elliptical halo** tilted above
+  head height, and the set's **S-swept tail** with its spade and arrow
+  tips. Same store-shared wall, photo-op scale, riding the room's RGB
+  clock (and steady-lights safe).
+- **The YouTube key is gone — music is keyless now (t186).** The music
+  monitor opens **YouTube itself** in the player panel — there is no API
+  key to paste, test, or mask anywhere in the app. Server-wide admin
+  setup is **Steam-only**; every YouTube field, Test button, and route
+  is removed, and a stale key saved by an older install never survives
+  a config save.
+- **Smaller owner notes (t186):** the den's LED strips run stronger
+  (brighter emissive, crown and skirt both), and ☰ and the panel
+  buttons **toggle** — a second click closes what the first one opened.
+
+## 2026-10-09 — 2.0.0 (build 16): the owner's live-test pass — ten fixes, corrected after your walk-through
+
+- **YouTube ads are blocked in the desktop app (t185):** pie.org-style
+  blocking, but NATIVE — Chrome extensions can't load into the app's
+  webviews, so the app pulls the same two levers at its own network +
+  style layers: ad/tracker requests to Google's ad stack are cancelled
+  before they leave the app, YouTube's ad slots are CSS-hidden, and
+  skippable ads get their Skip button clicked automatically. Playback
+  (googlevideo/ytimg/timedtext) is never touched; no other site is
+  affected.
+- **The TV Guide never waits on a dead mirror (t185):** the EPG snapshot
+  races each uncached source against an 8-second deadline and serves
+  without the slow one (its channels keep the honest ● LIVE line), while
+  a background warmer prefetches every EPG source the moment the channel
+  library builds (and re-warms every 5 hours, before the 6-hour cache
+  lapses) — so a Guide open reads warm local data, and the next open is
+  complete even after a slow source.
+- **Panels free the mouse (t185):** with the media player panel or the
+  Discord dock up, the pointer is never captured — you get a real cursor
+  over the app; close the panel and the canvas takes the lock back.
+- **A real keyboard + mouse on the battle station (t185):** a compact
+  two-row keyboard with 22 RGB keycaps cycling with the room, a palm
+  rest on the player's edge, and a mouse with a split-button shell,
+  thumb-side buttons and a scroll wheel — at the player's right hand,
+  squared on a desk pad under the center screen.
+- **The tower's corner posts no longer overshoot (t185):** the glass
+  posts were full-height and offset — standing 0.27 m proud of the case
+  top AND bottom. They now seat flush between the frame panels.
+- **The angel set (t185, corrected t185b):** big neon wings and a
+  floating halo on the wall the den shares with the store — behind the
+  seated player, opposite the computer (your correction; the first cut
+  put it on the back wall). Rebuilt to match the reference sign: each
+  wing is a fan of curved neon-tube feathers (a primary fan plus a
+  shorter under-layer — 26 tubes), not a filled silhouette; human-scale
+  and centered on the wall, so the wing tips crown a person standing
+  there and the halo floats just above head height. Rides the room's RGB
+  cycle.
+- **The owner's logo behind the monitors (t185, centered t185b):** the
+  store's own mark, glow-lit, CENTERED on the wall above the monitor row
+  (served from the app's own /img, no external calls).
+- **The hallway lip is gone — both sides (t185):** a stale note had the
+  wing's walkable zone start a wall-and-a-half past the den's front
+  wall, leaving a 0.59 m invisible band people got stuck on near the
+  store wall; the rects now meet the real wall faces, so you can hug the
+  wall all the way to the den door — and out the door, turning along
+  either wall face.
+- **Max FPS (t185):** the default render resolution cap drops 2× → 1.5×
+  (a 44% pixel cut on retina panels, invisible at couch distance), idle
+  den-screen refreshes ease 8 → 4 fps, the screens only paint within
+  8.5 m, and a new **Settings → My Theme → Graphics** dial (Quality /
+  Balanced / Performance) renders at 1.5× / 1× / 0.75× — remembered per
+  device, applied live.
+- **VIZ, the fourth monitor (t185, rebuilt in-app t185b):** the den's
+  own music visualizer — ALL in app, per your call (VZX-the-app is a
+  native Windows program and can't render inside Home Binger, so nothing
+  external launches from the den anymore). Four styles — Bars · Radial ·
+  Tunnel · Waves — dance on the room's clock whenever music plays in the
+  den; a click switches styles, and an idle click starts the music (the
+  player panel on desktop, the picker in a browser). The screen is
+  row-aligned and the left desk speaker moved clear of the seated sight
+  line, so it's fully visible from the chair.
+
+## 2026-10-05 — 2.0.0: the game room update — your accounts, your music, your screen
+
+- **The den goes YouTube-only (t182), and the theater stays exactly what
+  it was (t182c):** Spotify is out of the game room — the owner's call
+  (it never played nice and wasn't worth the setup pain); search is
+  YouTube only, and a pick opens the **player panel** with YouTube's own
+  page — the monitor shows what's on and brings the player back with a
+  click, the Discord-monitor pattern that has always worked. The attempt
+  to project the video onto the den's monitor (and to unify the theater
+  with it) was REVERTED at the owner's call after their live test — the
+  theater is byte-for-byte its proven t173 behavior again (the embed on
+  the screen, F/⛶ for full screen, Esc back with the video still
+  rolling). Spotify is gone ENTIRELY now (t182c) — the picker tab, the
+  monitor face, My Connections, the Admin section, every /api/spotify
+  route, and the desktop app's sign-in rules: not a trace left. One quiet
+  hardening kept from the attempts: the den's webview is muted and paused before removal, so a
+  stopped player can never bleed audio over what plays next.
+- **THE GAME ROOM (t170):** a new RGB-lit room off the extended front
+  hall — battle station, glass PC tower with hue-cycling fans and a
+  glowing water block, gaming chair, and neon pocket door that rises as
+  you approach. The GAME ROOM sign hangs outside over the doorway.
+- **Monitors that work (t172/t173/t184):** M1 is a live Discord portal
+  (the project's server, who's online, one-click into your own
+  DMs/servers — bug reports stay on the store's help-desk PC). M2 is the
+  music station: click it and YouTube itself opens in the player panel —
+  no picker detour, you search on the real site (browsers keep the
+  in-app search picker). M3 is
+  your real Steam library — plus every user who shares theirs.
+- **The den, round three — music that plays (t180):** YouTube picks
+  open in a **media player panel** — the same treatment as
+  the Discord panel (a webview of the real site in the app; the official
+  embed iframe in a browser), because that is the one mechanism that has
+  worked reliably on real machines. The music monitor becomes the
+  now-playing screen + click target; the remote's ⏯/volume drive the
+  panel; the 2.1 zone mutes it outside the den (with a visible 🔇 badge);
+  Esc hides without stopping (Discord panel rules); the panel is
+  resizable and remembers its size. YouTube plays through its own real
+  page — sign in once in the panel. The projected overlay machinery is
+  gone with it.
+- **The den, round two (t179):** YouTube on the music monitor runs on the
+  theater's proven player (autoplay ladder + zone unmute — the raw iframe
+  could sit paused forever); the desktop build ships castlabs Electron
+  (Widevine-capable); the Discord panel is resizable (grip +
+  dock edge, persisted); clicking the Discord monitor opens the client
+  directly (portal popup removed, theme box removed); the desk is built in
+  wall-to-wall (no legs); the tower's solid body became an open glass frame
+  with an interior light — the build shows.
+- **The den, tuned by the owner's live tests (t178):** Discord is a
+  panel INSIDE the app (webview) with BetterDiscord theme support
+  (plugins stay out — they need BetterDiscord's own client); playback
+  wakes properly on the first click;
+  Steam libraries got ▶ Play buttons (steam://run); the game room is its
+  own audio zone — desk L/R + floor sub, remote says 🎮 GAME ROOM; the
+  tower is the full Panorama XL build (Ryzen 9 9950X3D · RTX 5090 ·
+  64GB DDR5 · 2TB Gen4 · WiFi 7 · Win 11 Pro); F in the theater frees
+  the mouse like G; and every Test button answers inline, right under
+  its connection, with copyable setup text everywhere.
+- **Connections, two ways (t171/t175):** the ADMIN sets up YouTube +
+  Steam once in Admin → Servers and the whole server gets search + their
+  Steam libraries (each user just adds a SteamID64); anyone can still
+  bring their OWN keys in ☰ Menu → My Connections.
+  Keys are masked in every response and never echoed back into inputs —
+  the project owner's accounts are never involved. Every setup field
+  has a **Test** button (t177): it asks Google / Steam directly and
+  reports the exact cause when something's wrong (API not enabled, key
+  restrictions, a typo).
+- **Full Discord in-app, one docked panel everywhere (t176/t183):** the
+  den's Discord monitor and the theater's 💬 Watch-with-me button open
+  the SAME Discord panel docked on the right — DMs, servers, voice
+  channels, calls, screen sharing (sign in once; the session persists),
+  in view while you walk the store, a full-screen movie yielding to it.
+  (The den's old big centered panel stole the theater's dock mid-movie —
+  that was the owner's "game room Discord breaks the theater's" report.)
+  In a plain browser, Discord opens in a tab (their no-embedding
+  policy).
+- **YouTube on the theater screen (t173):** pasted Guide links (and
+  playlists) play ON the screen — no forced full screen. F/⛶ toggles
+  true full screen; Esc returns to the screen without stopping; the
+  remote's ⏹ stops. A CC button joined the theater remote.
+- **The full-screen HUD grew a 📖 Guide button** that docks the Guide
+  beside the movie (same as G).
+- **Comfort & polish:** the game-room chair sits 0.35–0.40 m from the
+  desk; monitor canvases fill the actual screen faces (no side gaps);
+  RGB strips ring all four walls plus a skirt loop, all on one clock.
+- **Fixed:** the fs HUD popping over the room when a link started
+  (hudShow is fs-only now); captions unreachable in on-screen mode (the
+  remote's CC button); a guest-boot 401 in the console
+  (refreshGamerPreviews and the gamer panel are guest-gated); the
+  help-desk's misleading "looks configurable" blurb (it now points to
+  upgrading instead); the walk/jog/run toast telling you to press X when
+  the key is Shift.
+
+## 2026-10-03 — 1.15.1: the bug-report chat is pinned to the project
+
+- **Every bug report now reaches the project's Discord, guaranteed.**
+  The help-desk chat connection (invite + channel) is built in and
+  PINNED — the admin settings for changing it are gone, the server
+  ignores any attempt to change it, and every install heals to the
+  project's own bug-report channel on load. (Owners who want their own
+  server can still edit the default in the source; the app itself no
+  longer offers the option.)
+
 ## 2026-10-02 — 1.15.0: the community update — chat, comfort, and a booth for DJs
 
 - **The store's Discord, built in for everyone.** The help-desk PC now
@@ -1698,7 +2287,6 @@ you're on 1.8.0, this is the one to grab.*
   silently shelving nothing.
 - **Verified 0 element-overlap** across all panels, HUD, help, and both decks
   at 1280px and 1024px, using per-line rect intersection.
-# Home Binger — Change Log
 
 ## 2026-09-06 — Audio Quality & Beta-Test Pass (t66)
 - **Audited every audio source end-to-end** (theater, jukebox, dance hall/pro

@@ -8,12 +8,12 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1790983945165';
-import { api } from './api.js?v=1790983945165';
-import { initUI } from './ui.js?v=1790983945165';
-import { createScene } from './store3d/scene.js?v=1790983945165';
-import { STORE, SUPPORT } from './store3d/config.js?v=1790983945165';
-import { initGuide, guideInfo, openGuide } from './guide.js?v=1790983945165';   // t123: the TV Guide
+import { state } from './state.js?v=1791834263993';
+import { api } from './api.js?v=1791834263993';
+import { initUI } from './ui.js?v=1791834263993';
+import { createScene } from './store3d/scene.js?v=1791834263993';
+import { STORE, SUPPORT } from './store3d/config.js?v=1791834263993';
+import { initGuide, guideInfo, openGuide } from './guide.js?v=1791834263993';   // t123: the TV Guide
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {
@@ -134,13 +134,15 @@ async function boot() {
   };
   scene.setItems(state.items, prefs.sorting, onStockProgress, state.shelves);
   scene.setDancePrefs?.(state.prefs.dance);   // t86: dance-floor prefs at boot
+  scene.setSteadyLights?.(!!(state.prefs.a11y || {}).steady);   // t186: photosensitive comfort at boot
   scene.setControlPrefs?.(state.prefs.controls);   // t161: look sensitivity + speed tier
-  // t161: the X key cycles walk → jog → run — say so, so nobody has to guess
+  // t161: the pace toast — ONE press of Shift cycles walk → jog → run (t164
+  // retired hold-to-jog, and X never did anything). Say the real key.
   document.addEventListener('vb-speed', (e) => {
     const t = e.detail?.tier;
-    toastIt(t === 'run' ? '💨 Running — press X to slow down'
-      : t === 'jog' ? '🏃 Jogging — press X again to run'
-      : '🚶 Walking — press X to jog');
+    toastIt(t === 'run' ? '💨 Running — press Shift to slow down'
+      : t === 'jog' ? '🏃 Jogging — press Shift again to run'
+      : '🚶 Walking — press Shift to jog');
   });
   scheduleLocalThumbs();                      // t89: grabber case art, once the store settles
   // t149: the version label under the sidebar's front-entrance button —
@@ -221,7 +223,9 @@ async function boot() {
     currentAccent: () => state.prefs.theme.accent,
     applySorting: (sorting) => { scene.applySorting(sorting); toastIt('Shelves restocked!'); },
     applyDancePrefs: (p) => scene.setDancePrefs?.(p),       // t86: dance-floor light prefs
+    setSteadyLights: (on) => scene.setSteadyLights?.(on),    // t186: photosensitive comfort (den + dance floor)
     applyControlPrefs: (p) => scene.setControlPrefs?.(p),   // t161: look sensitivity + speed tier
+    setGfx: (m) => scene.setGfx?.(m),                        // t185: render-resolution dial (Settings → Look)
     checkVersion,                                           // t96: new-version notice (launch check)
     genLocalThumbs: () => scheduleLocalThumbs(),            // t89: grabber case art (also auto-runs)
     respawn: () => { scene.controls.reset(); },
@@ -280,6 +284,7 @@ async function boot() {
       const p = scene.debugPose();
       if (p.z < -6.35 && Math.abs(p.x) < 5.6) return 'theater';
       if (p.x > 6.2 && p.z < 9.2) return 'dance';      // t47: the dance wing
+      if (p.x < -6.3 && p.z > 0.8) return 'gamer';     // t173: the gamer den
       return 'store';
     },
     carried: () => scene.carried(),
@@ -473,6 +478,7 @@ async function boot() {
   };
   scene.onJukeboxClick = () => ui.openDj('jukebox');
   scene.onHelpDeskClick = () => ui.openHelpDesk();   // t155: the PC by the theater door
+  scene.onGamerMonitorClick = (kind) => ui.openGamerPanel(kind);   // t172: the den's monitors
 
   // t123: the TV GUIDE — lives in the theater (G key / remote 📖 button)
   initGuide({
@@ -484,6 +490,20 @@ async function boot() {
   });
   ctx.guideInfo = guideInfo;
   ctx.openGuide = openGuide;   // t123: tests + the remote path   // t52: the DJ UI lives on the jukebox now
+  // t173 (owner: "when in the theater make f go into fullscreen") — F toggles
+  // the true full-screen layer. Same guard shape as the Guide's G: no typing,
+  // no open modal, theater room only. Toasts the honest reason when idle.
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'f' && e.key !== 'F') return;
+    if (e.target?.closest?.('input, textarea, select, [contenteditable]')) return;
+    if (document.querySelector('.modal:not(.hidden)')) return;
+    if (!document.getElementById('settings')?.classList.contains('hidden')) return;
+    if (ctx.playerRoom?.() !== 'theater') return;
+    const tv = ctx.getTv?.(); if (!tv) return;
+    e.preventDefault();
+    if (tv.fullscreenActive?.()) { tv.exitFullscreen(); return; }
+    if (!tv.enterFullscreen()) toastIt('Play something first — full screen is for video', true);
+  });
   scene.onDjClick = () => ui.openDj('booth');                           // t52: booth runs its own deck
   scene.onStreetDoorClick = () => toastIt('🧟 Zombie warning, Stay and party');   // t52
   scene.onRecordClick = (item) => {                                      // spin a vinyl

@@ -56,6 +56,15 @@ export const LAYOUT = {
   },
   djlib: { w: 6.5, l: 4.2, h: 4.27 },            // x: +6.345…+12.845 · z: −10.7…−6.5
 
+  // ── THE GAMER DEN (t170) — LEFT of the store, through the extended front
+  // hall. Deliberately the SMALLEST room: a cozy RGB battle station. The
+  // future library wraps this room on the left (street front → back of the
+  // theater) — keep this footprint exactly as it is.
+  gamer: {
+    w: 6.5, l: 5.5, h: 4.27,                       // x: −12.845…−6.345 · z: 0.845…6.345
+    door: { width: 1.9, height: 2.25 }             // in the +z wall, opens into the extended hall
+  },
+
   // ── Perimeter shelves (continuous runs along the LEFT & RIGHT walls) ──────
   // Depth trimmed front-to-back (0.40 m): wider wall lanes + the boards no
   // longer loom over the cases (cases also sit at the FRONT lip now — see

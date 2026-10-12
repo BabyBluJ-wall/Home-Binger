@@ -1,13 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  store3d/hall.js — THE FRONT HALL (t47)
-//  Runs the FULL WIDTH of the store front (never beyond it). Three doors:
+//  Runs the FULL WIDTH of the store front. Three doors:
 //   · STORE  (−z): a WORKING sliding double door into the movie store
 //   · STREET (+z): a sliding door that NEVER opens — the street stays outside
 //   · DANCE  (+x): a cased opening (slider) into the dance hall
-//  The book room will take the −x side later.
+//  t170: the hall now extends LEFT past the store — the wing ends at the
+//  gamer den's front wall, whose own door opens into it (gamer.js builds
+//  that wall + door). The future library will wrap around that room.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1790983945165';
+import { LAYOUT } from './config.js?v=1791834263993';
 // t119: hex mixer (same recipe as room.js) — the hall ceiling derives from the theme wall
 function mixHex(a, b, k) {
   const pa = /^#?([0-9a-f]{6})$/i.exec(String(a || '')), pb = /^#?([0-9a-f]{6})$/i.exec(String(b || ''));
@@ -24,6 +26,7 @@ export function buildHall(theme) {
   const Z0 = L.room.l / 2 + T;               // inner face of the store's front wall
   const Z1 = Z0 + L.hall.d;                  // the street wall
   const zc = (Z0 + Z1) / 2;
+  const EXT = T + L.gamer.w;                 // t170: the LEFT wing (hall → gamer den front wall)
   const group = new THREE.Group();
 
   const wallMat = new THREE.MeshStandardMaterial({ color: theme.wall, roughness: 0.9 });
@@ -39,10 +42,10 @@ export function buildHall(theme) {
   const ceilMat = new THREE.MeshStandardMaterial({ color: '#1a1f30', roughness: 1 });
 
   // ── shell: floor + ceiling ──
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, L.hall.d), floorMat);
-  floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, zc); group.add(floor);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, L.hall.d), ceilMat);
-  ceil.rotation.x = Math.PI / 2; ceil.position.set(0, H, zc); group.add(ceil);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(W + EXT, L.hall.d), floorMat);   // t170: store + left wing
+  floor.rotation.x = -Math.PI / 2; floor.position.set(-EXT / 2, 0, zc); group.add(floor);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W + EXT, L.hall.d), ceilMat);
+  ceil.rotation.x = Math.PI / 2; ceil.position.set(-EXT / 2, H, zc); group.add(ceil);
 
   // ── walls (with openings where doors go) ──
   const occluders = [];
@@ -55,9 +58,10 @@ export function buildHall(theme) {
   { const SD = L.hall.streetDoor, swSide = (W - SD.width) / 2;
     wall(swSide, H, T, -(SD.width / 2 + swSide / 2), H / 2, Z1 + T / 2);
     wall(swSide, H, T, (SD.width / 2 + swSide / 2), H / 2, Z1 + T / 2);
-    wall(SD.width, H - SD.height, T, 0, SD.height + (H - SD.height) / 2, Z1 + T / 2); }
+    wall(SD.width, H - SD.height, T, 0, SD.height + (H - SD.height) / 2, Z1 + T / 2);
+    wall(EXT, H, T, -W / 2 - EXT / 2, H / 2, Z1 + T / 2); }   // t170: the wing's street wall
   // −x wall (book room side, later) — solid for now
-  wall(T, H, L.hall.d + T, -W / 2 - T / 2, H / 2, zc);
+  wall(T, H, L.hall.d + T, -W / 2 - EXT - T / 2, H / 2, zc);   // t170: wing end wall (was the hall's −x wall)
   // +x wall: solid EXCEPT the dance opening (z 6.6…8.6 at the front corner)
   const DZ = L.dance.door, dzC = Z1 - DZ.width / 2 - 0.35;
   // (t49: the wall itself lives in dance.js — same plane, with the true
@@ -77,11 +81,11 @@ export function buildHall(theme) {
   const seg = (w, d, x, z) => { const m3 = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, d), bb); m3.position.set(x, 0.055, z); group.add(m3); };
   seg((W - sdw) / 2 - 0.15, 0.05, -(sdw / 2 + 0.15 + (W - sdw) / 4), Z0 + 0.03);
   seg((W - sdw) / 2 - 0.15, 0.05, (sdw / 2 + 0.15 + (W - sdw) / 4), Z0 + 0.03);
-  seg(W, 0.05, 0, Z1 - 0.03);
-  seg(0.05, L.hall.d, -W / 2 + 0.03, zc);
+  seg(W + EXT, 0.05, -EXT / 2, Z1 - 0.03);
+  seg(0.05, L.hall.d, -W / 2 - EXT + 0.03, zc);   // t170: wing end
 
   // ── ceiling lights (warm, always on — it's the lobby) ──
-  for (const lx of [-W / 3, 0, W / 3]) {
+  for (const lx of [-W / 3, 0, W / 3, -W / 2 - EXT / 2]) {   // t170: + the wing light
     const pl = new THREE.PointLight(0xffd9a0, 1.1, 4.5, 2);
     pl.position.set(lx, H - 0.4, zc); group.add(pl);
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8),

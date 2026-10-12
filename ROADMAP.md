@@ -2,7 +2,7 @@
 
 *From a single video-store room to a full media building. Updated every turn.*
 
-**Current phase: 1.15.0 SHIPPED (2026-10-02)** — the community update: the store's Discord chat on the help-desk PC's screen (global default for every install), self-healing mouse lock + look-speed slider that saves (0.55× default) + one-press Shift pacing, solid theater screen + clean dance-hall door, self-healing live TV, and the DJ booth's folder picker. 182/182. Next: Windows invite test → radio genre picker + Easy Start wizard → rung 2 → W1 → DLC LAST.
+**Current phase: 2.0.0 SHIPPED (2026-10-12)** — the game-room / watch-party graduation: a fourth room (the den — battle station, glass tower, three working monitors: Discord portal, keyless YouTube music station, Steam library, the angel-demon sign), three ways to watch together (theater sync, live browser shares that work for anyone with the link — no VPN, app-to-app), the graphics dial + photosensitive comfort switch, the condensed README, and share links that survived real networks. 193/193. **Version scheme: 2.x = updates and bug fixes; 3.0 = the library megaproject.** Next: the library major update (keep the den footprint) → public graduation.
 
 ---
 

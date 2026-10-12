@@ -17,11 +17,11 @@
 //  (or ⏹ Stop) controls it.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1790983945165';   // t123: live TV (HLS) on the big screen
-import { createYtPlayer } from '/js/yt.js?v=1790983945165';   // t152: pasted YouTube links play on the big screen
-import { LAYOUT } from './config.js?v=1790983945165';
-import { signTexture, hashString } from './textures.js?v=1790983945165';
-import { computeTheaterSpeakers } from './room.js?v=1790983945165';   // 8.2 layout (shared with the room mesh)
+import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1791834263993';   // t123: live TV (HLS) on the big screen
+import { createYtPlayer } from '/js/yt.js?v=1791834263993';   // t152: pasted YouTube links play on the big screen
+import { LAYOUT } from './config.js?v=1791834263993';
+import { signTexture, hashString } from './textures.js?v=1791834263993';
+import { computeTheaterSpeakers } from './room.js?v=1791834263993';   // 8.2 layout (shared with the room mesh)
 
 const TW = 512, TH = 288;   // screen canvas LOGICAL resolution (drawing code)
 const SS = 3.75;            // supersample: device canvas = TW×SS × TH×SS = 1920×1080.
@@ -430,6 +430,7 @@ export function buildTV(theme) {
   function ytTeardown() {
     if (ytCtl) { try { ytCtl.destroy(); } catch {} ytCtl = null; }
     if (ytWrap) { try { ytWrap.remove(); } catch {} ytWrap = null; }
+    if (ytLayer) { try { ytLayer.remove(); } catch {} ytLayer = null; }   // t173: the projected screen layer
   }
   function ytStart(item) {
     ytTeardown();
@@ -445,7 +446,9 @@ export function buildTV(theme) {
       onReady: (title) => {
         if (S.playing?.kind !== 'youtube' || !ytCtl) return;
         if (title) { S.playing.item.title = title; setPlate(title); }
-        hudShow();               // the HUD title catches the real video name
+        if (fsActive) hudShow(); // t173: the HUD is full-screen-only — a link playing ON the
+                                 // screen is driven by the remote (the fs HUD used to pop over
+                                 // the world here, covering the remote bar)
         emit();
       },
       onTitle: (title) => {      // t157: playlist videos change on their own
@@ -466,7 +469,11 @@ export function buildTV(theme) {
       },
       onAutoMuted: () => setPlate('Autoplayed muted — use the volume slider for sound')
     });
-    enterFullscreen();           // the HTML layer is the ONLY view for YouTube
+    // t173 (owner: "make youtube pasted links play on the theater screen not
+    // just full screen"): the iframe layer rides the SCREEN, projected like
+    // the den's monitors. ⛶/F still blows it up; Esc returns it here.
+    if (fsActive) enterFullscreen();
+    else mountYtOnScreen();
     setPlate(item.title);
   }
   // a <video>-shaped shim over the controller — the HUD (seek bar, time,
@@ -515,7 +522,8 @@ export function buildTV(theme) {
     if (prevWasPlaying && S.playing?.kind === 'video') resumeAfterDetach();
     if (S.playing.kind === 'youtube' && ytWrap) {        // t152: the iframe layer
       ytWrap.id = 'vb-fs-video';                        // …wears the movie layer's styling
-      if (!ytWrap.parentNode) document.body.appendChild(ytWrap);
+      document.body.appendChild(ytWrap);                // t173: MOVE it off the projected layer
+      if (ytLayer) ytLayer.style.display = 'none';
     } else if (S.playing.kind === 'video' && videoEl) {
       videoEl.id = 'vb-fs-video';                     // the movie itself, native resolution
       videoEl.style.cssText = '';                     // t46: drop the hidden-attach styles — the
@@ -527,6 +535,10 @@ export function buildTV(theme) {
     }
     fsActive = true;
     document.body.classList.add('tv-fullscreen');
+    // t178 (owner: "hitting F should free the mouse just like hitting G") —
+    // the fs HUD's buttons (guide, volume, watch-with-me) need a free cursor;
+    // a locked pointer under the overlay let people walk around blind.
+    document.exitPointerLock?.();
     // t134: a Guide that was already open docks beside the video instead of
     // hiding behind it (the fs layer sits above every modal otherwise)
     if (!document.getElementById('guide-modal')?.classList.contains('hidden')) {
@@ -539,16 +551,18 @@ export function buildTV(theme) {
   }
   function exitFullscreen() {
     if (!fsActive) return;
-    // t152: YouTube exists ONLY in the HTML layer — leaving it stops playback
-    // (inline exit, then stop(); stop→stopMedia→exitFullscreen early-returns)
+    // t173: leaving full screen no longer STOPS YouTube — the video drops
+    // back onto the theater screen and keeps playing (a movie's behavior).
+    // Full stop is the remote's ⏹ (or playing something else).
     if (S.playing?.kind === 'youtube') {
       fsActive = false;
       document.body.classList.remove('tv-fullscreen');
       document.body.classList.remove('fs-guide');
       hudHide();
       const yel = document.getElementById('vb-fs-video');
-      if (yel) { yel.removeAttribute('id'); yel.parentNode?.removeChild(yel); }
-      stop();
+      if (yel) yel.removeAttribute('id');
+      mountYtOnScreen();
+      emit();
       return;
     }
     fsActive = false;
@@ -573,6 +587,73 @@ export function buildTV(theme) {
       exitFullscreen();
     }
   });
+
+  // ── t173: YouTube ON THE SCREEN — the iframe projected onto the theater's
+  // screen plane (an iframe can't feed the WebGL texture; a DOM overlay with
+  // a true-perspective transform can — the den's monitors proved it). The
+  // layer is pointer-events:none: playback is driven by the remote/HUD/F.
+  let ytLayer = null;
+  const _yp = new THREE.Vector3(), _yv = new THREE.Vector3();
+  const _yc = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const YT_SRC = [[0, 0], [1280, 0], [1280, 720], [0, 720]];   // TL TR BR BL
+  function mountYtOnScreen() {
+    if (!ytWrap) return;
+    if (!ytLayer) { ytLayer = document.createElement('div'); ytLayer.id = 'tv-yt'; document.body.appendChild(ytLayer); }
+    ytLayer.appendChild(ytWrap);
+    ytLayer.style.display = 'block';       // tickYtScreen gates it every frame
+  }
+  function ytHomography(dst, srcPts) {     // same 8×8 solver as the den (gamer.js)
+    const A = [], b = [];
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = srcPts[i], [u, v] = dst[i];
+      A.push([x, y, 1, 0, 0, 0, -x * u, -y * u]); b.push(u);
+      A.push([0, 0, 0, x, y, 1, -x * v, -y * v]); b.push(v);
+    }
+    for (let c = 0; c < 8; c++) {
+      let piv = c;
+      for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      if (Math.abs(A[piv][c]) < 1e-8) return null;
+      if (piv !== c) { [A[c], A[piv]] = [A[piv], A[c]]; [b[c], b[piv]] = [b[piv], b[c]]; }
+      for (let r = 0; r < 8; r++) {
+        if (r === c) continue;
+        const f = A[r][c] / A[c][c];
+        for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k];
+        b[r] -= f * b[c];
+      }
+    }
+    return b.map((v, i) => v / A[i][i]);
+  }
+  function tickYtScreen(camera, sightBlocked) {
+    if (!ytLayer) return;
+    if (fsActive || S.playing?.kind !== 'youtube' || !ytWrap) { ytLayer.style.display = 'none'; return; }
+    let show = false;
+    try {
+      if (camera) {
+        _yv.copy(screen.position); screen.localToWorld(_yv);          // screen center, world
+        _yp.copy(_yv).project(camera);
+        const inView = _yp.z < 1 && Math.abs(_yp.x) < 0.95 && Math.abs(_yp.y) < 0.95;
+        const blocked = !!sightBlocked?.(_yv);
+        show = inView && !blocked;
+      }
+    } catch { show = false; }
+    if (!show) { ytLayer.style.display = 'none'; return; }
+    ytLayer.style.display = 'block';
+    // the plane's corners in world space (viewer's TL TR BR BL — the screen faces +z)
+    const hw = SCREEN_W / 2, hh = SCREEN_H / 2;
+    const local = [[-hw, hh, 0.05], [hw, hh, 0.05], [hw, -hh, 0.05], [-hw, -hh, 0.05]];
+    const pts = []; let behind = false;
+    for (let i = 0; i < 4; i++) {
+      _yc[i].set(local[i][0], local[i][1], local[i][2]); screen.localToWorld(_yc[i]);
+      _yp.copy(_yc[i]).project(camera);
+      if (_yp.z > 1) { behind = true; break; }
+      pts.push([(_yp.x * 0.5 + 0.5) * innerWidth, (-_yp.y * 0.5 + 0.5) * innerHeight]);
+    }
+    let area = 0;
+    if (!behind) for (let i = 0; i < 4; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % 4]; area += x1 * y2 - x2 * y1; }
+    const h = behind || Math.abs(area) < 900 ? null : ytHomography(pts, YT_SRC);
+    if (!h) { ytLayer.style.display = 'none'; return; }
+    ytLayer.style.transform = `matrix3d(${[h[0], h[3], 0, h[6], h[1], h[4], 0, h[7], 0, 0, 0, 0, h[2], h[5], 0, 1].join(',')})`;
+  }
 
   // ── t153: CLOSED CAPTIONS — one CC button, both engines. YouTube starts
   // with captions OFF (yt.js enforces it — its own controls are stripped, so
@@ -602,10 +683,16 @@ export function buildTV(theme) {
     }
   }
   function ccPaint() {
-    const cc = byId('fs-cc'); if (!cc) return;
-    cc.classList.toggle('hidden', !ccAvailable());
-    cc.classList.toggle('cc-on', ccOn);
-    cc.title = ccOn ? 'Turn captions off' : 'Turn captions on';
+    const cc = byId('fs-cc');
+    if (cc) {
+      cc.classList.toggle('hidden', !ccAvailable());
+      cc.classList.toggle('cc-on', ccOn);
+      cc.title = ccOn ? 'Turn captions off' : 'Turn captions on';
+    }
+    // t173: the remote's CC button shows its lit state immediately — the
+    // remote interval repaints it, but a toggle must not wait for the tick
+    const rb = byId('tv-cc');
+    if (rb) { rb.classList.toggle('cc-on', ccOn); rb.title = ccOn ? 'Turn captions off' : 'Turn captions on'; }
   }
 
   // ── full-screen HUD — seek bar + transport controls. While playing it
@@ -676,6 +763,7 @@ export function buildTV(theme) {
     }
     const on = (id, fn) => { const b = byId(id); if (b) b.addEventListener('click', fn); };
     on('tv-fs-close', () => exitFullscreen());
+    on('fs-guide-btn', () => { document.getElementById('tv-guide')?.click(); });   // t173: the Guide docks beside the video
     on('fs-prev', () => tvSelf && tvSelf.step(-1));
     on('fs-next', () => tvSelf && tvSelf.step(1));
     on('fs-back', () => tvSelf && tvSelf.seekBy(-10));
@@ -1132,8 +1220,9 @@ export function buildTV(theme) {
   // slow when walking around" report.
   let screenSphere = null;
   const _frustum = new THREE.Frustum(), _projScreen = new THREE.Matrix4();
-  function update(dt, camera) {
+  function update(dt, camera, sightBlocked) {
     lastCam = camera;
+    tickYtScreen(camera, sightBlocked);          // t173: YouTube rides the screen
     if (actx && camera) {
       const l = actx.listener;
       // Fullscreen = the BEST SEAT: the listener sits at the room's sweet
@@ -1257,6 +1346,10 @@ export function buildTV(theme) {
     update,
     state: S,
     isPlaying: () => !!S.playing,
+    // t173: on-screen playback is driven by the remote — captions must be
+    // reachable there (the fs HUD no longer pops up outside full screen)
+    toggleCc() { ccOn = !ccOn; ccApply(); ccPaint(); },
+    ccInfo() { return { available: ccAvailable(), on: ccOn }; },
     nowPlaying: publicState,
     setMuted(muted) {
       if (videoEl) videoEl.muted = muted;

@@ -69,6 +69,24 @@ export const api = {
     return r;
   },
   changePassword: (oldPassword, newPassword) => call('POST', '/api/account/password', { oldPassword, newPassword }),
+  // t171: per-user connections — the user's OWN keys, nobody else's
+  myConnections: () => call('GET', '/api/connections/me'),
+  saveMyConnections: (connections) => call('PUT', '/api/connections/me', { connections }),
+  steamLibrary: (user) => call('GET', '/api/steam/library' + (user ? '?user=' + encodeURIComponent(user) : '')),
+  // t186: the watch party — the theater's "watch with me"
+  partyState: () => call('GET', '/api/party'),
+  partyCreate: (item) => call('POST', '/api/party', { item }),
+  partyEnd: () => call('DELETE', '/api/party'),
+  partyJoin: () => call('POST', '/api/party/join'),
+  partyLeave: () => call('POST', '/api/party/leave'),
+  partyHost: (patch) => call('POST', '/api/party/host', patch),
+  partyStall: (on) => call('POST', '/api/party/stall', { on }),
+  steamShared: () => call('GET', '/api/steam/shared'),
+  adminConnections: () => call('GET', '/api/connections'),
+
+  // t173: the game room's Discord portal (project-server facts, public)
+  discordPortal: () => call('GET', '/api/discord/portal'),
+  connectionsTest: (draft) => call('POST', '/api/connections/test', draft),              // t178: test MY OWN key
 
   adminConfig: () => call('GET', '/api/admin/config'),
   adminSaveConfig: (config) => call('PUT', '/api/admin/config', { config }),

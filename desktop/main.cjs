@@ -10,7 +10,7 @@
 //  Users who already have Node installed are never touched: this app is
 //  self-contained and never installs or modifies anything on the system.
 // ─────────────────────────────────────────────────────────────────────────────
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, session, desktopCapturer, ipcMain } = require('electron');   // t185: session → adblock · t195: desktopCapturer + ipcMain → screen-share rooms
 
 // t152: the store's YouTube playback (and any embedded stream) may start
 // without a prior click — the Guide's Enter key IS the gesture, but the
@@ -27,26 +27,126 @@ const fs = require('node:fs');
 // t159b: EXCEPTION — the in-app chat's Discord login. The chat embed
 // (wizcord.io) signs in through a popup to wizcord.io/auth/discord →
 // discord.com, and Discord's login/OAuth pages refuse to run inside a frame.
+// ═══ t185: YT ADBLOCK — pie.org-style, but NATIVE (the owner's ask) ═══
+// Chrome extensions can't load into Electron <webview>s, so this pulls the
+// same two levers a blocker extension pulls, at the app's own network +
+// style layers instead:
+//   1) ad + tracker requests to Google's ad stack are CANCELLED before they
+//      leave the app (doubleclick, googlesyndication, pagead paths, midroll
+//      fetches, qoe/ptrace beacons);
+//   2) on YouTube pages, the remaining ad SLOTS are CSS-hidden and any
+//      skippable ad gets its Skip button clicked automatically.
+// Playback itself (googlevideo.com, ytimg.com, timedtext) is NEVER touched,
+// and no other site is affected — it's YouTube-only, like pie.org.
+const YT_AD_HOSTS = [
+  /(^|\.)doubleclick\.net$/i, /(^|\.)googlesyndication\.com$/i, /(^|\.)googleadservices\.com$/i,
+  /(^|\.)google-analytics\.com$/i, /(^|\.)adservice\.google\.com$/i, /(^|\.)ads\.youtube\.com$/i,
+  // t193 (the owner: "adblock does not work as intended in the den") — the
+  // modern ad stack: beacons, ad-serving subdomains, AT Internet-style trackers
+  /(^|\.)video-stats\.video\.google\.com$/i, /(^|\.)ade\.googlesyndication\.com$/i,
+  /(^|\.)ads\.google\.com$/i, /(^|\.)adsense\.google\.com$/i, /(^|\.)partner\.adhesion\.io$/i
+];
+const YT_AD_PATHS = [/^\/pagead\//, /^\/api\/stats\/ads/, /^\/get_midroll_info/, /^\/ptrace/, /^\/api\/stats\/qoe/,
+  /^\/adbreak\//, /^\/youtubei\/v1\/ad_/, /^\/api\/ads\//, /^\/s\/ads\//];
+function ytAdRequest(url) {
+  let u; try { u = new URL(url); } catch { return false; }
+  if (YT_AD_HOSTS.some((re) => re.test(u.hostname))) return true;
+  if (YT_AD_PATHS.some((re) => re.test(u.pathname)) && /(^|\.)youtube\.com$|(^|\.)google\.com$|(^|\.)googlevideo\.com$/i.test(u.hostname)) return true;
+  return false;
+}
+const YT_AD_CSS = `
+  #masthead-ad, #player-ads, .video-ads, .ytp-ad-module, .ytp-ad-overlay-container,
+  .ytp-ad-text-overlay, .ytp-ad-image-overlay, .ytp-ad-image-overlay,
+  ytd-ad-slot-renderer, ytd-promoted-video-renderer, ytd-in-feed-ad-layout-renderer,
+  ytd-engagement-panel-ad-slot-renderer, yt-mealbar-promo-renderer,
+  #masthead-ad-companion, ytd-banner-promo-renderer,
+  ytd-video-masthead-ad-renderer, ytd-compact-promoted-video-renderer,
+  ytd-promoted-sparkles-web-renderer, ytd-brand-video-singleton-renderer,
+  .ytp-ad-progress, tp-yt-paper-dialog[dialog-id^='ad-'] { display: none !important; }
+`;
+const YT_SKIP_JS = `(function(){
+  if (window.__hbAdSkip) return; window.__hbAdSkip = 1;
+  var n = 0;
+  var iv = setInterval(function(){
+    try {
+      var q = '.ytp-skip-ad-button, button.ytp-ad-skip-button-modern, .ytp-ad-skip-button-modern, .ytp-ad-skip-button, .ytp-ad-skip-button-slot button, button.ytp-skip-ad-button';
+      var bs = document.querySelectorAll(q);
+      for (var i = 0; i < bs.length; i++) {
+        try {                                    // a real click — pointerdown first
+          var ev1 = new MouseEvent('pointerdown', { bubbles: true, cancelable: true });
+          bs[i].dispatchEvent(ev1);
+          bs[i].click();
+        } catch (e) {}
+      }
+    } catch (e) {}
+    if (++n > 1200) clearInterval(iv);          // ~10 minutes at 500 ms
+  }, 500);
+})();`;
+function armAdblock(ses) {
+  try { ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] },
+    (details, callback) => callback({ cancel: ytAdRequest(details.url) })); } catch (e) { /* session already gone */ }
+}
+
 // Sending those popups to the SYSTEM browser logged people in "somewhere
 // else": the cookies landed in the browser, never in the app, and the embed
 // stayed signed out (owner report). So wizcord.io + discord.com popups open
 // as IN-APP child windows that share this app's session — the login sticks,
 // and the embed reconnects. Everything else still goes to the user's browser.
+// The app's own origin must stay in-app too (server pages, sign-ins).
 app.on('web-contents-created', (_e, wc) => {
-  wc.setWindowOpenHandler(({ url }) => {
+  wc.setWindowOpenHandler(({ url, frameName, features }) => {
     try {
       const u = new URL(url);
       const inApp = (u.protocol === 'https:' || u.protocol === 'http:')
-        && (/(^|\.)wizcord\.io$/i.test(u.hostname) || /(^|\.)discord\.com$/i.test(u.hostname));
+        && (/(^|\.)wizcord\.io$/i.test(u.hostname) || /(^|\.)discord\.com$/i.test(u.hostname)
+          || u.hostname === 'localhost' || u.hostname === '127.0.0.1');            // our own origin stays in-app
+      // t176: FULL DISCORD IN-APP — the real web client (DMs, servers, voice
+      // channels, calls, screen sharing) in its own properly-sized window.
+      // This is Discord's own client in our shell — no user tokens, no
+      // self-botting; the session persists in the app's own profile.
+      const fullDiscord = /(^|\.)discord\.com$/i.test(u.hostname) && frameName === 'hbDiscord';
+      const dockDiscord = fullDiscord && typeof features === 'string' && features.includes('hbDock');   // watch-with-me side panel
       if (inApp) {
-        return { action: 'allow', overrideBrowserWindowOptions: {
-          width: 940, height: 900, autoHideMenuBar: true,
-          backgroundColor: '#0b0e1a', title: 'Home Binger — sign in'
-        } };
+        const base = { autoHideMenuBar: true, backgroundColor: '#0b0e1a' };
+        if (dockDiscord) {                                       // t176: dock it beside the movie
+          let b = null;
+          try { const w = BrowserWindow.fromWebContents(wc); if (w) b = w.getBounds(); } catch {}
+          return { action: 'allow', overrideBrowserWindowOptions: { ...base,
+            width: 420, height: b ? b.height : 860,
+            x: b ? b.x + b.width - 420 : undefined, y: b ? b.y : undefined,
+            title: 'Discord — Home Binger' } };
+        }
+        if (fullDiscord) {
+          return { action: 'allow', overrideBrowserWindowOptions: { ...base,
+            width: 1200, height: 860, title: 'Discord — Home Binger' } };
+        }
+        return { action: 'allow', overrideBrowserWindowOptions: { ...base,
+          width: 940, height: 900, title: 'Home Binger — sign in' } };
       }
     } catch { /* unparsable URL — fall through to the browser path */ }
+    // t178: OS app links — the den's Steam ▶ Play buttons open steam://run/<id>
+    // in the user's own Steam (and discord: links behave like any app).
+    if (/^(steam|discord|zoom|ms-windows-store):/i.test(url)) {
+      shell.openExternal(url).catch(() => {});
+      return { action: 'deny' };
+    }
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
+  });
+  // t176: the page needs to know it's in the exe. Injected on OUR origin
+  // only — never into Discord/wizcord pages.
+  wc.on('did-finish-load', () => {
+    try {
+      const u = new URL(wc.getURL());
+      if (u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost'))
+        wc.executeJavaScript('try { window.HB_DESKTOP = 1 } catch {}').catch(() => {});
+      // t185: YouTube pages get the ad CSS + the auto-skipper (SPA soft
+      // navigations keep the frame — one injection per hard load is enough)
+      if (u.protocol === 'https:' && /(^|\.)youtube\.com$/i.test(u.hostname)) {
+        wc.insertCSS(YT_AD_CSS, { cssOrigin: 'user' }).catch(() => {});
+        wc.executeJavaScript(YT_SKIP_JS).catch(() => {});
+      }
+    } catch { /* not a page we should touch */ }
   });
 });
 
@@ -212,9 +312,30 @@ app.on('web-contents-created', (_e, wc) => {
 
 // One Home Binger at a time — a second launch just focuses the first window.
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
-app.on('second-instance', () => {
+
+// t193: hb://<code> deep links — "hb://HB-7QK2M9" opens the app with the join
+// box ready (remote watch rooms). Windows hands the URL to a NEW process (it
+// bounces off the single-instance lock into second-instance); macOS uses
+// open-url; a cold start finds it in argv. The renderer gets it via the
+// hbBridge preload → window.hbBridge.onJoin().
+const HB_LINK_RE = /^hb:\/\/([A-Za-z0-9-]+)/i;
+let pendingJoin = null;
+const linkFromArgv = (argv) => { for (const a of argv || []) { const m = HB_LINK_RE.exec(a); if (m) return m[1]; } return null; };
+let APP_PORT = 0;               // t195: hb://<code> opens the room in the default browser —
+const sendJoin = (code) => {    // the watch page served by THIS app at /watch/ joins via PeerJS
+  if (APP_PORT) { shell.openExternal(`http://127.0.0.1:${APP_PORT}/watch/#${encodeURIComponent(code)}`).catch(() => {}); return; }
+  const w = BrowserWindow.getAllWindows()[0];
+  if (!w || w.isDestroyed()) { pendingJoin = code; return; }
+  try { w.webContents.send('hb-join', code); } catch { pendingJoin = code; }
+};
+try { app.setAsDefaultProtocolClient('hb'); } catch (e) { console.warn('[hb://] protocol not registered:', e.message); }
+if (process.platform === 'win32' && !process.defaultApp) pendingJoin = linkFromArgv(process.argv) || pendingJoin;   // cold start: hb://… is argv[1]
+app.on('second-instance', (e, argv) => {
   for (const win of BrowserWindow.getAllWindows()) { if (win.isMinimized()) win.restore(); win.focus(); }
+  const link = linkFromArgv(argv);
+  if (link) sendJoin(link);
 });
+app.on('open-url', (e, url) => { e.preventDefault(); const m = HB_LINK_RE.exec(url || ''); if (m) sendJoin(m[1]); });
 
 // Pick the first free port from 8181 up, so the app NEVER fights a copy of the
 // server the user is already running (e.g. started with Node from the source).
@@ -241,6 +362,7 @@ function waitUp(port, ms) {
 (async () => {
   const PORT = await tryPort(8181, 11);
   process.env.PORT = String(PORT);
+  APP_PORT = PORT;
   // t79: the server is an ES module (import syntax). require() of ESM needs
   // Node >= 20.19 — Electron 33 ships 20.18, so require() threw ERR_REQUIRE_ESM
   // and the exe died silently on launch (no window, nothing in Task Manager).
@@ -249,16 +371,55 @@ function waitUp(port, ms) {
   await import(pathToFileURL(path.join(__dirname, '..', 'server', 'server.js')));   // the same server, in-process
   await waitUp(PORT, 20000);
   await app.whenReady();
+  // t185: the adblock guards BOTH webview sessions (the YouTube media panel
+  // runs in persist:hbmedia; Discord + in-app children share the default)
+  armAdblock(session.defaultSession);
+  armAdblock(session.fromPartition('persist:hbmedia'));
+  // t195: screen-share rooms — the renderer asks for capturable sources (the
+  // HB window) and captures it + system audio; media from OUR origin only
+  // (see the permission handler below — everything else is granted again)
+  ipcMain.handle('hb-desktop-sources', async () => {
+    try {
+      const srcs = await desktopCapturer.getSources({ types: ['window', 'screen'], thumbnailSize: { width: 0, height: 0 } });
+      return srcs.map(x => ({ id: x.id, name: x.name }));
+    } catch { return []; }
+  });
+  try {
+    // t196 (the owner: "the app no longer captures the mouse"): the t195
+    // handler granted media ONLY from our origin — but Electron also routes
+    // pointerLock, fullscreen, clipboard writes and mediaKeySystem (the
+    // Widevine CDM!) through this handler, and Discord's voice mic lives on
+    // this same default session. Ordinary app machinery is granted again;
+    // camera/mic/SCREEN capture stays app-origin only (plus Discord's mic,
+    // which the user triggers in the portal). Geolocation is never needed.
+    session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => {
+      const url = wc.getURL() || '';
+      const fromApp = /^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(url);
+      if (permission === 'media' || permission === 'display-capture' || permission === 'geolocation')
+        return cb(fromApp || (permission === 'media' && /^https:\/\/([a-z0-9-]+\.)?discord(app)?\.com\//.test(url)));
+      cb(true);
+    });
+  } catch {}
   Menu.setApplicationMenu(null);                                 // no menu bar — it's an app, not a browser
   const win = new BrowserWindow({
     width: 1280, height: 800,
     backgroundColor: '#0b0e1a',
     title: 'Home Binger',
     autoHideMenuBar: true,
-    show: false
+    show: false,
+    webPreferences: {
+      // t178: Discord lives in an in-app <webview> panel (DMs, servers, voice)
+      // instead of a separate window — the tag must be enabled up here.
+      webviewTag: true,
+      // t193: hb:// deep links — the renderer subscribes via window.hbBridge
+      preload: path.join(__dirname, 'preload.cjs')
+    }
   });
   win.once('ready-to-show', () => win.show());
   await win.loadURL(`http://127.0.0.1:${PORT}/`);
+  // a cold-start hb:// link was waiting for the window — hand it over once the
+  // page (and its onJoin listener) is up
+  win.webContents.once('did-finish-load', () => { if (pendingJoin) { const c = pendingJoin; pendingJoin = null; sendJoin(c); } });
 })().catch((e) => { console.error('Home Binger failed to start:', e.message); app.quit(); });
 
 app.on('window-all-closed', () => app.quit());

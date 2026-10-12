@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<!-- ─────────────────────────────────────────────────────────────────────────
+  Home Binger — watch party (t195). The browser guest page: self-contained
+  (one HTML + peerjs.min.js beside it), served by every HB server at /watch/
+  and published to GitHub Pages. Guests pick a name (w2g-style), the host's
+  Home Binger streams itself live over WebRTC — no install, no account.
+  The room code rides the URL hash: /watch/#HB-XXXXXX
+─────────────────────────────────────────────────────────────────────────── -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Home Binger — watch party</title>
+<style>
+  :root { --bg:#0b0e1a; --panel:#12142a; --line:#2a3354; --ink:#e8edf7; --muted:#8ea0c0; --accent:#ffd23f; --live:#ff3b5c; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 18px; }
+  .card { width: min(520px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 26px 26px 22px; box-shadow: 0 24px 90px rgba(0,0,0,.6); }
+  h1 { font-size: 21px; margin-bottom: 4px; letter-spacing: .2px; }
+  h1 .pop { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin-bottom: 18px; }
+  .sub b { color: var(--ink); font-weight: 600; }
+  label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 6px; }
+  input[type=text] { width: 100%; padding: 12px 14px; font-size: 16px; color: var(--ink); background: #0a0c18;
+    border: 1px solid var(--line); border-radius: 10px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+  .btn { display: block; width: 100%; margin-top: 14px; padding: 12px; font-size: 15.5px; font-weight: 700; cursor: pointer;
+    color: #101020; background: var(--accent); border: 0; border-radius: 10px; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 600; }
+  .err { color: #ff8da1; font-size: 13.5px; margin-top: 10px; min-height: 18px; }
+  .code-chip { display: inline-block; font-family: ui-monospace, 'Cascadia Mono', monospace; font-size: 14px;
+    letter-spacing: 2px; background: #0a0c18; border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; }
+  /* ── the viewer ── */
+  #viewer { display: none; position: fixed; inset: 0; background: #000; }
+  #vid { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .bar { position: fixed; left: 0; right: 0; display: flex; gap: 10px; align-items: center; padding: 10px 14px;
+    background: linear-gradient(rgba(5,7,16,.92), rgba(5,7,16,.55)); backdrop-filter: blur(6px); z-index: 5; }
+  .bar.top { top: 0; }
+  .bar.bottom { bottom: 0; justify-content: center; background: linear-gradient(rgba(5,7,16,.55), rgba(5,7,16,.92)); }
+  .live { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--live); }
+  .live i { width: 9px; height: 9px; border-radius: 50%; background: var(--live); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  .who { font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who small { color: var(--muted); }
+  .spacer { flex: 1; }
+  .chip { padding: 7px 13px; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(18,20,42,.9);
+    border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+  .chip.warn { color: #ffb3c0; }
+  #ping, #stats { font-size: 12.5px; color: var(--muted); }
+  #roster { position: fixed; top: 52px; right: 12px; z-index: 6; min-width: 190px; background: rgba(18,20,42,.96);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: none; }
+  #roster h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 8px; }
+  #roster .p { font-size: 14px; padding: 3px 0; }
+  #roster .p.me::after { content: ' (you)'; color: var(--muted); font-size: 12px; }
+  .center-msg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 8;
+    background: rgba(5,7,16,.94); text-align: center; padding: 30px; }
+  .center-msg .m { max-width: 460px; }
+  .center-msg h2 { font-size: 19px; margin-bottom: 8px; }
+  .center-msg p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+  .spin { width: 34px; height: 34px; margin: 0 auto 14px; border-radius: 50%; border: 3px solid var(--line);
+    border-top-color: var(--accent); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+</style>
+</head>
+<body>
+
+<!-- ── the join card ── -->
+<div class="card" id="join">
+  <h1>🍿 Home Binger <span class="pop">watch party</span></h1>
+  <div class="sub" id="join-sub">You've been invited to watch <b id="host-line">a Home Binger</b> — live, in your browser.
+    Pick a name so the host knows who's watching.</div>
+  <label for="name">Your name</label>
+  <input type="text" id="name" maxlength="24" placeholder="e.g. MovieNight_Meg" autocomplete="off">
+  <div id="code-row" style="display:none;margin-top:12px">
+    <label for="code">Room code</label>
+    <input type="text" id="code" maxlength="6" placeholder="HB-XXXXXX" autocomplete="off"
+      style="text-transform:uppercase;letter-spacing:2px;font-family:ui-monospace,'Cascadia Mono',monospace">
+  </div>
+  <button class="btn" id="go">▶ Join the watch party</button>
+  <div class="err" id="err"></div>
+  <div class="sub" style="margin:14px 0 0; font-size:12px">Room <span class="code-chip" id="code-chip">—</span></div>
+</div>
+
+<!-- ── the viewer ── -->
+<div id="viewer">
+  <video id="vid" autoplay playsinline></video>
+  <div class="bar top">
+    <span class="live"><i></i>LIVE</span>
+    <span class="who" id="who"></span>
+    <span class="spacer"></span>
+    <span id="stats"></span>
+    <span id="ping"></span>
+    <button class="chip" id="mute">🔊 Sound on</button>
+    <button class="chip" id="people">👥 <span id="pcount">1</span></button>
+    <button class="chip" id="fs">⛶</button>
+  </div>
+  <div id="roster"><h3>In the room</h3><div id="plist"></div></div>
+  <div class="bar bottom">
+    <button class="chip warn" id="leave">👋 Leave</button>
+  </div>
+  <div class="center-msg" id="msg"><div class="m"><div class="spin"></div><h2 id="msg-h">Connecting…</h2><p id="msg-p"></p></div></div>
+</div>
+
+<script src="./peerjs.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  // NB: match() returns an ARRAY — take [1] (the group), never concatenate
+  // the array itself (that stringifies with a comma and dials a doubled id)
+  var CODE = (((location.hash || '').toUpperCase().match(/[A-HJ-NP-Z2-9]{6}/) || [])[0]) ||
+             ((location.search.match(/code=([A-HJ-NP-Z2-9]{6})/i) || [])[1]);
+  var roomCode = CODE ? 'HB-' + CODE : '';
+  var PREFIX = 'hbr-';
+  var peer = null, conn = null, call = null;
+  var state = 'needcode';        // needcode | idle | joining | live | reconnecting | ended | full
+  var hostName = '', myName = '', names = [];
+  var clockOffset = 0, lastPong = 0, pingIv = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  // the test seam: the suite reads this (no page internals touched otherwise)
+  window.__hbWatch = { get state() { return state; }, get names() { return names; }, get host() { return hostName; },
+    get code() { return roomCode; }, get videoLive() { var v = $('vid'); return !!v && v.videoWidth > 0; },
+    get jbuf() { return jbufMs; } };
+
+  if (!roomCode) {
+    $('join-sub').innerHTML = 'You\'ve been invited to a watch party. Ask the host for the six-character room code — it looks like <b>HB-XXXXXX</b>.';
+    $('code-row').style.display = 'block';
+  }
+  $('code-chip').textContent = roomCode;
+  try { $('name').value = localStorage.getItem('hb_watch_name') || ''; } catch (e) {}
+
+  function showMsg(h, p) { $('msg-h').textContent = h; $('msg-p').textContent = p || ''; $('msg').style.display = 'flex'; }
+  function hideMsg() { $('msg').style.display = 'none'; }
+
+  function paintRoster() {
+    $('pcount').textContent = String(names.length || 1);
+    var html = '';
+    (names.length ? names : ['you']).forEach(function (n) {
+      var me = (n === myName);
+      html += '<div class="p' + (me ? ' me' : '') + '">' + String(n).replace(/[<>&]/g, '') + '</div>';
+    });
+    $('plist').innerHTML = html;
+    $('who').innerHTML = hostName ? (hostName.replace(/[<>&]/g, '') + " <small>is sharing</small>") : '';
+  }
+
+  function wireConn(c) {
+    conn = c;
+    c.on('open', function () {
+      try { c.send({ t: 'hi', name: myName }); } catch (e) {}
+    });
+    c.on('data', onMsg);
+    c.on('close', function () { if (state === 'live' || state === 'reconnecting') reconnect(); });
+    c.on('error', function () { if (state === 'live' || state === 'reconnecting') reconnect(); });
+  }
+
+  var joinDeadline = 0;    // re-dial until this, then believe the bad news
+  var wasLive = false;     // once live, "nobody answers" means the host stopped
+  var unavailables = 0;    // …but give the broker two tries before concluding
+  var PEER_DEBUG = /dbg=1/.test(location.search) ? 3 : 0;   // field diagnostics: /watch/?dbg=1#HB-…
+  // t201: same ICE as the host — STUN first, Open Relay's free TURN as the
+  // fallback for NATs that can't be punched (cellular CGNAT, symmetric NAT).
+  var ICE = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject', credential: 'openrelayproject' }
+  ];
+  function dial() {
+    state = 'joining';
+    peer = new Peer({ debug: PEER_DEBUG, config: { iceServers: ICE } });
+    var connOpened = false;
+    peer.on('open', function () {
+      var c = peer.connect(PREFIX + roomCode.slice(3), { reliable: true });
+      wireConn(c);
+      c.on('open', function () { connOpened = true; unavailables = 0; });
+      // a busy host can drop the first offers (t193's lesson) — re-dial a
+      // silent join instead of giving up; believe "nobody's there" only at
+      // the deadline
+      setTimeout(function () {
+        if (state === 'joining' && !connOpened) {
+          if (Date.now() < joinDeadline) { try { peer.destroy(); } catch (e) {} peer = null; dial(); }
+          else fail('No room answered — check the code with the host.');
+        }
+      }, 11000);
+    });
+    peer.on('error', function (e) {
+      if (state !== 'joining' && state !== 'live' && state !== 'reconnecting') return;
+      if (state === 'joining') {
+        // peer-unavailable can fire while a busy host is still registering —
+        // re-dial until the deadline, then show the honest message
+        if (e && e.type === 'peer-unavailable') {
+          unavailables += 1;
+          // once we've BEEN live, two straight unavailables = the host left
+          if (wasLive && unavailables >= 2) { ended('The host ended the watch party. Thanks for watching!'); return; }
+        }
+        if (Date.now() < joinDeadline) { try { peer.destroy(); } catch (x) {} peer = null; setTimeout(dial, 1800); }
+        else if (e && e.type === 'peer-unavailable') fail('No room with that code — the host may have stopped sharing.');
+        else fail('Could not reach the room network. Check your connection and retry.');
+      } else reconnect();
+    });
+    peer.on('call', function (mc) {         // the host's stream arrives
+      call = mc;
+      try { mc.answer(); } catch (e) {}
+      mc.on('stream', function (st) {
+        var v = $('vid');
+        v.srcObject = st;
+        v.muted = true;                       // browsers block unmuted autoplay — one tap turns it up
+        $('mute').textContent = '🔇 Tap for sound';
+        v.play().catch(function () {});      // the Join click is the user gesture; autoplay is allowed muted
+        // low latency with a floor: the LEARNED jitter buffer (t200 — a hard
+        // 40 ms was loopback-tuned; see applyJbuf below)
+        applyJbuf();
+        if (state !== 'live') {
+          state = 'live'; wasLive = true; unavailables = 0;
+          $('join').style.display = 'none';
+          $('viewer').style.display = 'block';
+          hideMsg();
+          showMsg('🔊 Sound is off by default', 'Tap “🔇 Tap for sound” up top to hear the movie.');
+          setTimeout(hideMsg, 4500);
+        }
+      });
+    });
+  }
+
+  function pcGetReceivers(mc) {
+    try { return (mc.peerConnection && mc.peerConnection.getReceivers) ? mc.peerConnection.getReceivers() : []; }
+    catch (e) { return []; }
+  }
+
+  // t200: the jitter buffer that LEARNS. The old hard 40 ms was tuned on a
+  // loopback, where there is no jitter — on real Wi‑Fi and cellular every
+  // spike past it starved the decoder and the picture froze ("it just keeps
+  // buffering"). Start at a live-feel 200 ms; each time the video waits,
+  // thicken by 150 ms up to 700 ms. Sub-second feel, steady on rough links.
+  var JBUF_START = 200, JBUF_STEP = 150, JBUF_MAX = 700, jbufMs = JBUF_START;
+  function applyJbuf() {
+    pcGetReceivers(call).forEach(function (r) {
+      if (r.jitterBufferTarget !== undefined) { try { r.jitterBufferTarget = jbufMs; } catch (e) {} }
+    });
+  }
+  $('vid').addEventListener('waiting', function () {
+    if (state === 'live' && jbufMs < JBUF_MAX) { jbufMs = Math.min(JBUF_MAX, jbufMs + JBUF_STEP); applyJbuf(); }
+  });
+
+  function reconnect() {
+    if (state === 'ended') return;
+    state = 'reconnecting';
+    showMsg('Reconnecting…', 'The link to the host hiccuped. Hanging on…');
+    try { conn && conn.close(); } catch (e) {}
+    try { peer && peer.destroy(); } catch (e) {}
+    conn = null; peer = null;
+    setTimeout(function () { if (state === 'reconnecting') dial(); }, 1500);
+  }
+
+  function fail(msg) {
+    if (state === 'live') return;
+    state = 'idle';
+    $('join').style.display = 'block';
+    $('viewer').style.display = 'none';
+    hideMsg();
+    $('err').textContent = msg;
+    $('go').disabled = false;
+    $('go').textContent = '▶ Join the watch party';
+  }
+
+  function onMsg(m) {
+    if (!m || typeof m !== 'object') return;
+    if (m.t === 'welcome') { hostName = String(m.host || 'The host'); paintRoster(); }
+    else if (m.t === 'roster') { names = (m.names || []).map(String); paintRoster(); }
+    else if (m.t === 'pong' && typeof m.sent === 'number') {
+      clockOffset = (m.hostNow || Date.now()) - m.sent;
+      lastPong = Date.now();
+      $('ping').textContent = Math.max(0, Math.round(Date.now() - m.sent)) + ' ms';
+    }
+    else if (m.t === 'ended') { ended(String(m.host || 'The host') + ' ended the watch party. Thanks for watching!'); }
+    else if (m.t === 'full') { ended('That room is full (' + (m.max || 6) + ' viewers max).'); }
+  }
+
+  function ended(text) {
+    state = 'ended';
+    try { conn && conn.close(); } catch (e) {}
+    try { call && call.close(); } catch (e) {}
+    try { peer && peer.destroy(); } catch (e) {}
+    conn = null; call = null; peer = null;
+    clearInterval(pingIv);
+    var v = $('vid');
+    try { v.pause(); v.srcObject = null; } catch (e) {}
+    $('viewer').style.display = 'none';
+    $('join').style.display = 'block';
+    $('err').textContent = '';
+    // the end card: the message replaces the form
+    $('join-sub').innerHTML = text.replace(/[<>&]/g, '');
+    $('name').style.display = 'none';
+    document.querySelector('label').style.display = 'none';
+    $('go').style.display = 'none';
+    $('code-chip').textContent = roomCode;
+  }
+
+  // ── the Join click ──
+  $('go').addEventListener('click', function () {
+    if (!roomCode) {           // t201: link without a code — the guest types it
+      var typed = ((($('code').value || '').toUpperCase().match(/[A-HJ-NP-Z2-9]{6}/) || [])[0]);
+      if (!typed) { $('err').textContent = 'Enter the 6-character room code the host gave you.'; return; }
+      roomCode = 'HB-' + typed;
+      $('code-chip').textContent = roomCode;
+    }
+    myName = ($('name').value || '').replace(/\s+/g, ' ').trim().slice(0, 24) || 'Guest';
+    try { localStorage.setItem('hb_watch_name', myName); } catch (e) {}
+    $('go').disabled = true;
+    $('go').textContent = 'Connecting…';
+    $('err').textContent = '';
+    state = 'joining';
+    joinDeadline = Date.now() + 75000;   // ~6 dials worth of patience
+    dial();
+  });
+  $('name').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('go').click(); });
+  $('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('go').click(); });
+
+  // viewer controls
+  $('mute').addEventListener('click', function () {
+    var v = $('vid'); v.muted = !v.muted;
+    this.textContent = v.muted ? '🔇 Muted' : '🔊 Sound on';
+    if (!v.muted) { hideMsg(); v.play().catch(function () {}); }
+  });
+  $('fs').addEventListener('click', function () {
+    try { if (document.fullscreenElement) document.exitFullscreen(); else $('viewer').requestFullscreen(); } catch (e) {}
+  });
+  $('people').addEventListener('click', function () {
+    var r = $('roster'); r.style.display = r.style.display === 'block' ? 'none' : 'block';
+  });
+  $('leave').addEventListener('click', function () {
+    ended('You left the watch party. See you next movie night! 🍿');
+  });
+
+  // keep the latency number honest while live
+  pingIv = setInterval(function () {
+    if (state === 'live' && conn && conn.open) { try { conn.send({ t: 'ping', sent: Date.now() }); } catch (e) {} }
+    if (state === 'live' && lastPong && Date.now() - lastPong > 12000) reconnect();
+  }, 2500);
+
+  // t200: the honest numbers — what the guest ACTUALLY receives (resolution ·
+  // fps · bitrate), read from the inbound stats, not what was asked for
+  var lastBytes = -1, lastStatsAt = 0;
+  setInterval(function () {
+    if (state !== 'live' || !call || !call.peerConnection) return;
+    call.peerConnection.getStats().then(function (rep) {
+      rep.forEach(function (s) {
+        if (s.type !== 'inbound-rtp' || s.kind !== 'video') return;
+        var now = Date.now(), bits = '';
+        if (lastBytes >= 0 && s.bytesReceived >= lastBytes && now > lastStatsAt)
+          bits = ((s.bytesReceived - lastBytes) * 8 / (now - lastStatsAt) / 1000).toFixed(1) + ' Mb/s';
+        lastBytes = s.bytesReceived; lastStatsAt = now;
+        var parts = [];
+        if (s.frameWidth && s.frameHeight) parts.push(s.frameHeight + 'p');
+        if (s.framesPerSecond) parts.push(Math.round(s.framesPerSecond) + 'fps');
+        if (bits) parts.push(bits);
+        $('stats').textContent = parts.join(' · ');
+      });
+    }).catch(function () {});
+  }, 2000);
+})();
+</script>
+</body>
+</html>

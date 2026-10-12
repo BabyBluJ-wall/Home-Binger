@@ -16,8 +16,8 @@
 //  whole thing self-contained — no image files.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, STORE } from './config.js?v=1790983945165';
-import { signTexture } from './textures.js?v=1790983945165';
+import { LAYOUT, STORE } from './config.js?v=1791834263993';
+import { signTexture } from './textures.js?v=1791834263993';
 
 // ── procedural material helpers (cached per accent) ─────────────────────────
 function tex(w, h, draw) {
@@ -123,19 +123,46 @@ export function buildExterior(theme) {
   // (c) ride 2 cm ABOVE wall height so a cap bottom can never share a plane
   // with any interior ceiling. Coplanar = flicker; a 2 cm shadow joint at
   // 4.3 m is invisible from every reachable viewpoint.
+  const EXT = T + LAYOUT.gamer.w;                     // t170: the LEFT wing (gamer den) street-face width
+  const GWC = -W - EXT / 2;                           // wing street-face center x
   const capMat = std('#8d8371', 0.95);
   const HB = LAYOUT.hall.d;                                    // the t49 group shift to undo
   const CAPY = LAYOUT.room.h + 0.08;                           // bottom face at H + 0.02
   const CW = LAYOUT.room.w + 2 * T + 0.35;                     // cap width, across the building
   const CL = LAYOUT.room.l + 2 * T + LAYOUT.hall.d + 0.35;     // cap length: store + hall, full depth
   box(CW, 0.12, T + 0.35, capMat, 0, CAPY, D + T / 2);         // street cap — atop the hall's front wall
+  // t170: caps over the left wing (street run + outer side + back wall)
+  box(EXT, 0.12, T + 0.35, capMat, GWC - 0.425, CAPY, D + T / 2);            // street cap, wing run
+  box(T + 0.35, 0.12, 8.35, capMat, -W - T - EXT - T / 2, CAPY, 4.895 - LAYOUT.hall.d);  // wing outer side
+  box(EXT + 0.6, 0.12, T + 0.35, capMat, GWC, CAPY, 0.72 - LAYOUT.hall.d);   // wing back wall
   box(CW, 0.12, T + 0.35, capMat, 0, CAPY, -D - T / 2 - HB);   // back cap — back on the store's back wall
   box(T + 0.35, 0.12, CL, capMat, -W - T / 2, CAPY, -HB / 2);  // side caps — full building depth
   box(T + 0.35, 0.12, CL, capMat, W + T / 2, CAPY, -HB / 2);
   // brick on the side exterior faces too (seen at an angle through the door)
-  const sideV = new THREE.Mesh(new THREE.PlaneGeometry(LAYOUT.room.l, LAYOUT.room.h * 0.62), brickMat);
-  sideV.position.set(-W - T - 0.03, LAYOUT.room.h * 0.31, 0); sideV.rotation.y = -Math.PI / 2; g.add(sideV);
+  // t170: trimmed to the store's own depth — it used to run past the front
+  // wall into what is now the hall wing's air (a floating brick slab)
+  const sideV = new THREE.Mesh(new THREE.PlaneGeometry(LAYOUT.room.l + T, LAYOUT.room.h * 0.62), brickMat);
+  sideV.position.set(-W - T - 0.03, LAYOUT.room.h * 0.31, -LAYOUT.hall.d); sideV.rotation.y = -Math.PI / 2; g.add(sideV);
   // (t51: the RIGHT side is the dance hall now — interior, no brick veneer)
+
+  // ══ t170: THE LEFT WING (gamer den) — same facade recipes as the store
+  // front, mirrored left: brick, fascia, sign, pinstripe, roof edge. ══
+  const wingV = new THREE.Mesh(new THREE.PlaneGeometry(EXT, 2.55), brickMat);
+  wingV.position.set(GWC, 2.55 / 2, F + 0.03); wingV.rotation.y = Math.PI; g.add(wingV);
+  const wingFascia = new THREE.Mesh(new THREE.PlaneGeometry(EXT, 0.85), fasciaMat);
+  wingFascia.position.set(GWC, 2.95, F + 0.05); wingFascia.rotation.y = Math.PI; g.add(wingFascia);
+  const wingSign = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 0.5),
+    new THREE.MeshBasicMaterial({ map: signTexture('GAME ROOM', { accent: '#31e6ff', bg: '#101322' }), toneMapped: false }));
+  wingSign.position.set(GWC, 2.95, F + 0.07); wingSign.rotation.y = Math.PI; g.add(wingSign);
+  box(EXT, 0.07, 0.18, std(YELLOW, 0.6), GWC, 3.40, F + 0.12);       // yellow pinstripe cap
+  box(EXT, 0.22, 0.36, std('#8d8371', 0.95), GWC, 4.16, F + 0.24);   // roof edge
+  // brick on the wing's left + back faces (the wing is real exterior now)
+  const wingSideV = new THREE.Mesh(new THREE.PlaneGeometry(8.6, LAYOUT.room.h * 0.62), brickMat);
+  wingSideV.position.set(-W - T - EXT - T / 2 - 0.03, LAYOUT.room.h * 0.31, 4.895 - LAYOUT.hall.d);
+  wingSideV.rotation.y = -Math.PI / 2; g.add(wingSideV);
+  const wingBackV = new THREE.Mesh(new THREE.PlaneGeometry(EXT, LAYOUT.room.h * 0.62), brickMat);
+  wingBackV.position.set(GWC, LAYOUT.room.h * 0.31, 0.565 - LAYOUT.hall.d); wingBackV.rotation.y = Math.PI; g.add(wingBackV);
 
   // ══ THE GLASS ENTRY TOWER (right out front of the door) ══
   const TW = 1.9, TZ0 = F + 0.10, TZ1 = D + 2.95, TH = 3.5;   // TZ0 clears the wall's outer face F

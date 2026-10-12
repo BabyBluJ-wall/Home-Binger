@@ -1,0 +1,87 @@
+<!doctype html>
+<!-- t198: the EMBED WRAPPER — YouTube stopped playing embed URLs loaded as
+     top-level documents (Error 153, "Video player configuration error"),
+     which is exactly how the den's panel webview loaded them. Inside a real
+     page the very same official player plays fine (the theater's iframe
+     never broke). This page is served by the app, loaded in the webview,
+     and mounts the official embed the way YouTube expects — plus a small
+     script bridge (window.__hbWrap) so the app can ask/control it:
+     title, video id, play/pause/volume/mute, and player errors (the
+     embed-blocked fallback needs them). No origin param: our rig tests
+     showed the plain iframe context is what YouTube accepts. -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Binger player</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #p, iframe { width: 100%; height: 100%; border: 0; display: block; }
+</style>
+</head>
+<body>
+<div id="p"></div>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var v = (q.get('v') || '').replace(/[^A-Za-z0-9_-]/g, '');
+  var list = (q.get('list') || '').replace(/[^A-Za-z0-9_-]/g, '');
+  var P = null, apiReady = false, lastErr = 0, state = -1, title = '', vid = v, t0 = Date.now();
+
+  // ── the bridge the app's askView talks to ──
+  window.__hbWrap = {
+    alive: function () { return !!(apiReady && !lastErr); },
+    playing: function () { return state === 1 || state === 3; },
+    title: function () { return title; },
+    vid: function () { return vid; },
+    err: function () {
+      if (lastErr) return lastErr;                       // the player refused (101/150 embed-blocked, 2/5/100 gone…)
+      if (!apiReady && Date.now() - t0 > 8000) return 'noapi';   // the API never arrived (blocked/offline)
+      return 0;
+    },
+    play: function () { try { P && P.playVideo(); } catch (e) {} },
+    pause: function () { try { P && P.pauseVideo(); } catch (e) {} },
+    vol: function (x) { try { P && P.setVolume(Math.round(Math.max(0, Math.min(1, x)) * 100)); } catch (e) {} },
+    mute: function (m) { try { P && (m ? P.mute() : P.unMute()); } catch (e) {} }
+  };
+
+  function sync(e) {
+    try {
+      var d = e.target.getVideoData && e.target.getVideoData();
+      if (d) { if (d.title) title = d.title; if (d.video_id) vid = d.video_id; }
+      document.title = title || 'Home Binger player';    // the app's title poll keeps working unchanged
+    } catch (e2) {}
+  }
+
+  function boot() {
+    if (!window.YT || !YT.Player) { if (Date.now() - t0 < 12000) setTimeout(boot, 300); return; }
+    P = new YT.Player('p', {
+      width: '100%', height: '100%',
+      ...(v ? { videoId: v } : {}),
+      playerVars: {
+        autoplay: 1, rel: 0, playsinline: 1,
+        ...(list ? (v ? { list: list } : { listType: 'playlist', list: list }) : {})
+      },
+      events: {
+        onReady: function (e) {
+          apiReady = true;
+          try { e.target.setVolume(100); } catch (e2) {}
+          try { e.target.playVideo(); } catch (e2) {}
+          sync(e);
+        },
+        onStateChange: function (e) { state = e.data; sync(e); },
+        onError: function (e) { lastErr = (e && e.data) ? e.data : -1; }
+      }
+    });
+  }
+
+  window.onYouTubeIframeAPIReady = function () { boot(); };
+  var s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  s.onerror = function () { lastErr = 'api'; };
+  document.head.appendChild(s);
+  boot();   // in case the API landed before the handler was assigned
+})();
+</script>
+</body>
+</html>

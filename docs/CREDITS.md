@@ -77,6 +77,13 @@ is not an endorsement by them.
 - **hls.js v1.7.3 (Apache-2.0)** — HLS playback for the live TV Guide and
   Simple Mode, vendored verbatim at `public/vendor/hls.min.js`
   (license note alongside: `public/vendor/HLS-LICENSE.txt`).
+- **PeerJS v1.5.4 (MIT)** — WebRTC peer-to-peer signaling for the remote
+  watch rooms (t193) and the browser watch party (t195): the client
+  bundle is vendored verbatim at `public/vendor/peerjs.min.js`, and the
+  guest page carries its own copy at `public/watch/peerjs.min.js`
+  (license note alongside: `public/vendor/PEERJS-LICENSE.txt`). The
+  default free public broker (0.peerjs.com) is used for the handshake
+  only — media and playback never pass through it.
 
 ## Free live TV sources (the Guide's channel packs)
 

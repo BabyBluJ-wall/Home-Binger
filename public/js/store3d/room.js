@@ -7,8 +7,8 @@
 //  shelves.js). Everything recolors live from the user's personal theme.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1790983945165';
-import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1790983945165';
+import { LAYOUT } from './config.js?v=1791834263993';
+import { wallTexture, floorTexture, ceilingTexture, signTexture, logoTexture } from './textures.js?v=1791834263993';
 
 // t120: sign backgrounds derive from the theme wall (were hardcoded plum #160f1e)
 const signBgOf = (t) => mixHex(t.wall || '#12275e', '#000000', 0.5);

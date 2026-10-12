@@ -10,7 +10,7 @@
 //  • Collision: the player is a circle vs. every shelf AABB + the room walls.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1790983945165';
+import { LAYOUT, TUNING } from './config.js?v=1791834263993';
 
 const SPAWN = { x: 0, z: LAYOUT.room.l / 2 + 1.55 };   // t52: in the FRONT HALLWAY, just outside
                                                         // the store door — facing in (-z), as if you
@@ -49,6 +49,7 @@ export function createControls(camera, domElement, colliders) {
   let lockRetryTimer = null;
   function requestLock() {
     if (state.locked || state.lockBlocked || !state.enabled || isTouch()) return;
+    if (panelUp()) return;                     // t185: a free cursor while a panel is up
     const p = domElement.requestPointerLock?.();
     // Chrome returns a promise; older browsers undefined
     if (p && p.catch) p.catch(() => lockFailed());
@@ -98,6 +99,45 @@ export function createControls(camera, domElement, colliders) {
     const lim = Math.PI / 2 - 0.05;
     state.pitch = Math.max(-lim, Math.min(lim, state.pitch));
   };
+  // ═══ t190/t191: STABLE LOOK — pending buffer + frame cap + pixel guards ═══
+  // (the Ctrl+Shift+L diagnostic that confirmed the fix on the owner's
+  // machine is GONE, as promised — stripped in t192. The guards stay.)
+  // Mouse deltas ACCUMULATE in a pending buffer applied ONCE per frame; a
+  // hitched frame, >500 px in one frame, or ≥3 clamp-hit events in one
+  // frame drops the queue — the view FREEZES through a stall instead of
+  // teleporting. Real flicks pass.
+  const pend = { dx: 0, dy: 0, n: 0, nc: 0 };
+  let lastPumpAt = performance.now();
+  function pumpLook(dt) {
+    const now = performance.now();
+    const realDt = (now - lastPumpAt) / 1000;      // t191: TRUE frame time — the loop's dt is capped at 0.05, blind to hitches
+    lastPumpAt = now;
+    if (!pend.n) return 0;
+    const zoomK = state.fov / state.fovBase;
+    const sens = P.lookSensitivity * state.lookScale * zoomK;
+    let ry = -pend.dx * sens, rp = -pend.dy * sens;
+    const total = Math.max(Math.abs(ry), Math.abs(rp));
+    // t191 (the owner's looklog decoded): Chrome flushes stall-coalesced
+    // events as bursts — 3-20 events with cumulative deltas (identical
+    // clamped values, ~900 px singles). Rad-based guards miss them at low
+    // sensitivity/zoom, so the drops are decided in PIXELS: >500 px of
+    // accumulated delta in ONE frame, or ≥3 clamp-hit events in one frame
+    // (>30,000 px/s — no real hand does that) = a stall burst → drop.
+    const pxBurst = Math.abs(pend.dx) > 500 || Math.abs(pend.dy) > 500;
+    const clampBurst = pend.nc >= 3;
+    if (dt > 0.12 || realDt > 0.12 || pxBurst || clampBurst || (pend.n >= 4 && total > 1.2)) {
+      ry = 0; rp = 0;                              // a stall burst → drop the queue
+    } else {
+      const cap = 30 * Math.max(dt, 0.004);                          // 30 rad/s — real flicks pass, queues don't
+      if (Math.abs(ry) > cap) ry = Math.sign(ry) * cap;
+      if (Math.abs(rp) > cap) rp = Math.sign(rp) * cap;
+      const lim = Math.PI / 2 - 0.05;
+      state.yaw += ry;
+      state.pitch = Math.max(-lim, Math.min(lim, state.pitch + rp));
+    }
+    pend.dx = 0; pend.dy = 0; pend.n = 0; pend.nc = 0;
+    return ry;
+  }
   document.addEventListener('mousemove', (e) => {
     if (!state.enabled) return;
     // ── GLITCH GUARDS (layered) ──
@@ -111,24 +151,30 @@ export function createControls(camera, domElement, colliders) {
     const now = performance.now();
     if (now - lockFlipAt < 60) return;
     if (!state.locked && now - enterAt < 80) return;
-    const SPIKE = 260;
+    const SPIKE = 160;                             // t190: 260→160 — one event can no longer swing 34°
     let dx = e.movementX || 0, dy = e.movementY || 0;
     const mag = Math.max(Math.abs(dx), Math.abs(dy));
     if (recentMags.length >= 5) {
       const avg = recentMags.reduce((a, b) => a + b, 0) / recentMags.length;
       if (mag > 30 && mag > avg * 7 + 25) {          // one-off outlier → drop
-        recentMags.push(mag); if (recentMags.length > 12) recentMags.shift();
+        // t191: junk contributes at most SPIKE to the baseline — a ~900 px
+        // outlier used to lift avg so high the NEXT ~900 passed the filter
+        recentMags.push(Math.min(mag, SPIKE)); if (recentMags.length > 12) recentMags.shift();
         return;
       }
     }
-    if (Math.abs(dx) > SPIKE) dx = Math.sign(dx) * SPIKE;
-    if (Math.abs(dy) > SPIKE) dy = Math.sign(dy) * SPIKE;
+    let didClamp = false;
+    if (Math.abs(dx) > SPIKE) { dx = Math.sign(dx) * SPIKE; didClamp = true; }
+    if (Math.abs(dy) > SPIKE) { dy = Math.sign(dy) * SPIKE; didClamp = true; }
     recentMags.push(Math.max(Math.abs(dx), Math.abs(dy)));
     if (recentMags.length > 12) recentMags.shift();
-    if (state.locked) applyLook(dx, dy);
-    else if (state.dragging) {
-      state.dragMoved += Math.abs(dx) + Math.abs(dy);
-      applyLook(dx, dy);
+    // t190: deltas ACCUMULATE here and are applied once per frame by
+    // pumpLook() — a stalled frame can no longer sum a whole event queue
+    // into one giant turn. t191: pend.nc counts clamp-hit events — the
+    // stall-burst signature the pump drops.
+    if (state.locked || state.dragging) {
+      pend.dx += dx; pend.dy += dy; pend.n++; if (didClamp) pend.nc++;
+      if (state.dragging) state.dragMoved += Math.abs(dx) + Math.abs(dy);
     }
   });
   domElement.addEventListener('mousedown', (e) => {
@@ -176,6 +222,12 @@ export function createControls(camera, domElement, colliders) {
   // is dismissed with an inline style, not .hidden, so it's not listed.)
   const uiOpen = () => !!document.querySelector(
     '#sidebar:not(.hidden), #settings:not(.hidden), .modal:not(.hidden)'
+  );
+  // t185 (the owner's report: "opening youtube should free the mouse"): the
+  // player panel and the Discord dock are NOT modals — you may walk with them
+  // up — but the pointer must never stay CAPTURED while they're on screen.
+  const panelUp = () => !!document.querySelector(
+    '#hb-media-panel:not(.hidden), #hb-discord-panel:not(.hidden)'
   );
   document.addEventListener('keydown', (e) => {
     // t143: full-screen TV freezes the player too — WASD/arrows must never
@@ -257,6 +309,7 @@ export function createControls(camera, domElement, colliders) {
   const fw = LAYOUT.door.width / 2 - P.radius + 0.05;           // store front door half-lane
   const dzC = hZ1 - DAN.door.width / 2 - 0.35;                  // dance door center z (matches hall.js)
   const bdX = (dX0 + dX1) / 2 + 0.4;                            // booth-door x (matches dance.js)
+  const GAM = LAYOUT.gamer, gX1 = -RW - T, gX0 = gX1 - GAM.w, gDX = (gX0 + gX1) / 2;   // t170: gamer den span + door x
   const ROOMS = [
     { x0: -RW, x1: RW, z0: -RD, z1: RD, padX: 1, padZ: 1 },         // sales floor
     { x0: -cw - P.radius, x1: cw + P.radius, z0: thZ1 - 0.5, z1: thZ0 + 0.7, padX: 0, padZ: 0 },  // theater corridor
@@ -272,7 +325,27 @@ export function createControls(camera, domElement, colliders) {
     // door opening, so the wall beside the door stays solid).
     { x0: RW - 0.5, x1: dX0 + 0.4, z0: dzC - DAN.door.width / 2 + 0.13, z1: dzC + DAN.door.width / 2 - 0.13, padX: 0, padZ: 0 },
     { x0: dX0 + 0.05, x1: lX1, z0: lZ0 + 0.05, z1: dZ0 - 0.05, padX: 1, padZ: 1 },                  // DJ's library
-    { x0: bdX - DAN.boothDoor.width / 2 + 0.15, x1: bdX + DAN.boothDoor.width / 2 - 0.15, z0: dZ0 - 1.6, z1: dZ0 + 1.6, padX: 0, padZ: 0 }  // booth-door pass (t51: OVERLAPS both rooms — no dead zone)
+    { x0: bdX - DAN.boothDoor.width / 2 + 0.15, x1: bdX + DAN.boothDoor.width / 2 - 0.15, z0: dZ0 - 1.6, z1: dZ0 + 1.6, padX: 0, padZ: 0 },  // booth-door pass (t51: OVERLAPS both rooms — no dead zone)
+    // t185 FIX (the owner's report): the wing's walkable z used to start at
+    // hZ0+2T — a 0.59 m INVISIBLE wall band in front of the den's front wall
+    // (whose outer face is at hZ0+T). People hugging the store wall toward
+    // the door got stuck on the lip; the far side had the same phantom band.
+    // The rect now starts AT the real wall face (inRoom adds the player
+    // radius, so the walkable zone begins exactly where the wall collider
+    // stops you — zero dead band, hugging the wall works end to end).
+    // t170b: the hall's LEFT wing + the gamer den. t164's dead-band lesson,
+    // learned the hard way (the owner hit an invisible wall walking in): the
+    // wing's PADDED walkable edge must OVERLAP the hall's padded edge, and
+    // the door pass must overlap BOTH rooms' padded rects. The first cut put
+    // a 0.6 m band between hall and wing where NO room contained you.
+    // (The old note here claimed the den front wall spans hZ0…hZ0+2T — it
+    // doesn't: gamer.js builds it ONE wall thick, z hZ0…hZ0+T. That stale
+    // claim is exactly where the 0.59 m lip came from.)
+    // The wing's x1 reaches INTO the hall so the walkable rects overlap
+    // (radius 0.34 on each side, both ways).
+    { x0: gX0 + 0.055, x1: -RW + 1.0, z0: hZ0 + T, z1: hZ1 - 0.05, padX: 1, padZ: 1 },              // hall left wing (walkable THROUGH from the hall)
+    { x0: gX0 + 0.055, x1: gX1 - T - 0.055, z0: hZ0 - GAM.l + 0.055, z1: hZ0 - 0.055, padX: 1, padZ: 1 },   // gamer den (t172: −T for the doubled store-side wall)
+    { x0: gDX - GAM.door.width / 2 + 0.13, x1: gDX + GAM.door.width / 2 - 0.13, z0: hZ0 - 0.55, z1: hZ0 + T + 0.35, padX: 0, padZ: 0 }  // den door pass (overlaps BOTH rooms' padded rects — no dead zone; t185: z1 tightened 2T+0.55→T+0.35, the wing now carries the far side)
   ];
   const inRoom = (p, r) => p.x > r.x0 + (r.padX ? P.radius : 0) && p.x < r.x1 - (r.padX ? P.radius : 0)
     && p.z > r.z0 + (r.padZ ? P.radius : 0) && p.z < r.z1 - (r.padZ ? P.radius : 0);
@@ -329,7 +402,7 @@ export function createControls(camera, domElement, colliders) {
   // way out). The frame loop (and the debug hook) release the lock the moment
   // a panel is up. Returns the live lock state for tests.
   function lockHygiene() {
-    if (state.locked && uiOpen()) document.exitPointerLock?.();
+    if (state.locked && (uiOpen() || panelUp())) document.exitPointerLock?.();   // t185: panels get a free cursor
     return { locked: state.locked, lockBlocked: state.lockBlocked, dragging: state.dragging };
   }
 
@@ -358,9 +431,19 @@ export function createControls(camera, domElement, colliders) {
       const wx = mx * c + mz * s;
       const wz = -mx * s + mz * c;
       const next = state.pos.clone();
-      next.x += wx * speed * dt;
-      next.z += wz * speed * dt;
-      collide(next);
+      // t178: SUBSTEP big frame steps — on a slow machine one frame's move can
+      // be longer than a collider is deep, landing the player INSIDE the box
+      // (the push-out then picks a side and you slip THROUGH furniture).
+      // Marching the same distance in ≤9 cm slices keeps the circle on the
+      // surface, so collision is frame-rate independent. Healthy machines
+      // (step < 9 cm) still take exactly ONE step — identical to before.
+      const stepLen = speed * dt;
+      const sub = Math.max(1, Math.min(16, Math.ceil(stepLen / 0.09)));
+      for (let i = 0; i < sub; i++) {
+        next.x += wx * speed * dt / sub;
+        next.z += wz * speed * dt / sub;
+        collide(next);
+      }
       state.pos.copy(next);
     }
 
@@ -386,6 +469,7 @@ export function createControls(camera, domElement, colliders) {
     // climb/descend the theater tier smoothly (a step, not a teleport)
     const fh = floorHeightAt(state.pos.x, state.pos.z);
     state.floorLift = (state.floorLift || 0) + (fh - (state.floorLift || 0)) * Math.min(1, dt * 8);
+    pumpLook(dt);                                   // t190: the frame's mouse look — capped, hitch-safe
     syncCamera();
     camera.position.y += bob;
   }
@@ -444,12 +528,13 @@ export function createControls(camera, domElement, colliders) {
       return state.yaw - y0;
     },
     debugStep(dx, dz) {                 // t48: walk ONE step through collide() —
-      const next = { x: state.pos.x + dx, z: state.pos.z + dz };  // the real path tests must use
+      const next = { x: state.pos.x + dx, z: state.pos.z + dz };      // the real path tests must use
       collide(next);
       state.pos.x = next.x; state.pos.z = next.z;
       state.floorLift = floorHeightAt(state.pos.x, state.pos.z);
       syncCamera();
     },
+    debugPumpLook: (dt = 0.016) => pumpLook(dt),   // t190 tests: flush the pending look buffer deterministically
     floorHeightAt,
     lock: requestLock,
     unlock: () => document.exitPointerLock?.(),

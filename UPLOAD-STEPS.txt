@@ -1,44 +1,59 @@
-PUTTING A HOME BINGER UPDATE ON GITHUB (about 10 minutes, free)
-===============================================================
+PUTTING HOME BINGER 2.0 ON GITHUB (about 10 minutes, free)
+===========================================================
 
 You have: this zip = the complete, ready-to-commit source for this
 release. (The .gitignore inside already keeps out runtime data, test
 media, and builds — nothing to configure.)
 
-FIRST TIME ONLY — create the repo (ALREADY DONE — yours is
------------------------------------------------------------
-github.com/BabyBluJ-wall/Home-Binger, live since the 1.10 beta push).
-Skip to "EVERY UPDATE". (Kept for reference: GitHub Desktop → File →
-Add Local Repository → name: home-binger, Git ignore: NONE, License:
-NONE → Publish.)
-
 WHERE THINGS STAND RIGHT NOW
----------------------------
-The repo's latest release is "v1.10.1" (2026-09-23). Publishing v1.15.0
-as a REGULAR release (pre-release box NOT ticked) makes the "new version
-out" notice appear for everyone still on 1.10.1 and the 1.10 beta —
-that is the point of this release.
+----------------------------
+The repo's latest public release is "v1.15" (2026-10-03). Publishing
+v2.0 as a REGULAR release (pre-release box NOT ticked) makes the
+"new version out" notice appear for everyone still on 1.15, 1.10.1,
+1.10 and older — that is the point of this release. This is the big
+one: the game room, watch parties, keyless music, and a version number
+that finally makes sense.
+
+THE VERSION SCHEME (owner's call, 2026-10-12)
+---------------------------------------------
+  2.0      this release
+  2.x      updates and bug fixes (tag them v2.1, v2.2, …)
+  3.0      the library megaproject, when it lands
+The app reads its own version from package.json — the sidebar badge
+and the new-version notice both follow it automatically. Nothing to
+hand-edit in the app, ever.
 
 EVERY UPDATE — three drags
 --------------------------
 1. On github.com, open your repo → "Add file" → "Upload files" → drag
    EVERYTHING from inside this zip in (matching files get replaced).
-   Commit message: a one-liner like "1.15.0".
+   Commit message: a one-liner like "2.0".
+   (First push of this release also fires the "Watch page" workflow —
+   that publishes the browser guest page for watch parties. It's
+   already enabled: Settings → Pages → Source "GitHub Actions".)
 2. Releases (right column) → "Draft a new release".
-3. Tag: v1.15.0        <- plain "v" + the version number, no extra letters
-   Title: Home Binger 1.15
-   Notes: paste the release-notes file delivered next to this zip
-   (RELEASE-NOTES-v1.15.md).
-   Drag the exe zip (HomeBinger-1.15.0.zip) into "Attach binaries",
+3. Tag: v2.0           <- plain "v" + the version number, no extra letters
+   Title: Home Binger 2.0
+   Notes: paste RELEASE-NOTES-v2.0.md (it's in this zip, repo root).
+   Drag the exe zip (HomeBinger-2.0.0.zip) into "Attach binaries",
    then Publish. Do NOT tick "Set as a pre-release" — the app's update
    notice only looks at regular releases.
 
 WHY THE TAG MATTERS
 -------------------
 Every copy of the app checks this release's TAG on launch and shows a
-"new version out" note when the number is higher. Plain v1.8.1 parses
-cleanly. (Tags with letters in front, like "Rv1.8", used to hide the
-note — 1.8.1 tolerates them, but plain v-tags keep it simple.)
+"new version out" note when the number is higher. Plain v2.0 parses
+cleanly. Keep tags plain (v2.1, v2.2, v3.0) — letters in front (like
+the old "Rv1.8" and "V1.8.8.8") used to hide the notice.
+
+TAG CLEANUP (optional, one minute, recommended)
+-----------------------------------------------
+The tag list has two malformed leftovers from early days: "Rv1.8" and
+"V1.8.8.8" (capital V, four segments). They look like typos to
+visitors. To remove: repo → Tags (under Releases) → find each → the
+trash icon. (If a release is attached to them, delete the release
+first — v1.8.8.8 and Rv1.8 have no releases attached, so it's just
+the two clicks.)
 
 ONE CHECK BEFORE GOING PUBLIC
 -----------------------------

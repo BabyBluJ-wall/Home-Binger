@@ -8,7 +8,7 @@
 //  a vinyl record.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, AUDIO_TYPES } from './config.js?v=1790983945165';
+import { LAYOUT, AUDIO_TYPES } from './config.js?v=1791834263993';
 
 export function buildDance(theme) {
   const L = LAYOUT, H = L.dance.h;
@@ -480,7 +480,8 @@ export function buildDance(theme) {
       speed: num(p?.speed, P.speed, 0.3, 3),          // t103: wider top end too
       pattern: ['auto', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'].includes(String(p?.pattern)) ? String(p.pattern) : P.pattern,   // t115: + the 6 festival programs
       sweep: num(p?.sweep, P.sweep, 0.2, 2.5),        // t109: shape SIZE — circle diameter, arc width, fan reach
-      spread: num(p?.spread, P.spread, 0, 1)          // t109: how staggered the four heads are (0 = lockstep, 1 = full ripple)
+      spread: num(p?.spread, P.spread, 0, 1),         // t109: how staggered the four heads are (0 = lockstep, 1 = full ripple)
+      steady: p?.steady === true                      // t186: photosensitive comfort — calm levels, no drops, slow palette
     };   // t103: ballSpin removed (owner) — saved prefs with it are simply ignored
     if (P.pattern !== 'auto') pattern = P.pattern | 0;   // t95: a program pick applies IMMEDIATELY — never wait for the next kick
   }
@@ -497,7 +498,12 @@ export function buildDance(theme) {
   const col = new THREE.Color();
   let pose = 0, lastBg = 0;                     // t59: beat-advanced pose target · t95: last beat-grid value (for info)
   function update(dt, levels) {
-    const lv = levels || { bass: 0, mid: 0, treble: 0, energy: 0, live: false };
+    let lv = levels || { bass: 0, mid: 0, treble: 0, energy: 0, live: false };
+    // t186: STEADY LIGHTS (photosensitive comfort) — every music-driven
+    // pulse downstream (floor checker, beam zoom, ball + pin, glints) reads
+    // these levels, so one damping here calms the whole rig. The floor stays
+    // LIT — just gentle. (Drops are gated separately below.)
+    if (P.steady && levels) lv = { bass: levels.bass * 0.18, mid: levels.mid * 0.18, treble: levels.treble * 0.18, energy: levels.energy * 0.18, live: levels.live };
     // t54: no music → the SPOT holds on the booth and the rig rests;
     // music in → spot fades, the rig wakes and moves WITH the song
     // (pattern rotation every 8 kicks + speeds/colors ride the track's
@@ -534,15 +540,16 @@ export function buildDance(theme) {
       lastBeatT = clock; beats++;
       barBeats++;
       pose += (1.2 + (barBeats % 2) * 0.8 + Math.min(1.3, flux * 5)) * P.speed;   // deeper kick → bigger travel (t114)
-      hue = (hue + 0.06 + lv.energy * 0.05) % 1;              // every kick nudges the palette
-      if (barBeats >= 4) { barBeats = 0; if (++bars >= 8) { bars = 0; pattern = (pattern + 1) % 19; } }   // t86 rotate · t109 shapes · t115: 32 beats per look, 19 programs
+      hue = (hue + (P.steady ? 0.008 : 0.06 + lv.energy * 0.05)) % 1;   // t186: steady = a slow crawl · every kick nudges the palette
+      if (barBeats >= 4) { barBeats = 0; if (!P.steady && ++bars >= 8) { bars = 0; pattern = (pattern + 1) % 19; } }   // t86 rotate · t109 shapes · t115: 32 beats per look, 19 programs
       if (P.pattern !== 'auto') pattern = P.pattern | 0;      // t86: locked look wins
     }
     // t115: THE DROP DETECTOR — an energy SPIKE (a kick whose onset clears
     // the track's own flux average hard, on top of a hot bed) blips the
     // DROP_EXPLODE program for a moment in auto mode: the festival moment.
     dropT = Math.max(0, dropT - dt);
-    if (P.pattern === 'auto' && kick && flux > Math.max(0.06, fAvg * 2.2) && (lv.energy > 0.65 || lv.bass > 0.9)) dropT = 2.2;   // t115: a real DROP runs hot — gated high so routine beats never seize the rig
+    if (P.steady && dropT > 0) dropT = 0;               // t186: steady lights never fire the drop blast
+    if (P.pattern === 'auto' && !P.steady && kick && flux > Math.max(0.06, fAvg * 2.2) && (lv.energy > 0.65 || lv.bass > 0.9)) dropT = 2.2;   // t115: a real DROP runs hot — gated high so routine beats never seize the rig
     // t95: THE BEAT GRID + beat envelope. bg = beats + fraction-of-beat, so
     // continuous motion (orbits, tilt swings) LANDS on the kicks instead of
     // drifting free — every song locks its own groove. kp spikes to 1 on each

@@ -21,7 +21,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Home Binger — Be Kind, Rewind</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230a0f2e'/><text x='32' y='42' font-size='34' text-anchor='middle' fill='%23ff3ea5' font-family='sans-serif' font-weight='900' font-style='italic'>HB</text></svg>">
-<link rel="stylesheet" href="/css/style.css?v=1790983945165">
+<link rel="stylesheet" href="/css/style.css?v=1791834263993">
 </head>
 <body class="overlay-open">
 
@@ -60,6 +60,9 @@
         <button id="fs-play" class="hud-btn" title="Play / Pause">⏸</button>
         <button id="fs-fwd" class="hud-btn" title="Forward 10 seconds">10⏩</button>
         <button id="fs-next" class="hud-btn" title="Next">⏭</button>
+        <button id="fs-guide-btn" class="hud-btn" title="TV Guide — docks beside the video (G)">📖</button>
+        <button id="fs-dc" class="hud-btn" title="Discord — chat &amp; voice beside the movie (DMs · voice · screen share)">💬</button>
+        <button id="fs-vc" class="hud-btn" title="Watch with me — sync this movie for everyone in the theater">👀</button>
         <button id="fs-cc" class="hud-btn" title="Closed captions on/off">CC</button>
         <input id="fs-vol" type="range" min="0" max="100" value="25" title="Volume">
         <span id="fs-time">0:00 / 0:00</span>
@@ -76,6 +79,9 @@
   <div id="tv-remote" class="hidden">
     <span id="remote-room">🎬 THEATER</span>
     <button id="tv-guide" class="hud-btn" title="TV Guide — the free live TV channels (or press G in the theater)">📖</button>
+    <button id="tv-cc" class="hud-btn" title="Closed captions on/off" style="display:none">CC</button>
+    <button id="tv-dc" class="hud-btn" title="Discord — chat &amp; voice beside the movie (DMs · voice · screen share)" style="display:none">💬</button>
+    <button id="tv-vc" class="hud-btn" title="Watch with me — sync this movie for everyone in the theater" style="display:none">👀</button>
     <button id="tv-stop" class="hud-btn" title="Stop — back to the idle screen">⏹</button>
     <button id="tv-prev" class="hud-btn" title="Previous">⏮</button>
     <button id="tv-skip-back" class="hud-btn" title="Back 10 seconds">⏪10</button>
@@ -112,6 +118,7 @@
       <button class="side-link" data-tab="look">🎨 <span>My Theme</span><small>colors · visualizer · TV idle</small></button>
       <button class="side-link" data-tab="shelves">📼 <span>My Shelves</span><small>sorting &amp; shelf map</small></button>
       <button class="side-link" data-tab="profile">👤 <span>My Profile</span><small>account · password · invite</small></button>
+      <button class="side-link" data-tab="conn">🔗 <span>My Connections</span><small>Steam library · account link</small></button>
       <button class="side-link guest-only" id="nav-admin-login" data-tab="profile">🛠️ <span>Admin sign-in</span><small>manage servers · TV · users</small></button>
       <button class="side-link admin-only hidden" data-tab="admin">🛠️ <span>Admin</span><small>server · users · policies — one place</small></button>
     </nav>
@@ -170,6 +177,26 @@
   <!-- t155/t159: THE HELP-DESK PC — click the PC by the theater door.
        The store's #bug-reports chat is embedded (read past bugs, send one,
        see reactions) + the invite link + the report format. -->
+  <!-- t172: THE GAMER DEN MONITORS — music (YouTube, plays ON the
+       center monitor) + Steam libraries (yours + anyone who shares). -->
+  <div id="gamer-music-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close hud-btn">✕</button>
+      <h2 style="margin:0 0 4px">🎵 Music monitor — YouTube</h2>
+      <div id="gm-body"><div class="hint">…</div></div>
+    </div>
+  </div>
+  <div id="gamer-steam-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close hud-btn">✕</button>
+      <h2 style="margin:0 0 4px">🎮 Steam libraries</h2>
+      <div id="gs-body"><div class="hint">…</div></div>
+    </div>
+  </div>
+
+    </div>
+  </div>
+
   <div id="helpdesk-modal" class="modal hidden">
     <div class="modal-card">
       <button class="modal-close hud-btn">✕</button>
@@ -250,8 +277,8 @@
     </div>
   </div>
 
-  <script src="/js/vendor/resonance-audio.min.js?v=1790983945165"></script>
+  <script src="/js/vendor/resonance-audio.min.js?v=1791834263993"></script>
   <script src="/vendor/hls.min.js"></script>
-  <script type="module" src="/js/main.js?v=1790983945165"></script>
+  <script type="module" src="/js/main.js?v=1791834263993"></script>
 </body>
 </html>

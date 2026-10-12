@@ -30,6 +30,12 @@ body {
 
 .hidden { display: none !important; }
 
+/* t178 (owner: "allow the user to highlight it all and ctrl+c") — the world
+   stays unselectable (it's a 3D store), but every place SETUP text lives is
+   fair game: settings, modals, the remote, the Discord panel. */
+#settings, .modal, .toast, #tv-remote, #hb-discord-panel, #hb-media-panel, #wwm-panel { -webkit-user-select: text; user-select: text; }
+#settings .hint, .modal .hint, .verdict { -webkit-user-select: text; user-select: text; cursor: text; }
+
 /* ── 3D container ── */
 #scene-container { position: fixed; inset: 0; }
 #scene-container canvas { display: block; }
@@ -184,6 +190,12 @@ body {
   font-family: inherit; outline: none;
 }
 .field input:focus, .field select:focus { border-color: var(--vb-accent); }
+/* t171: My Connections boxes — same input look as .field, without the label */
+.conn-box input[type=password], .conn-box input[type=text] {
+  background: var(--vb-panel, #141a2e); color: var(--vb-ink, #eef1ff);
+  border: 1px solid var(--vb-line, #2a3354); border-radius: 10px; padding: 9px 12px;
+  font-size: 13.5px; outline: none; }
+.conn-box input:focus { border-color: var(--vb-accent); }
 .field .hint { font-size: 12px; color: var(--vb-muted); margin-top: 6px; line-height: 1.45; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
@@ -574,6 +586,8 @@ body.tv-fullscreen.fs-guide { cursor: auto; }
 /* t153b: the CC toggle — lit when captions are on */
 #fs-cc { font-weight: 800; letter-spacing: .5px; }
 #fs-cc.cc-on { color: var(--vb-accent, #ffd23f); border-color: var(--vb-accent, #ffd23f); }
+#tv-cc { font-weight: 800; letter-spacing: .5px; }
+#tv-cc.cc-on { color: var(--vb-accent, #ffd23f); border-color: var(--vb-accent, #ffd23f); }
 #fs-cc.hidden { display: none; }
 #btn-tv-full.active { color: var(--vb-accent, #ffd23f); border-color: var(--vb-accent, #ffd23f); }
 
@@ -617,6 +631,72 @@ body.tv-fullscreen.fs-guide { cursor: auto; }
   transform-origin: 0 0; will-change: transform; overflow: hidden; pointer-events: none;
   z-index: 8; display: none; background: #0b1020; }
 #hd-world-chat iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* t172/t173: the MUSIC monitor's projected players — the transform IS the
+   screen quad; 890×370 fills the monitor's active area (0.89×0.37 m) */
+/* ── t178: the in-app DISCORD PANEL (desktop app; a <webview> of the real
+   client). t183: ONE mode — the docked right column. The den's big centered
+   panel stole the theater's dock mid-movie (the owner's live test), so every
+   entry point opens the SAME side column; it stays in view while you walk.
+   t179: the left edge resizes it, and the width persists. Sits above the fs
+   layer (z 80) and modals. ── */
+#hb-discord-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 432px;
+  z-index: 120; display: flex; flex-direction: column;
+  background: #16182b; border: 1px solid #2a3354; border-radius: 10px 0 0 10px; overflow: hidden;
+  box-shadow: 0 24px 90px rgba(0,0,0,.65); }
+#hb-discord-panel.hidden { display: none; }
+#hb-discord-panel .hbd-bar { display: flex; gap: 8px; align-items: center; padding: 7px 10px;
+  background: #10121f; border-bottom: 1px solid #2a3354; }
+#hb-discord-panel .hbd-title { flex: 1; font: 600 13.5px system-ui, sans-serif; color: #dfe6ff; }
+#hb-discord-panel #hbd-view { flex: 1; min-height: 0; background: #fff; border: 0; }
+#hb-discord-panel .hbd-edge { position: absolute; left: 0; top: 0; bottom: 0;
+  width: 7px; cursor: ew-resize; z-index: 5;
+  background: linear-gradient(90deg, rgba(90,105,160,.55), transparent); }
+
+/* t178: setup verdicts — the Test button's answer lands right here, in sight */
+.verdict { font-size: 13px; line-height: 1.45; color: #cdd8f5; }
+.verdict:empty { display: none; }
+
+/* ── t180: the MEDIA PLAYER PANEL — YouTube the Discord way (t182c: Spotify
+   is gone entirely): a
+   <webview> of the real site in the app (an official-embed <iframe> in a
+   browser). Corner grip resizes; sizes persist; ✕ hides (keeps playing),
+   ■ stops. The 🔇 badge shows when the den's audio zone has it muted. ── */
+#hb-media-panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(860px, 94vw); height: min(580px, 92vh); z-index: 122; display: flex; flex-direction: column;
+  background: #16182b; border: 1px solid #2a3354; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 24px 90px rgba(0,0,0,.65); }
+#hb-media-panel.hidden { display: none; }
+#hb-media-panel .hbm-bar { display: flex; gap: 8px; align-items: center; padding: 7px 10px;
+  background: #10121f; border-bottom: 1px solid #2a3354; }
+#hb-media-panel .hbm-ic { flex: none; font-size: 15px; line-height: 1; }
+#hb-media-panel .hbm-title { flex: 1; min-width: 0; font: 600 13.5px system-ui, sans-serif; color: #dfe6ff;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hb-media-panel .hbm-badge { flex: none; font: 600 11px/1.2 system-ui, sans-serif; color: #ffcf6e;
+  background: rgba(255,207,110,.12); border: 1px solid rgba(255,207,110,.35); border-radius: 6px; padding: 3px 7px; }
+#hb-media-panel #hbm-vol { flex: none; width: 90px; accent-color: #31e6ff; }
+/* t181 FIX: the webview's internal display:flex must NOT be overwritten —
+   it is what makes the guest page fill and TRACK the element (the owner's
+   "the windows resize but the webview does not size"). The view is a plain
+   flex child, exactly like the proven Discord panel's #hbd-view. */
+#hb-media-panel .hbm-body { flex: 1; min-height: 0; background: #000; display: flex; }
+#hb-media-panel #hbm-view { flex: 1; min-height: 0; border: 0; background: #000; }
+#hb-media-panel .hbm-grip { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
+  cursor: nwse-resize; z-index: 5; border-bottom-right-radius: 14px;
+  background: linear-gradient(135deg, transparent 46%, #3d4768 48%, #3d4768 62%, transparent 64%); }
+/* t173: pasted YouTube links play ON the theater screen (projected like the
+   den's monitors — an iframe can't feed the WebGL texture) */
+#tv-yt { position: fixed; left: 0; top: 0; width: 1280px; height: 720px;
+  transform-origin: 0 0; will-change: transform; overflow: hidden; pointer-events: none;
+  z-index: 8; display: none; background: #000; }
+#tv-yt iframe, #tv-yt .yt-mount, #tv-yt > div { width: 100%; height: 100%; border: 0; }
+/* t172: music/steam modal rows */
+.gm-row { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--vb-line, #2a3354);
+  border-radius: 10px; margin-top: 8px; background: rgba(255,255,255,.03); }
+.gm-row img { width: 96px; height: 54px; object-fit: cover; border-radius: 6px; background: #0b1020; flex: none; }
+.gm-row .gm-meta { flex: 1; min-width: 0; }
+.gm-row .gm-title { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-row .gm-sub { font-size: 12px; color: var(--vb-muted, #93a0c4); margin-top: 2px; }
+.gm-list { max-height: 46vh; overflow-y: auto; margin-top: 4px; }
 .hd-report summary { cursor: pointer; font-weight: 700; }
 .hd-report { background: rgba(255,255,255,.05); border: 1px solid var(--vb-line, #2a3354);
   border-radius: 12px; padding: 12px 14px; margin-top: 12px; font-size: 13px; line-height: 1.55; }
@@ -919,3 +999,14 @@ body:not(.tv-fullscreen) #guide-foot { margin: 5px 8px 8px; }
 .guide-star:hover { opacity: 1; transform: scale(1.15); }
 .guide-star.on { color: #ffd23f; opacity: 1; }
 .guide-row.sel .guide-star.on { color: #ffd23f; }
+
+/* ── t195: THE WATCH PARTY DOCK — the popover retired (it rendered behind the
+   full-screen movie: z-60 under the fs layer's z-80). The Discord-dock
+   pattern: z-120, right side, and JS makes #vb-fs-video yield width. ── */
+#wwm-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 384px; max-width: 94vw; z-index: 120;
+  display: flex; flex-direction: column; background: #16182b; border: 1px solid #2a3354; border-radius: 10px 0 0 10px;
+  box-shadow: -24px 0 90px rgba(0,0,0,.55); }
+#wwm-panel .wwm-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px;
+  background: #10121f; border-bottom: 1px solid #2a3354; font-weight: 700; border-radius: 10px 0 0 0; }
+#wwm-panel .wwm-body { padding: 14px; overflow-y: auto; }
+#wwm-panel select { font-family: inherit; }

@@ -4,7 +4,7 @@
 //  Holds what /api/bootstrap gave us plus the current library, and fans out
 //  changes to whoever subscribed (3D scene, settings UI, …).
 // ─────────────────────────────────────────────────────────────────────────────
-import { api } from './api.js?v=1790983945165';
+import { api } from './api.js?v=1791834263993';
 
 export const state = {
   boot: null,       // /api/bootstrap payload (me, prefs, locks, defaults, tv…)
@@ -37,6 +37,7 @@ export const state = {
     }
     if (patch.tv) boot.prefs.tv = { ...(boot.prefs.tv || { idleMode: '', itemId: '' }), ...patch.tv };
     if (patch.dance) boot.prefs.dance = { ...(boot.prefs.dance || {}), ...patch.dance };   // t86: dance-floor lights
+    if (patch.a11y) boot.prefs.a11y = { ...(boot.prefs.a11y || {}), ...patch.a11y };   // t186: photosensitive comfort
     if (patch.sources !== undefined) boot.prefs.sources = patch.sources;
     if (Array.isArray(patch.guideFavs)) boot.prefs.guideFavs = patch.guideFavs;   // t128: favorite channels
     // t165 (owner: "slider needs to stay where it's set"): the controls pref
@@ -52,6 +53,7 @@ export const state = {
         shelves: patch.shelves ? (shelvesOut ?? boot.prefs.shelves) : undefined,
         tv: patch.tv ? boot.prefs.tv : undefined,
         dance: patch.dance ? boot.prefs.dance : undefined,
+        a11y: patch.a11y ? boot.prefs.a11y : undefined,   // t186: photosensitive comfort
         sources: patch.sources !== undefined ? patch.sources : undefined,
         guideFavs: Array.isArray(patch.guideFavs) ? patch.guideFavs : undefined,   // t128
         controls: patch.controls ? boot.prefs.controls : undefined   // t165: look speed + pace REALLY save

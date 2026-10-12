@@ -1,744 +1,202 @@
 # 📼 Home Binger™
 
-
 <p align="center">
   <img src="docs/og-home-binger.png" alt="Home Binger — a walkable 3D video store with VHS and DVD shelves, real cover art, jukebox, and theater doors" width="960">
 </p>
 
-**The 3D Storefront for The CordCut Co-op™ (TCC™)** — a self-hosted, walkable 3D video store with a movie theater and a neon dance hall, stocked from your own Plex, Jellyfin, or any folder on your server. Free for anyone to use and modify, **not for sale**: licensed under [CC BY-NC-SA 4.0](LICENSE). Made with 💙 by **BluJ Productions** — owner-directed, owner-designed, and ear-tested by BluJ; engineered with AI assistance by [Arena.ai](https://arena.ai)'s Agent Mode (full story in [`docs/CREDITS.md`](docs/CREDITS.md)).
-
-## ✨ What's new in 1.15
-
-**💬 The store's Discord, built in for everyone.** The help-desk PC's
-monitor now shows the live bug-report chat right on its screen — like a
-real PC running Discord — and clicking the PC opens it big. Every copy
-ships with the store's Discord as the default chat; owners can point
-their own server at it instead.
-
-**🖱️ A mouse that behaves.** Lock hiccups heal on their own (no more
-silent fallback to hold-the-button looking), and menus always get a
-free cursor the instant they open.
-
-**🏃 Movement, your way.** A look-speed slider that actually SAVES
-(default a calm 0.55×), and ONE press of Shift cycles
-walk → jog → run.
-
-**🧱 A world with edges.** The theater's movie screen is solid now, and
-the dance-hall door no longer snags when you walk through slowly.
-
-**📺 Long shows stay on.** Live TV heals itself through stream hiccups
-and silent freezes — no more black screen mid-movie.
-
-**🎧 DJs pick their set at the booth.** A new Folders tab lists your own
-local music by folder, with one-tap "queue the whole folder" for AUTO-DJ.
-
-### Earlier — 1.10.0: the TV Guide update
+<p align="center"><b>The 3D Storefront for The CordCut Co-op™ (TCC™)</b><br>
+A self-hosted, walkable 3D video store stocked from your own <b>Plex</b>, <b>Jellyfin</b>, or any folder on your server — with a private movie theater, a neon dance hall, a game room, and <b>watch parties anyone can join from a plain browser link</b>.</p>
 
 <p align="center">
-  <img src="docs/whats-new/entry-neon.png" alt="Home Binger's neon entry screen — press Enter the store to walk in" width="880">
+  <a href="https://github.com/BabyBluJ-wall/Home-Binger/releases"><img src="https://img.shields.io/badge/release-2.0.0-ffd23f?style=flat-square" alt="release 2.0.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-00e5ff?style=flat-square" alt="license CC BY-NC-SA 4.0"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20Docker%20%C2%B7%20Node.js-ff5c74?style=flat-square" alt="Windows, Docker, Node.js">
+  <a href="https://discord.gg/rbq2m9zZBs"><img src="https://img.shields.io/badge/Discord-join%20the%20store-5865F2?style=flat-square" alt="Discord"></a>
 </p>
 
-**📺 The TV Guide — free live TV from every free service, with real
-listings.** Walk into the theater and press **G**: a glass channel guide
-floats in from the right like an AR overlay — the movie keeps playing
-bright on the screen behind it, with **no shade over the view**. It's
-styled like the old paper TV guides — numbered channels with their
-provider logos, **what's on right now AND what's on next** (real program
-titles, episode numbers, a live progress line and times — from the
-providers' own published schedules), a **time bar** to browse the whole
-published future — ▶ Now · 1 PM · 2 PM · … up to eight hours ahead, every
-row showing what's on then, like paging through a paper guide (press
-**T**), **genre pages** (News · Movies · Series · Kids · Sports…), a
-**provider row** (Pluto TV · Samsung TV Plus · Tubi · The Roku Channel ·
-Plex Free…), language sections, ☆ favorites that follow your account, and
-**instant search** (press **/** — by channel name, number, or the show
-airing now). **Thousands of officially-free channels** stream through your
-server — nothing to pay, nothing to sign up for — with **duplicates removed
-automatically**. The list renders only what you see, so it stays at 60fps
-no matter how many channels you add. In full screen the Guide **docks
-beside the movie** — the picture keeps its exact size and slides left, and
-on ultrawide monitors the dock sizes itself to the space the picture
-leaves, so it tiles like **two monitors side by side** (nothing slides
-under anything). The dock's padding is tight top, bottom and sides, so
-rows fill the space; the selected channel's story (episode, airtime,
-minutes left, what's next) rides the dock's **footer** with a one-click
-**▶ Watch**. The rich **synopsis card** lives in the theater (windowed)
-guide — it floats in front of the view, its buttons (▶ Watch · ☆ Favorite ·
-Next · ✕) take their own clicks, and **✕** closes it. Picking a channel in
-full screen **keeps the Guide docked** — flip channels like changing inputs
-on a second monitor. And while you're in full screen TV, your character
-stays put — no walking around unseen under the video.
-
-<p align="center">
-  <img src="docs/whats-new/tv-guide-epg.png" alt="The TV Guide — glass drawer with logos, live programme data, progress lines, provider tags and search" width="430">
-  <img src="docs/whats-new/tv-guide-docked.png" alt="In full screen, the Guide docks into a column on the right — the movie keeps its size and slides left" width="430">
-</p>
-
-**🎫 Invite a friend — your store, over the internet.** Admin → Users now
-has an **Invite a friend** card: make a one-time key, send it over any chat,
-and their Home Binger links to your building — your shelves stream straight
-from your machine, gated to exactly what you shared. `docs/FRIEND-SHARING.md`
-is the two-minute how-to.
-
-<p align="center">
-  <img src="docs/whats-new/invite-a-friend.png" alt="Admin → Users — the Invite a friend card with its one-time key" width="430">
-</p>
-
-**👨‍👩‍👧 Per-account libraries.** Link a Plex/Jellyfin library and the store
-now asks **"who gets this library?"** — grown-ups' shelves for the parents,
-cartoons for the kids' accounts, and invites that only see what you shared.
-One building, everyone gets their own store.
-
-**📱 Simple Mode — the phone view.** Phones that visit your store get a
-clean, fast list view — big covers, one tap to play, and shelves separated
-into **categories** (Movies · TV Series · Music · Radio · Podcasts · Live
-TV). The **☰ menu** holds the view switch and sign-in, with **Enter the 3D
-store** right at the top for the full walk-around.
-
-<p align="center">
-  <img src="docs/whats-new/simple-mode-phone.png" alt="Simple Mode on a phone — a clean list view of the store, one tap to play" width="270">
-</p>
-
-**🩹 Plus the beta shakedown pass** — every report from real Windows
-testing, fixed: themes now survive a restart everywhere (menus *and* store,
-personal *and* admin-set defaults — the theater's trim and speaker cones
-re-tint with the theme instead of staying frozen on one color); the TV
-remote belongs to the room you're standing in (jukebox in the store, DJ
-booth in the dance hall, screen in the theater); the swinging doors hold
-their arc when you walk through slowly; "My Shelves" pins stay unpinned when
-you set a shelf back to Automatic; theater sound is untouched by DJ-booth
-sessions; and the theater's idle screen is the **standby card** on a fresh
-install. The self-test suite grew to **139 checks** — all green, run twice.
+Free for anyone to use and modify, **not for sale** — licensed under [CC BY-NC-SA 4.0](LICENSE). Made with 💙 by **BluJ Productions** — owner-directed, owner-designed, ear-tested by BluJ; engineered with AI assistance by [Arena.ai](https://arena.ai)'s Agent Mode (full story in [`docs/CREDITS.md`](docs/CREDITS.md)).
 
 ---
 
-## 🏬 What's inside the building
+## 🏬 What's inside
 
-Three connected spaces under one roof:
+Four connected spaces under one roof:
 
-- **The store** — a classic video-rental floor, ~40 × 40 ft with a tall ~14 ft
-  ceiling. Perimeter shelves plus **four slim double-sided gondola islands per
-  side (eight total)** around a wide central aisle that runs door → wall TV.
-  Cases stand shoulder-to-shoulder in three real-world sizes — tall VHS
-  sleeves, DVD keep cases, CD jewels — with the cover wrapped all the way
-  around (front, titled spine, mirrored back). When Plex/Jellyfin is
-  connected, every case pulls its item's **actual cover art by metadata ID**
-  (exact match — not a name search), streamed through this server. Category
-  signs re-label themselves from your personal sorting. There's no checkout
-  counter — everything happens in-aisle (and on the TV). Music lives in the
-  **jukebox** against the back wall (a slim bass cabinet sits flush beside it,
-  never poking past the machine) — click it and its DJ deck opens: queue,
-  fades, EQ, tempo, and a 🎬 Cinema/Flat voicing toggle.
+- **🏬 The store** — a classic video-rental floor: gondola islands, hanging category signs, and cases shoulder-to-shoulder in real **VHS / DVD / CD** sizes, wrapped in **your actual cover art** (pulled by metadata ID from Plex/Jellyfin, not a name search). The **jukebox** against the back wall opens a DJ deck — queue, fades, EQ, tempo — and the store TV plays anything you pick off a shelf.
 
-<p align="center">
-  <img src="docs/store-entrance.png" alt="Home Binger — storefront view looking back at the BluJ Network neon sign and stocked shelves" width="880">
-</p>
-- **The theater** — behind the store's back wall: a real screening room with
-  a sloped floor and its own big screen. Grab a movie off any shelf and hit
-  **"Play in the theater"**; a control bar handles stop/seek/volume/repeat,
-  and full screen puts the movie itself up at native resolution — press **G**
-  there and the **TV Guide docks beside the picture** (flip channels without
-  leaving full screen; Esc and the ✕ chip still step out). The theater is
-  also where free live TV lives — hundreds of officially-free channels via
-  the Guide (above). The theater is soundproofed: the jukebox and the dance
-  hall never bleed in, and the movie never leaks out. Its **8.2 array** plays
-  discrete 7.1 on multichannel hardware and **HRTF binaural imaging in a
-  headset** — fronts, sides, rears and subs placed around you like a
-  professionally tuned room.
+  <p align="center"><img src="docs/store-entrance.png" alt="Home Binger — the store's central aisle: stocked shelves and cases shoulder-to-shoulder, category signs, neon everywhere" width="880"></p>
 
-<p align="center">
-  <img src="docs/theater.png" alt="Home Binger — private screening room with tiered seating and 8.2 surround sound" width="880">
-</p>
-- **The dance hall** — through the glass sliders in the store's right wall. A
-  glossy checkerboard floor that **pulses and changes color with the music**,
-  a mirror ball, and sweeping light beams that run **DJ-set patterns** (sweep
-  → chase → strobe → build-and-drop, changing color with every kick and moving
-  differently with every song). Between sets a **club spotlight holds on the
-  booth**; the moment the music starts, the spot fades and the rig takes over.
-  **10 surround speakers** ring the walls
-  plus **subwoofers at the front of the DJ booth counter** (mouths visible,
-  aimed at the floor), and neon LED bars and diffused coves riding every wall. The **DJ booth** (two turntables, mixer, laptop) opens a
-  full DJ deck: queue, fades, EQ, tempo, dead-center on the floor — and the
-  booth is run entirely from the **PC's booth panel** (the floating TV
-  remote stays out of the dance hall — one controller, no confusion).
-  Behind its swinging doors, the
-  **DJ's Library** keeps the vinyl — click a record to spin it for the floor.
-  Dance music **stays in the dance hall**: room gates keep each zone's sound
-  inside its own wing.
+- **🎬 The theater** — a sloped-floor screening room with its own big screen and an **8.2 array** (discrete 7.1 on multichannel hardware, HRTF binaural in a headset). Bring a movie from any shelf, go **full screen at native resolution**, and press **G** for the **TV Guide** — thousands of officially-free live channels, docked beside the movie.
 
-<p align="center">
-  <img src="docs/dance-hall.png" alt="Home Binger — neon dance hall with music-reactive floor, disco ball, and DJ booth" width="880">
-</p>
+  <p align="center"><img src="docs/theater.png" alt="Home Binger — the private screening room mid-movie: the big screen lit up, tiered seating in the dark" width="880"></p>
 
-Between the store and the street, the glass entry sliders stay locked —
-click them and the building answers: **"Zombie warning, Stay and party."**
-You load in, in the front hallway just outside the store door, looking into
-the store; **☰ → Back to front entrance** always returns you there
-(anti-stuck). The big screen, the jukebox, and the dance rig each
-idle attractively when nothing is playing, and everything on the walls wears
-the neon theme.
+- **🪩 The dance hall** — a glossy checkerboard floor that **pulses with the music**, a mirror ball, light rigs that land ON the beat (an adaptive beat detector learns each track), and a full **DJ booth** — two decks, crossfader, hot cues, loops, BPM + key detection. Room-gated sound: the music never bleeds into the store or theater.
 
-The mouse starts **unlocked** so the menus are usable — click the store to
-look around, **Q** (or Esc) to free the mouse again (Q re-grabs it too), and
-the **scroll wheel zooms** — scroll up to lean into a shelf of covers, scroll
-down to pull back out. While any menu or form is open, WASD pauses and every
-key belongs to the text you're typing. The **sidebar search** finds titles
-across the whole building; shelves are only selectable from the room you're
-standing in.
+  <p align="center"><img src="docs/dance-hall.png" alt="Home Binger — neon dance hall with music-reactive floor, disco ball, and DJ booth" width="880"></p>
 
-**Support this project:** click the **entry door** in the store (or the logo
-chip in the top-left HUD) and your **support/projects page is copied to the
-clipboard**. Defaults to `https://BluJ-Productions.softr.app`, editable as
-`SUPPORT.url` in `public/js/store3d/config.js`.
+- **🎮 The game room (the den)** — a battle station behind the rising neon pocket door: glass showcase tower (hue-cycling fans, glowing water block), RGB keyboard and mouse, and **three monitors that actually work** — the **Discord portal**, the **music station** (YouTube, keyless), and your **Steam library**. The store's glow-lit logo hangs above; the big neon **angel-demon sign** fills the store-side wall.
 
-**Admin access:** the store's admin panels (media servers, store TV, users,
-policies) live behind a sign-in. Sign-in is triple-routed — session cookie,
-Authorization header, and `?auth=` query parameter — so it works even behind
-proxies that strip cookies. On your own LAN, everything just works. Guests
-see **🛠️ Admin sign-in** right in ☰ Menu.
+  <p align="center"><img src="docs/game-room.png" alt="The game room — battle station, glass tower with hue-cycling fans, RGB keyboard and mouse, working monitors, the neon angel-demon sign on the wall" width="880"></p>
 
-Everything runs from **one small Node.js app with ZERO npm dependencies** —
-if you have Node 18+ installed, you are two commands away from opening the store.
-
----
-
-## 💻 Will it run on my machine? (system requirements)
-
-**The Windows exe (HomeBinger.exe):**
-
-| | Minimum | Comfortable |
-|---|---|---|
-| **OS** | Windows 10 64-bit (hard floor — the bundled runtime dropped Win 7/8.1) | Windows 10/11 64-bit |
-| **CPU** | Dual-core, ~2015 or newer (Core i3 class) | Quad-core or better |
-| **RAM** | 4 GB | 8 GB |
-| **Graphics** | Any GPU with working drivers (DirectX 11 era is fine) | Intel HD 530+ or any dedicated GPU |
-| **Disk** | ~1 GB free (app ~270 MB extracted + poster cache + media) | — |
-| **Internet** | Not required — local media + the grabber work fully offline | Needed for the free archive.org shelves, radio, Plex/Jellyfin |
-
-Two real-world notes:
-- **GPU drivers matter more than GPU power.** With missing/broken drivers the
-  app silently falls back to software rendering — it still works, but the
-  start screen can take 30–60 seconds to appear. If that happens, update the
-  graphics driver and it snaps back to normal.
-- **The heaviest moments are the DJ booth** (10 spatial-audio sources) and
-  high-bitrate video. A minimum-spec machine runs the store and theater
-  fine but may dip in the booth during playback. Headphones give the full
-  spatial effect; plain stereo speakers work too.
-
-Port 8181 must be free (the exe politely takes 8182+ if it's busy — the two
-never fight). **Running it the Node way or visiting over LAN?** The same
-table applies, but the browser carries the graphics load: any current
-Chrome, Edge, or Firefox with WebGL2 does it.
-
----
-
-## 🖡️ The EASY way (Windows, nothing to install)
-
-**Where to get it:** the [Releases page](https://github.com/BabyBluJ-wall/Home-Binger/releases) —
-grab the newest **HomeBinger….zip** (the one with the green **Latest** badge). Unzip it,
-open the **Home Binger** folder, and double-click **HomeBinger.exe**. A
-**"1 - START HERE"** text file sorts to the very top of the folder and walks
-you through it in plain words.
-That's the whole install — it runs in its own app window (no browser, no address
-bar) and carries everything it needs inside the folder, including its own copy of
-the runtime: **Node.js is NOT required**. Your phones can still connect exactly
-like before (same server, same port). If a copy of the store is already running,
-the exe quietly takes the next free port from 8181 up — the two never fight —
-and if you already have Node installed, the exe simply never touches it.
-Settings/users/caches live inside the exe folder (`resources/app/data/`), so
-uninstall = delete the folder. Plain-language guide: **START-HERE.txt**.
-Rebuild it from source any time: `node tools/build-desktop.mjs`.
-
-## 🚀 Quick start — the beginner's guide (no experience needed)
-
-You do **one** thing: run one command. Here's every click along the way.
-
-### Step 0 — Check you have Node.js (once per computer)
-
-Node.js is the tiny engine that runs the store.
-
-1. **Windows:** press the **Windows key**, type `cmd`, press Enter → a black
-   window opens. **Mac:** open **Terminal** (press ⌘+Space, type `terminal`).
-2. Type this and press Enter:
-   ```
-   node -v
-   ```
-3. You should see something like `v20.11.0` or `v24.20.0`. Any number **18 or
-   bigger** is perfect → go to Step 1.
-   If you see `'node' is not recognized` (or `command not found`), install it:
-   go to **https://nodejs.org**, click the big green **LTS** button, run the
-   installer, keep clicking Next until it's done, then **close and reopen**
-   the black window and try `node -v` again.
-
-### Step 1 — Unzip the store
-
-Unzip `home-binger.zip` (right-click → *Extract All* on Windows, double-click
-on Mac). You get a folder called `home-binger`. Put it anywhere you like
-(Desktop is fine).
-
-### Step 2 — Open a terminal INSIDE that folder
-
-The easy way, so you never type a path:
-
-- **Windows:** open the `home-binger` folder in File Explorer, click once on
-  the **address bar** at the top, type `cmd`, press Enter. A black window
-  opens already "inside" the folder.
-- **Mac:** open the `home-binger` folder in Finder, right-click any empty
-  space → **Services → New Terminal at Folder** (or Terminal → `cd ` then
-  drag the folder in and press Enter).
-
-### Step 3 — Start the store (the one command)
-
-Type this and press Enter:
-
-```
-node server/server.js
-```
-
-You'll see the **HOME BINGER — now OPEN for business** banner. **Leave that
-window open** — closing it closes the store. (To stop the store later: click
-in the window and press **Ctrl+C**.)
-
-### Step 4 — Walk in
-
-Open a browser (Chrome/Edge/Firefox) and go to:
-
-```
-http://localhost:8181
-```
-
-You'll see the **HOME BINGER** start screen → **Enter the store**. The
-shelves start empty — that's deliberate. It's YOUR store: stock it in Step 5
-by pointing Home Binger at your Plex or Jellyfin — it pulls your actual files,
-one item per movie, show, and track.
+**Controls:**
 
 | Key | What it does |
 |---|---|
 | **W A S D** | walk (arrow keys work too) |
-| **Mouse** | look around (click the store first) |
-| **Q** | free the mouse / grab it again |
-| **Scroll** | zoom |
-| **☰** (top-right) | menu — sorting, themes, admin |
+| **Mouse** | look around (click the store first) · **Q** frees / re-grabs it |
+| **Scroll** | zoom — lean into a shelf of covers |
+| **☰** (top-right) | menu — sorting, themes, sign-in, admin |
+| **G** | TV Guide (theater) · **F** full screen · **/** instant search |
 
-### Step 5 — Stock it with YOUR movies (connect Plex, ~2 minutes)
+---
 
-1. In the store, click **☰ Menu → 🛠️ Admin sign-in** and sign in with
-   **BabyBluJ** / **BluJNetwork** (the default — change it in Admin → Users).
-2. Go to **🛠️ Admin → Server** and click the **Plex** card (or **Jellyfin**).
-   The form changes to show only that service's fields.
-3. **Server URL**: `http://` + the IP of the computer running Plex +
-   `:32400` — for example `http://192.168.1.50:32400`. If Plex is on THIS
-   computer, use `http://localhost:32400`. (Plex Web URLs ending in `/web`
-   are fixed automatically.)
-4. **X-Plex-Token**: in Plex Web, click any movie → **⋮ → Get Info → View
-   XML** → copy the long `X-Plex-Token` number from the address bar.
-5. Click **Test connection** — you want a green line like
-   `✅ MyServer — 3 usable libraries (Movies, TV Shows, Music)`.
-6. Click **Save & stock the shelves**. Watch the shelves fill with YOUR
-   covers. Click any case → flip the 3D box around → **Play on the store
-   TV**, or carry it to the theater.
+## 👀 Watch together — three ways
 
-(Jellyfin is the same idea: URL ends in `:8096`, and the key comes from
-Dashboard → API Keys.)
+- **In the theater (everyone on your server):** the host clicks **Watch together** and the room follows — gentle drift correction, and the group pauses while someone buffers (a guest whose connection keeps struggling stops holding the room hostage after a few pauses: the party plays on and they catch up when it steadies).
+- **Anywhere (any browser, no install):** **🌐 Share this Home Binger — live** hands you a link and a six-character room code. Friends open it on a phone or laptop, type a name, and watch your screen live with your system's sound — WebRTC with STUN + a free relay fallback, so home routers and cellular work without a VPN. Up to six viewers, your choice of quality (capped, so a share can't overdrive a thin uplink), and honest live stats on their end. If a chat app mangles the link, they just type the code.
+- **App-to-app:** friends running their own Home Binger sync theater screens directly, peer-to-peer.
 
-### Step 6 — Invite the house (phones, laptops, smart TVs)
+<p align="center"><img src="docs/watch-party.png" alt="The Watch-with-me panel beside the store — LIVE with a room code, the anyone link and the same-Wi-Fi link with copy buttons, viewer roster and quality picker" width="880"></p>
 
-Anyone on your Wi-Fi opens a browser to `http://YOUR-COMPUTER'S-IP:8181`.
-Find your IP: **Windows** → `ipconfig` in that black window (look for
-`IPv4 Address`); **Mac** → System Settings → Wi-Fi → Details. The startup
-banner in the terminal also prints the network address. That's the whole
-"website" — nothing to install on their end.
+## 🎛 The panels
 
-### 📱 The exe & phones — the questions everyone asks
+- **The player panel** — **YouTube itself, docked beside you**: browse the real site, click a video, and (in the desktop app) it plays through the official embed player — **keyless, mostly ad-free** (fewer ads, not zero: the embed lane plus the app's blocker stops most, but a few ride the video's own pipes where no blocker can reach). The remote's ⏯ and volume drive it; music in the den stays in the den through its own 2.1 rig.
 
-**Can I run the exe and still visit from my phone?**
-Yes. The exe serves the exact same store on your network — every device on
-the **same Wi-Fi** opens `http://<your-PC's-IP>:8181` in any browser, just
-like Step 6. Nothing to install on the phone.
+  <p align="center"><img src="docs/media-panel.png" alt="The player panel — YouTube playing in-app beside the store, with the title bar and remote controls" width="720"></p>
 
-**Does the exe have to stay running?**
-Yes. Your PC **is** the store; the phones are visitors walking in. Close the
-exe (or let the PC go to sleep) and the doors close — visitors just get
-"can't connect" until you start it again. Nothing breaks, nothing re-setups.
+- **Settings → My Theme** — theme presets and colors, the **graphics dial** (Auto watches your frame rate and steps render resolution to fit the machine), and a **photosensitive comfort switch** that calms every flashing effect.
 
-**Does it work away from home / over mobile data?**
-Not by itself — same network only, by design: your media stays yours and
-never touches the internet. For away-from-home access you'd add a VPN such
-as **Tailscale** (free tier) that links the phone to your home network.
+  <p align="center"><img src="docs/settings.png" alt="Settings → My Theme — theme presets, the graphics dial and the photosensitive comfort switch" width="720"></p>
 
-Three smaller ones:
-- **First run:** Windows Firewall will ask → **Allow** (Private networks),
-  or phones can't get in.
-- **Hosting for a while?** Set the PC to stay awake (Settings → System →
-  Power → screen can sleep, PC shouldn't).
-- Each visiting device keeps its own theme and preferences automatically
-  (a guest profile per device) — no setup needed on their end.
+---
 
-## 🐳 Quick start (Docker)
+## ✨ What's new in 2.0
 
-```bash
-cd home-binger
-docker compose up -d
-# open http://<your-machine>:8181
+- **🎮 The game room** — the battle station, the glass tower, three working monitors, the angel-demon sign.
+- **🎵 The music station** — YouTube in the player panel, keyless; Steam library sharing server-wide (one key, Test buttons that say exactly what's wrong).
+- **👀 Watch with me** — theater sync, live browser shares (quality caps, a self-smoothing guest player, share links that work for anyone — no VPN), app-to-app sync.
+- **📺 The big screen** — YouTube links and playlists play ON the screen; full-screen Guide docking; CC on the theater remote.
+- **⚙️ Comfort** — panels free the mouse; the Guide can't stall; the graphics dial; the photosensitive switch.
+- **🐛 Fixed** — desktop mouse capture (b27), the YouTube "Error 153" embed break (b28), buffering on real networks (b30), share links that only worked over a VPN (b31).
+
+Full history: [`CHANGELOG.md`](CHANGELOG.md)
+
+---
+
+## 🚀 Quick start
+
+**Windows exe (nothing to install):** grab the newest **HomeBinger….zip** from the [Releases page](https://github.com/BabyBluJ-wall/Home-Binger/releases), unzip, double-click **HomeBinger.exe**. Node.js is **not** required; a **1 - START HERE** file in the folder walks you through it. (First run: SmartScreen → *More info → Run anyway* — the exe is unsigned.)
+
+**Node.js:** unzip the source and run:
+```
+node server/server.js        # → http://localhost:8181
+```
+**Docker:**
+```
+docker compose up -d         # → http://<machine>:8181
 ```
 
-Everything (users, preferences, server config, cached posters) is stored in
-`./data`, so upgrades are safe: replace the files, `docker compose up -d --build`,
-and your data survives.
+**Stock it (2 minutes):** ☰ Menu → 🛠️ Admin sign-in (**BabyBluJ / BluJNetwork** — the default, change it) → Admin → Server → **Plex** (URL `http://<ip>:32400`; token from Plex Web → any movie → ⋯ → Get Info → View XML) or **Jellyfin** (`:8096`; key from Dashboard → API Keys) → **Test connection** → **Save & stock the shelves**. No media server? Point **📁 Local files** at any folder — everything inside gets shelved, and videos grow their own case art automatically.
+
+**Invite the house:** anyone on your Wi-Fi opens `http://<your-PC-ip>:8181` in any browser — nothing to install (phones get a clean list view with the 3D store one tap away). Allow Home Binger through **Windows Firewall** when asked.
+
+**Updating** = unzip the new folder and open the new exe — accounts and settings migrate themselves; the old folder gets renamed "(old — you can delete this)". **Uninstalling** = delete the folder. Nothing lands in the registry or Program Files.
+
+### Sources (stack as many as you like)
+
+| Source | What you get |
+|---|---|
+| **Plex / Jellyfin** | your full library, paginated to the last page — movies & TV on the shelves, music on the jukebox, Live TV/DVR as 📺 VHS tapes |
+| **➕ More libraries** | extra Plex/Jellyfin servers (yours, or a friend's), each with its own switch and Test button |
+| **📁 Local files** | any folders, recursive; music grouped by album; auto case art; ebooks indexed |
+| **🎞️ Internet Archive** | public-domain classics, free and legal |
+| **📻 Radio-Browser** | live radio stations on the jukebox |
+| **🎙️ Podcasts** | any podcast by RSS feed |
+
+Movies shelve as VHS sleeves and DVD cases, TV as per-episode DVD sets grouped by series, music as CD jewels by album, live TV as tapes. Any library can be **scoped per account** — cartoons for the kids' logins, grown-up shelves for the parents.
 
 ---
-
-## 🛰️ Stocking the shelves
-
-**No media server? Use the file grabber.** Admin → Server → **📁 Local files**:
-add as many **media spots** as you like (`C:\Videos`, `D:\Music`, an external
-drive…) and switch it on. Every spot grabs everything inside it — **and every
-folder nested inside, recursively** — as individual files: movies by file,
-music tracks grouped by their folder. Grabbed **videos grow their own case
-images automatically** — the first browser to visit grabs a frame from each
-file and uploads it once; every store after that shows it. Ebooks/PDFs are indexed in the catalogue
-for the coming full-media library. Nothing leaves your computer and no media
-server is involved.
-
-**Updating the exe** (new version out?): don't delete anything — just unzip
-the new version (right next to your old folder is fine) and open the **new**
-HomeBinger.exe. On its first launch it finds your old folder, moves your
-accounts, logins and settings into itself automatically, and renames the old
-folder to "(old — you can delete this)". Delete the old folder whenever you
-like. (Upgrading from 1.6.0–1.6.2? The first launch brings your data home
-from `%APPDATA%` and cleans that up for you — nothing to do.)
-
-**Uninstalling** is delete-the-folder: everything the app stored — accounts,
-logins, settings, caches — lives INSIDE the app folder, so deleting it
-removes every trace. No registry, no Program Files, nothing left behind
-anywhere else on your PC. (One tip: keep the app in a normal folder like
-Desktop or Downloads — not Program Files, which Windows keeps locked.)
-
-Open **☰ Menu → sign in as admin → Admin → Server**. Sources stack — mix and
-match any of them:
-
-| Source | What it gives you |
-|---|---|
-| **Plex** / **Jellyfin** | Your full library, paginated to the last page. Movies & TV on the shelves, music on the jukebox. Live TV/DVR channels appear as 📺 VHS channel-tapes (playback streams via HLS; Safari plays it natively, Chrome-based browsers may refuse the format — that's a browser limitation). |
-| **➕ More libraries** | Got a second server — or a friend's? **Admin → Server → "More libraries"**: add as many extra Plex/Jellyfin connections as you like. Each gets a nickname (shows as "Nickname · Library" on shelf labels), its own switch, picks and Test button. Everyone can flip each one on/off in My Media. |
-| **🎞️ Internet Archive** | Public-domain classics, free and legal. |
-| **📻 Radio-Browser** | Live radio stations on the jukebox. |
-| **🎙️ Podcasts** | Any podcast by RSS feed. |
-
-Hit **Test connection** (Plex/Jellyfin) — it explains failures in plain
-language (wrong port, bad token, `/web` URLs are auto-fixed). Items without
-artwork get attractive generated placeholder covers.
-
-**Finding your Plex token:** open Plex Web, click any movie →
-**⋯ → Get Info → View XML** — the URL contains `X-Plex-Token=…`; copy that
-number. Inside Docker, point at your media server with
-`http://host.docker.internal:32400` (Plex) or `:8096` (Jellyfin), or the LAN IP.
-
-### What gets shelved
-| Library type | On the shelf as |
-|---|---|
-| Movies | mix of chunky **VHS sleeves** and **DVD cases** (poster front, titled spine) |
-| TV shows | every **episode its own entry** (grouped by series, DVD-style cases) |
-| Music | every **track its own entry** (grabbed file-by-file from Plex/Jellyfin, grouped by album) — playable on the **jukebox** (store) and the **DJ's Library** (dance hall) |
-| Music videos | DVD-style cases |
-| Live TV / local video files | 📺 VHS-style tapes |
-
-If a media server is unreachable, its shelves just wait — the store stays
-open, and everything reconnects when it's back.
-
----
-
-## 🧑‍🤝‍🧑 Users, guests & personal views
-
-- **No login needed.** Every visitor gets an automatic device profile — theme and
-  shelf arrangement persist on that browser forever.
-- **Optional account** (☰ Menu → Profile): carry the same preferences to every
-  device you sign in on. Guest settings migrate into the account on sign-up.
-- **Admins** additionally manage the media sources, the store TV, user accounts,
-  and store-wide policies (including *locking* theme/sorting for everyone).
-- **Per-account libraries** — each linked library can be scoped: grown-ups'
-  shelves for the parents, cartoons for the kids' accounts, invites that see
-  only what was shared. One building; everyone gets their own store.
-- **Invites** (Admin → Users → Invite a friend) link a friend's Home Binger
-  to yours over the internet — one-time key, streamed from your machine,
-  revocable any time.
-- One user's theme/sorting **never** affects anyone else's view. Guests and
-  users browse their own personal arrangement of the same shelves.
-
-## 🎨 What you can personalize (☰ Menu)
-
-- **Theme:** wall color, floor color, shelf color, accent/lighting color, shelf
-  style (warm wood / brushed metal / midnight laminate), one-click presets —
-  including the projector-screen look for the theater, if that's your thing.
-- **Sorting:** Recently Added · By Library · Genre (with hanging aisle signs!) ·
-  Alphabetical (letter-range signs) · Rating · Release Year · By Type.
 
 ## 📺 Screens & sound
 
-- **Room sound** — the store + dance-hall speaker rings render through
-  Google's open-source **Resonance Audio** Ambisonic soundfield (true HRTF
-  binaural decode — see `docs/SURROUND.md`), with the theater on its own
-  hand-tuned 8.2 array. Every room is gain-staged to the same reference:
-  equal slider, equal loudness, bass managed to the subs, protection
-  limiters as safety nets (`docs/AUDIO.md`).
-- **The store TV** — select any case → **"📺 Play on the store TV"** and it
-  plays right there in the world, with a bottom control bar (stop · ⏪10s ·
-  play/pause · 10⏩s · repeat · volume). Albums get a spectrum visualizer.
-  The remote bar follows the room you're in: it runs the **jukebox** in the
-  store, the **DJ booth** in the dance hall, and the **screen** in the
-  theater. Admins can change the idle screen (Admin → Store TV): the standby
-  card (the fresh-install default), a pinned item, a looping video URL, or
-  the white projector screen.
-- **The TV Guide** (theater) — press **G** in the theater: a glass drawer
-  slides in from the right **with no shade over the rest of the view** —
-  the theater screen keeps playing bright behind it, like reading the
-  guide through a pair of AR glasses. Numbered channels with logos, **NOW
-  & NEXT program data** where the provider publishes a schedule (a channel
-  with no data shows the honest
-  ● LIVE line — never a made-up listing), and a **time bar** to browse the
-  whole published future — ▶ Now · 1 PM · 2 PM · … up to eight hours ahead
-  (press **T** or click an hour): every row shows what's on then, and the
-  synopsis card follows. **Genre pages**, a **provider
-  row**, language sections, ☆ favorites, **instant search** (**/**), dead
-  channels marked and skipped. The list is **virtualized** — only the
-  visible rows exist in the DOM, so 1,400+ channels scroll at 60fps. In
-  full screen the Guide **docks beside the movie** — the picture keeps its
-  exact size; on an ultrawide screen the dock fits the space the picture
-  leaves free, so the two sit side by side like a dual-monitor setup, and
-  the tight padding (top, bottom, both sides) fills the space with
-  channels. The selected channel's info rides the dock **footer** with a
-  **▶ Watch** button. The floating **synopsis card** (episode, airtime,
-  minutes left; click a row's NEXT to preview what's coming) lives in the
-  windowed/theater guide now — over the view, never over the fullscreen
-  movie — and its buttons take their own clicks (✕ closes it). Picking a
-  channel in full screen keeps you in full screen **with the Guide still
-  docked** — flip channels freely, two-monitor style — and while the big
-  screen is up your character can't wander off under it.
-  The Guide
-  button on the remote opens it too (theater only). The filter bars stay
-  TIDY so the channel list stays long: each bar shows its top 3 options
-  plus **+N more** — press it and every option appears (wrapped, all
-  clickable) with a **− Less** to tidy back up. Whatever you've selected
-  stays visible even when the bar is collapsed.
-  Admins stock it from two places (Admin → 🛰️ Server): the built-in
-  free-channel **directory** (curated iptv-org groups), plus **extra
-  channel packs** — one click each for **Pluto TV**, **Samsung TV Plus**,
-  **Tubi**, **The Roku Channel** and **Plex Free** (The Librarians,
-  Hallmark Movies & More, Stories by AMC…), or paste any `.m3u` playlist
-  URL. **Find more channels** (the same panel) adds whole countries in one
-  click — 🇬🇧 UK, 🇨🇦 Canada, 🇩🇪 Germany, 🇫🇷 France and 15 more, plus
-  worldwide bundles — and points at the public **iptv-org** directory for
-  thousands more playlists. Every pack arrives as its own provider page,
-  its channels fold into the genre pages, and the **duplicate remover**
-  folds the same channel automatically however it's spelled ("Danger TV" /
-  "DangerTV", "Estrella TV" / "EstrellaTV") — the panel even shows how
-  many it's hiding, and regional feeds (US vs UK) stay side by side. No
-  accounts, no costs, no DRM — just free ad-supported TV.
+- **The store TV** — play any case right in the world; albums get a spectrum visualizer; the idle screen is admin-settable (standby card, pinned item, video URL, or projector white).
+- **The TV Guide** (**G** in the theater) — numbered channels with logos, **NOW & NEXT** program data where providers publish schedules, a time bar up to eight hours ahead (**T**), genre pages, a provider row, ☆ favorites, instant search (**/**), duplicates removed automatically, 60fps virtualized even at 1,400+ channels. In full screen it **docks beside the movie** — flip channels like a second monitor. Stock it from the free directory or one-click packs: **Pluto TV, Samsung TV Plus, Tubi, The Roku Channel, Plex Free**, whole countries, or any `.m3u` URL.
+- **Jukebox + DJ booth** — two devices, each with a full deck (the booth's **PRO rig**: two decks, per-deck EQ/trim/tempo/key-lock, hot cues, beat-snapped loops, BPM + Camelot key detection, session save/load). The whole dance hall answers the music — floor, beams, LED walls.
+- **The sound engine** — Google's **Resonance Audio** Ambisonic rendering, bass management at ~100 Hz, cinema voicing, protection limiters, gliding volume; every room gain-staged to the same reference (`docs/AUDIO.md`, `docs/SURROUND.md`).
 
-<p align="center">
-  <img src="docs/whats-new/tv-guide.png" alt="The TV Guide — numbered live channels in category pages, ● LIVE" width="430">
-</p>
+## 🧑‍🤝‍🧑 Users & personalization
 
-- **The theater** — bring a movie (or send it from any case's detail card)
-  and it plays on the big screen with the same control bar. **Full screen**
-  promotes the movie itself to native resolution; **G** docks the Guide
-  beside it and channel flips keep the big screen big. The sloped floor
-  means every seat sees over the one in front.
-- **The jukebox** (store) and **the DJ booth** (dance hall) — two separate
-  devices, each running the same **DJ deck** (queue, crossfades,
-  bass/mid/treble EQ, tempo, shuffle/repeat) on its **own audio channel**,
-  so they can play two different tracks at the same time. The jukebox plays
-  for the **movie store room only** (silent in the hallway, theater and wing);
-  the booth stands **back by its library door with a walk-around apron**
-  (theater-chair clearance behind and along both sides) and its set fills the
-  dance hall and the DJ's Library — click the jukebox
-  for its classic deck, or the booth's laptop for the **PRO RIG** — two
-  independent decks (A cyan / B magenta) with real per-deck EQ, trim, tempo,
-  key lock, hot cues, beat-snapped loops, beat jump, BPM + key detection with
-  Camelot numbers, a curveable crossfader with center detent, master + booth
-  monitor volume, searchable playlist, Beginner/Pro modes, keyboard shortcuts
-  and session save/load. Or spin a vinyl from the DJ's Library to feed the
-  booth channel.
+- **No login needed** — every visitor gets an automatic device profile; theme and shelf arrangement persist on that browser.
+- **Optional accounts** carry preferences across devices; **admins** manage sources, the store TV, users, and store-wide policies.
+- **Invite a friend** — a one-time key links their Home Binger to your shelves over the internet, gated to exactly what you shared (`docs/FRIEND-SHARING.md`).
+- **Personalize** — wall/floor/shelf/accent colors, shelf styles (warm wood / brushed metal / midnight laminate), presets, projector-screen look; sort by Recently Added · Library · Genre (with hanging signs) · A–Z · Rating · Year · Type.
 
-<p align="center">
-  <img src="docs/whats-new/jukebox-deck.png" alt="The jukebox's classic DJ deck — queue, fades, EQ, tempo" width="430">
-  <img src="docs/whats-new/dj-pro-rig.png" alt="The booth's PRO rig — two decks, crossfader, BPM + key detection, hot cues" width="430">
-</p> And the whole room answers the music:
-  floor color, beam patterns, LED walls, even the DJ's
-  Library sign ride the set. The moving heads **glide** between poses — an
-  adaptive beat detector learns each track's own kick level (and its BPM),
-  so the rig lands ON the beat instead of near it. **Ten surround speakers** carry it; the **booth
-  subwoofers** aim the bass at the floor. When you walk out, the music stays
-  behind — each channel is gated to its own rooms. Both rooms run **theater-
-  style surround matrices**: stereo buses feed every cabinet by side (a real
-  stereo image), sides and rears are Haas-delayed like a tuned room, and HRTF
-  panning places each cabinet around your head in a headset. In the dance
-  hall all **10 cabinets and the booth subwoofers aim at the floor center**;
-  in the store the jukebox plays a **visible 7.1 set** — center above the TV,
-  fronts/sides/rears on the walls, bass cabinet on the floor — every cabinet
-  aimed at the room.
-- **The sound engine (both rooms + the TV)** — professionally staged end to
-  end: a rumble filter strips infrasonic junk, **bass management** crosses over
-  at ~100 Hz (satellites play clean mids/highs, the subwoofers own the lows),
-  **cinema voicing** adds dialogue presence and air (🎬 Cinema / Flat toggle on
-  every DJ deck; the theater runs it always), EQ boosts get automatic makeup
-  trim so they buy tone instead of clipping, and a console **limiter** sits as
-  the last safety net. Volume changes **glide** — one smoothed gain stage per
-  player, no zipper steps, no resets between tracks.
+## 💻 Will it run on my machine?
 
----
-
-## ⚙️ Environment variables
-
-All optional. They only **seed** first-run values — after that, manage settings
-from the app (they live in `data/config.json`). The old `VB_*` spellings still
-work if you have them set.
-
-| Variable | Default | What it does |
+| | Minimum | Comfortable |
 |---|---|---|
-| `PORT` | `8181` | Port to listen on (8080 is avoided — Steam uses it) |
-| `HOST` | `0.0.0.0` | Bind address — `0.0.0.0` makes it reachable from other machines |
-| `HB_ADMIN_USER` | `BabyBluJ` | First-run admin username |
-| `HB_ADMIN_PASSWORD` | `BluJNetwork` | First-run admin password — change after login! |
-| `HB_DATA_DIR` | `./data` | Where settings/users/caches are stored |
-| `HB_SESSION_SECRET` | auto | Secret for session cookies (auto-generated & persisted) |
-| `HB_SOURCE` | — | First-run media source: `plex` / `jellyfin` |
-| `HB_PLEX_URL` / `HB_PLEX_TOKEN` | — | First-run Plex connection |
-| `HB_JELLYFIN_URL` / `HB_JELLYFIN_API_KEY` | — | First-run Jellyfin connection |
+| **OS** | Windows 10 64-bit | Windows 10/11 64-bit |
+| **CPU** | dual-core, ~2015+ | quad-core+ |
+| **RAM** | 4 GB | 8 GB |
+| **GPU** | any GPU with working drivers (DX11 era) | Intel HD 530+ or dedicated |
+| **Disk** | ~1 GB free | — |
 
-## 🌍 Remote access (outside your home network)
+Node/browser mode: the same table, but the browser carries the graphics — any current Chrome, Edge, or Firefox with WebGL2. Two honest notes: **GPU drivers matter more than GPU power** (broken drivers fall back to software rendering — it works, but the start screen can take 30–60 s), and the heaviest moments are the DJ booth and high-bitrate video. Port **8181** (the exe politely takes 8182+ if it's busy).
 
-The server binds `0.0.0.0`, so everyone on your LAN/VPN can already open
-`http://<your-ip>:8181`. To reach it from anywhere on the internet, put a
-reverse proxy with HTTPS in front of it — never expose the raw port directly,
-since logins travel as plain HTTP otherwise.
+## ⚙️ For self-hosters
 
-**Caddy** (easiest — automatic HTTPS):
-```
-homebinger.example.com {
-    reverse_proxy 127.0.0.1:8181
-}
-```
+- **Environment variables** (first-run seeds only — after that, `data/config.json`): `PORT` · `HOST` · `HB_ADMIN_USER` · `HB_ADMIN_PASSWORD` · `HB_DATA_DIR` · `HB_SESSION_SECRET` · `HB_SOURCE` (`plex`/`jellyfin`) · `HB_PLEX_URL`/`HB_PLEX_TOKEN` · `HB_JELLYFIN_URL`/`HB_JELLYFIN_API_KEY`.
+- **Remote access** — binds `0.0.0.0`, so LAN and VPN just work. For the public internet, put HTTPS in front (Caddy/nginx examples in `docs/REMOTE-ACCESS.md`) and never expose the raw port.
+- **Security** — Plex/Jellyfin tokens never reach the browser (server-side proxy + poster cache), scrypt password hashing, HttpOnly sessions. Still a hobby app: keep it behind HTTPS and change the admin password.
 
-**nginx**:
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name homebinger.example.com;
-    ssl_certificate     /etc/letsencrypt/live/homebinger.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/homebinger.example.com/privkey.pem;
-    location / {
-        proxy_pass http://127.0.0.1:8181;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        # video streaming needs these:
-        proxy_buffering off;
-        proxy_request_buffering off;
-    }
-}
-```
-
-No WebSocket traffic is used, so no special upgrade headers are needed.
-Quick-and-dirty alternative: an encrypted tunnel like Tailscale/WireGuard and
-just browse `http://<tailscale-ip>:8181`.
-
-## 🗂️ Project tour (what every folder/file is for)
+## 🗂️ Project tour
 
 ```
 home-binger/
-├── server/                    the backend (plain Node, zero npm deps)
-│   ├── server.js              entry point — HTTP server + static files
-│   ├── lib/store.js           data/config.json + data/db.json persistence
-│   ├── lib/auth.js            users, passwords (scrypt), sessions, guest profiles
-│   ├── lib/library.js         one catalogue API over every source
-│   ├── lib/proxy.js           poster & video proxying (tokens stay server-side)
-│   └── lib/adapters/          plex.js · jellyfin.js · local.js (file grabber) ·
-│                              archive.js · radio.js · podcasts.js
-├── public/                    the frontend (Three.js, no build step)
-│   ├── index.html             page shell + UI overlays
-│   ├── css/style.css          all UI styling
-│   ├── js/main.js             boot sequence + the DJ queue
-│   ├── js/ui.js               settings panels, modals, sidebar
-│   ├── js/api.js / state.js   backend client + app state
-│   ├── js/store3d/config.js   ⭐ EVERY building dimension & tuning knob
-│   └── js/store3d/…           room · theater · dance hall · shelves · sorting ·
-│                              TV · jukebox audio · controls · exterior
+├── server/                    the backend (plain Node, ZERO npm deps)
+│   ├── server.js              entry point — HTTP + static files
+│   ├── lib/                   auth · store · library · proxy · party · friends
+│   └── lib/adapters/          plex · jellyfin · local · archive · radio · podcasts
+├── public/                    the frontend (three.js, no build step)
+│   ├── index.html · css/      page shell + UI styling
+│   ├── js/main.js · ui.js     boot · panels, modals, sidebar
+│   ├── js/party.js            theater watch-party sync
+│   ├── js/wwremote.js         live screen-share rooms (the anyone link)
+│   ├── watch/                 the browser guest page (self-contained)
+│   └── js/store3d/            rooms · shelves · jukebox · config.js (every knob)
 ├── desktop/main.cjs           the Electron shell — HomeBinger.exe's window
 ├── tools/build-desktop.mjs    builds the Windows exe folder from source
-├── tools/stamp.mjs            cache-buster (npm run stamp)
-├── START-HERE.txt             plain-language startup + store guide
-├── START-WITH-NODE.bat        double-click launcher when you have Node
-├── data/                      created at runtime — settings, users, caches
-├── docs/EDITING.md            guide to customizing the store
-├── docs/AUDIO.md             how audio plays in every room (chains + numbers)
-├── docs/SURROUND.md          the surround-engine research + verdict
-├── docs/CREDITS.md           every third-party component + its license
-├── docs/RELEASE.md           publishing: GitHub + Steam checklists
-├── ROADMAP.md                where the project is + what's next
-├── tests/v35.cjs              the self-check suite (73 checks, headless)
+├── tests/v35.cjs              the self-check suite (193 checks, headless)
+├── docs/                      AUDIO · SURROUND · EDITING · CREDITS · RELEASE · …
 ├── Dockerfile / docker-compose.yml
-└── README.md                  this file
+└── START-HERE.txt             plain-language guide (ships in the zip)
 ```
 
-Want to reshape the building (bigger room, more islands, chunkier cases)?
-Open **`public/js/store3d/config.js`** — every number is labeled and reloads
-with the page. See `docs/EDITING.md` for a guided tour.
-
-## 🔒 Security notes
-
-- Plex/Jellyfin **tokens never reach the browser** — the backend proxies every
-  poster and video request and caches posters on disk.
-- Passwords are hashed with scrypt; sessions are HttpOnly cookies.
-- Still: this is a hobby app exposing your media catalogue. Keep it behind
-  HTTPS, change the admin password, and don't port-forward the raw port.
-
-## ⚖️ License & Trademarks
-
-### Code & Assets License (CC BY-NC-SA 4.0)
-Home Binger is free software for personal, non-commercial use — full legal terms in [LICENSE](LICENSE) (Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International):
-
-- ✅ **Run it freely** at home for family & friends, customize anything you like, and share copies.
-- ❌ **No commercial use:** No selling the software, charging for access, or bundling into paid services.
-- 🔁 **Share-Alike:** Share your builds, modifications, and transforms under the **same license** (CC BY-NC-SA 4.0).
-- 📛 **Attribution:** Retain original credits to BluJ Productions and Home Binger.
-
-**Bundled open-source components** (full inventory with licenses in [`docs/CREDITS.md`](docs/CREDITS.md)):
-- [three.js](https://threejs.org) — 3D rendering (MIT)
-- [Resonance Audio](https://resonance-audio.github.io) (Google) — Ambisonic spatial room rendering (Apache-2.0)
-- [Electron](https://www.electronjs.org) — Windows desktop runtime (MIT)
-- [Node.js](https://nodejs.org) — Server backend (MIT)
-
-Like this and other projects? The door in the store copies the support link. 💛
-
-### 🛡️ Trademark Notice & Policy
-**Home Binger™**, **The CordCut Co-op™**, **TCC™**, the project logos, and **BluJ Productions** are trademarks owned by BluJ Productions.
-
-- **Scope:** The open-source license applies to the software code and assets; it does **not** grant permission to use our project names, logos, or trademarks for third-party products or forks.
-- **Forks & Distributions:** You are free to fork and build upon this code for non-commercial purposes under CC BY-NC-SA 4.0, but public forks and distributions must be **rebranded** under your own unique name and logo. You may not use *Home Binger™* or *The CordCut Co-op™* in a way that implies official endorsement, sponsorship, or affiliation.
-- See [`TRADEMARKS.md`](TRADEMARKS.md) for full trademark usage guidelines.
-
----
+Want a bigger room, more islands, chunkier cases? Open **`public/js/store3d/config.js`** — every number is labeled and reloads with the page (`docs/EDITING.md`).
 
 ## 🩺 Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `'node' is not recognized` | Node isn't installed (or the terminal was open before installing) — install LTS from nodejs.org, then close and reopen the terminal |
-| `Can't reach the server` on load | The backend isn't running — `node server/server.js` |
-| Shelves show placeholders forever | Media server unreachable from *this* machine; check URL/token in Admin → Server, use LAN IP or `host.docker.internal` in Docker |
-| Posters missing for some items | Those items have no artwork in Plex/Jellyfin — placeholders are intentional |
-| TV stays on its idle screen | URL/item mode needs a video the browser can play (mp4/webm, H.264); try a different file |
-| Pointer lock doesn't engage | Click the store once; in embedded previews the app auto-falls back to click-drag looking |
-| Port already in use | Something else uses the port — run `PORT=9090 node server/server.js` (Windows: `set PORT=9090` first, then the command) |
-| Browser shows "Inspectable WebContents" / Steam pages at `localhost:8181`?? | That's **Steam's** debugger on port 8080 — the store defaults to 8181 exactly to avoid it. Double-check you're visiting `http://localhost:8181` (not 8080) |
-| Other devices can't open the store | Windows Firewall prompt on first run must be **Allow**, and use the computer's IP (`ipconfig`), not `localhost` |
-| HomeBinger.exe won't open | SmartScreen may show "Windows protected your PC" on first run → *More info → Run anyway* (the exe is unsigned). Antivirus quarantine is the other usual suspect |
-| Exe started but which port? | It takes 8181, or the next free one if something's already there — other devices should try `http://<pc-ip>:8181` first |
+| `'node' is not recognized` | install the LTS from nodejs.org, then reopen the terminal |
+| Shelves show placeholders forever | media server unreachable from this machine — check URL/token in Admin → Server (in Docker: `host.docker.internal`) |
+| Other devices can't connect | Windows Firewall → **Allow** (Private); use the PC's IP (`ipconfig`), not `localhost` |
+| HomeBinger.exe won't open | SmartScreen → *More info → Run anyway*; antivirus quarantine is the other suspect |
+| Which port? | 8181, or the next free one up — try `http://<pc-ip>:8181` first |
+| Pointer lock won't engage | click the store once (embedded previews fall back to click-drag looking) |
+| Watch-together link won't load | use the **anyone** link (Link 1); Link 2 only works on your own network — and the panel warns you if the guest page isn't published yet |
+| Port already in use | `PORT=9090 node server/server.js` |
 
-Enjoy the store. **Be kind, rewind.** ⏪
+## ⚖️ License & trademarks
+
+**Home Binger is free for personal, non-commercial use** under [CC BY-NC-SA 4.0](LICENSE): run it freely at home, customize anything, share copies — no selling it or charging for access, and shared builds carry the same license with credit to BluJ Productions. Bundled open-source components (three.js, Resonance Audio, Electron, Node.js) are listed with their licenses in [`docs/CREDITS.md`](docs/CREDITS.md).
+
+**Home Binger™, The CordCut Co-op™, TCC™, the logos, and BluJ Productions are trademarks of BluJ Productions.** The license covers code and assets, not the names: forks and distributions must rebrand under their own name and logo. Full policy: [`TRADEMARKS.md`](TRADEMARKS.md).
+
+Like the project? The door inside the store copies the support link. 💛
 
 ---
 
-**The CordCut Co-op™ · TCC™ · Home Binger™**  
-© 2026 BluJ Productions. All rights reserved.  
+**The CordCut Co-op™ · TCC™ · Home Binger™**
+© 2026 BluJ Productions. All rights reserved.
 *Software licensed under CC BY-NC-SA 4.0. Brand names and logos are trademarks of BluJ Productions.*

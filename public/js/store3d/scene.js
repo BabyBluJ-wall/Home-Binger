@@ -8,23 +8,56 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1790983945165';
-import { buildRoom, buildTheater, buildJukebox, buildHelpDesk } from './room.js?v=1790983945165';
-import { buildHall } from './hall.js?v=1790983945165';
-import { buildDance } from './dance.js?v=1790983945165';
-import { buildExterior } from './exterior.js?v=1790983945165';   // the world outside the door
-import { buildSignage } from './signage.js?v=1790983945165';
-import { createDjPro } from './djpro.js?v=1790983945165';
-import { buildTV } from './tv.js?v=1790983945165';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1790983945165';
-import { PosterAtlases } from './atlas.js?v=1790983945165';
-import { createControls } from './controls.js?v=1790983945165';
-import { createJukeAudio } from './jukeaudio.js?v=1790983945165';
+import { LAYOUT, TUNING } from './config.js?v=1791834263993';
+import { buildRoom, buildTheater, buildJukebox, buildHelpDesk } from './room.js?v=1791834263993';
+import { buildHall } from './hall.js?v=1791834263993';
+import { buildDance } from './dance.js?v=1791834263993';   // t170: cache-bump (hall/exterior/gamer touched)
+import { buildGamer } from './gamer.js?v=1791834263993';
+import { buildExterior } from './exterior.js?v=1791834263993';   // the world outside the door
+import { buildSignage } from './signage.js?v=1791834263993';
+import { createDjPro } from './djpro.js?v=1791834263993';
+import { buildTV } from './tv.js?v=1791834263993';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1791834263993';
+import { PosterAtlases } from './atlas.js?v=1791834263993';
+import { createControls } from './controls.js?v=1791834263993';
+import { createJukeAudio } from './jukeaudio.js?v=1791834263993';
 
 export function createScene(container, theme) {
   // ── renderer ──
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // t185 (the owner's ask: "the most fps in app as possible"): the render
+  // resolution is a dial, not a fixed max. Quality caps the device ratio at
+  // 1.5 (was 2 — a 44% pixel cut on retina with no visible loss at couch
+  // distance); Balanced renders at 1×; Performance at 0.75× for 4K panels
+  // and modest GPUs. Set in Settings → Look, persisted, applied live.
+  const GFX = { quality: () => Math.min(window.devicePixelRatio, 1.5), balanced: () => 1, perf: () => 0.75 };
+  // t192: AUTO — the governor watches REAL frame times and steps the render
+  // resolution so smaller machines stay smooth (the owner's ask). One step
+  // down when the rolling average sags past 24 ms, one step back up after
+  // three consecutive fast windows; a decision every 90 frames and a
+  // 5-decision cooldown stop it oscillating. Decisions run on FRAME COUNTS,
+  // never wall-clock — deterministic, and tab-switch pauses (>400 ms) don't
+  // count. Manual modes still win: Auto is just the new default.
+  const AUTO_STEPS = ['quality', 'balanced', 'perf'];
+  const gov = { buf: [], frames: 0, nextDecide: 90, cool: 0, step: 0, fastStreak: 0, avgMs: 0 };
+  GFX.auto = () => GFX[AUTO_STEPS[gov.step]]();
+  function gfxTick(ms) {
+    if (!ms || ms > 400 || ms < 1) return;         // pauses/junk don't count
+    gov.buf.push(ms); if (gov.buf.length > 90) gov.buf.shift();
+    gov.frames++;
+    if (gov.frames < gov.nextDecide) return;
+    gov.nextDecide = gov.frames + 90;              // one decision per 90 frames
+    if (gov.cool > 0) { gov.cool--; return; }
+    const avg = gov.buf.reduce((a, b) => a + b, 0) / gov.buf.length;
+    gov.avgMs = +avg.toFixed(1);
+    if (avg > 24 && gov.step < 2) { gov.step++; gov.cool = 5; applyGfx(); }
+    else if (avg < 14.5 && gov.step > 0) {
+      if (++gov.fastStreak >= 3) { gov.step--; gov.fastStreak = 0; gov.cool = 5; applyGfx(); }
+    } else gov.fastStreak = 0;
+  }
+  const gfxMode = () => ['quality', 'balanced', 'perf', 'auto'].includes(localStorage.getItem('vb_gfx')) ? localStorage.getItem('vb_gfx') : 'auto';
+  const applyGfx = () => { const m = gfxMode(); renderer.setPixelRatio(m === 'auto' ? GFX.auto() : GFX[m]()); };
+  applyGfx();
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.3;
@@ -51,6 +84,8 @@ export function createScene(container, theme) {
   scene.add(hall.group);
   const dance = buildDance(theme);        // t47: dance hall + DJ's library (right side)
   scene.add(dance.group);
+  const gamer = buildGamer(theme);        // t170: the gamer den (left of the store, off the extended hall)
+  scene.add(gamer.group);
   // the entry-door assembly (frame, glass, push bars, OPEN sign, big logo) —
   // clicking it copies the SUPPORT link (main.js wires onPortalClick)
   // The front door is (for now) decorative — no links, no exit. It may become
@@ -91,7 +126,8 @@ export function createScene(container, theme) {
   };
 
   const faces = computeFaces();
-  const colliders = [...shelfColliders(faces), ...theater.colliders, ...jukebox.colliders, ...helpdesk.colliders, ...dance.colliders];   // t51: DJ booth blocks feet · t155 the help-desk desk
+  let lastDancePrefs = {};                                   // t186: merged into steady-light switches
+  const colliders = [...shelfColliders(faces), ...theater.colliders, ...jukebox.colliders, ...helpdesk.colliders, ...dance.colliders, ...gamer.colliders];   // t51: DJ booth blocks feet · t155 the help-desk desk · t170 the battle station
   const controls = createControls(camera, renderer.domElement, colliders);
   controls.reset();
   let currentTheme = { ...theme };   // kept in sync so rebuilds use fresh colors
@@ -153,6 +189,30 @@ export function createScene(container, theme) {
   vhsOverlay.position.set(0, LAYOUT.theater.screen.cy, tv.focusPoint.z + 0.06);
   scene.add(vhsOverlay);
 
+  // ── t186: the WATCH PARTY marquee — a small "🎬 NOW HOSTING" sign above
+  //    the theater screen, visible only while a party is live. tv.js stays
+  //    untouched; this is scene-side dressing like the VHS overlay. ──
+  const partyCv = document.createElement('canvas'); partyCv.width = 1024; partyCv.height = 128;
+  const partyTex = new THREE.CanvasTexture(partyCv);
+  const partySign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 0.94),
+    new THREE.MeshBasicMaterial({ map: partyTex, transparent: true, depthWrite: false }));
+  partySign.name = 'partySign';                      // t186 tests/debug: the marquee handle
+  partySign.position.set(0, LAYOUT.theater.screen.cy + LAYOUT.theater.screen.w * 9 / 32 + 0.85, tv.focusPoint.z + 0.06);
+  partySign.visible = false;
+  scene.add(partySign);
+  function paintPartySign(text) {
+    const g = partyCv.getContext('2d');
+    g.clearRect(0, 0, 1024, 128);
+    if (text) {
+      g.fillStyle = '#12060e'; g.beginPath(); g.roundRect(6, 8, 1012, 112, 26); g.fill();
+      g.strokeStyle = '#ff5c9e'; g.lineWidth = 4; g.stroke();
+      g.fillStyle = '#ffd9ea'; g.font = '700 44px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(text.length > 58 ? text.slice(0, 57) + '…' : text, 512, 66);
+    }
+    partyTex.needsUpdate = true;
+    partySign.visible = !!text;
+  }
+
   // ── EJECT: when playback ends/stops, the case sticks out of the deck
   //    like a tape that's been spat out. Click it to pick it back up. ──
   function showEject() {
@@ -202,9 +262,10 @@ export function createScene(container, theme) {
   // and again on click so a fast turn+click still lands on the right case.
   function inStoreRoom() {              // t51: store wing only (not dance/library/theater)
     const p = controls.state.pos;
-    return !(p.z < -6.35 && Math.abs(p.x) < 5.6) && !(p.x > 6.2 && p.z < 9.2);
+    return !(p.z < -6.35 && Math.abs(p.x) < 5.6) && !(p.x > 6.2 && p.z < 9.2)
+      && !(p.x < -6.3 && p.z > 0.6 && p.z < 9.2);   // t170: not the gamer den / hall wing either
   }
-  function doPick() {
+  function doPick(wallD) {
     if (!shelf) return null;
     if (!inStoreRoom()) return null;     // t51: no cross-room shelf selection
     controls.syncCamera();               // aim from the player's TRUE pose
@@ -214,10 +275,7 @@ export function createScene(container, theme) {
     // t52: walls are SOLID to the cursor too — no grabbing store cases through
     // the theater wall (or any wall): if a wall sits closer than the case,
     // the case can't be reached from here
-    const wallD = Math.min(
-      raycaster.intersectObjects(theater.occluders || [], true)[0]?.distance ?? Infinity,
-      raycaster.intersectObjects(hall.occluders || [], true)[0]?.distance ?? Infinity,
-      raycaster.intersectObjects(dance.occluders || [], true)[0]?.distance ?? Infinity);
+    if (wallD == null) wallD = wallDistance();
     return hits[0].distance < wallD ? shelf.pickAt(hits[0]) : null;
   }
 
@@ -243,7 +301,13 @@ export function createScene(container, theme) {
   // or door? (the help-desk PC's live screen shows its chat only when the
   // monitor is actually VISIBLE — never ghosting through the theater wall)
   const _sightV = new THREE.Vector3();
-  function sightBlocked(to) {
+  // t192: the occlusion test is the loop's heaviest CPU item — the TV and
+  // the help-desk PC each fire it EVERY FRAME while playing, and each call
+  // raycasts four full rooms recursively. The answer only matters at
+  // show/hide granularity, so it's cached per target for 100 ms: ~10 Hz
+  // instead of 60-144 Hz, identical behavior a frame late at worst.
+  const _sightCache = new Map();
+  function sightBlockedRaw(to) {
     _sightV.copy(to).sub(camera.position);
     const d = _sightV.length();
     if (d < 0.01) return false;
@@ -252,17 +316,36 @@ export function createScene(container, theme) {
     raycaster.far = d - 0.01;        // only BETWEEN the eye and the target — walls behind it don't count
     const hit = !!(raycaster.intersectObjects(theater.occluders || [], true)[0]
       || raycaster.intersectObjects(hall.occluders || [], true)[0]
-      || raycaster.intersectObjects(dance.occluders || [], true)[0]);
+      || raycaster.intersectObjects(dance.occluders || [], true)[0]
+      || raycaster.intersectObjects(gamer.occluders || [], true)[0]);
     raycaster.far = prevFar;
     return hit;
   }
-  function pickSpecial() {
-    controls.syncCamera();
-    raycaster.setFromCamera(controls.ray, camera);
-    const wallD = Math.min(
+  function sightBlocked(to) {
+    const key = `${Math.round(to.x * 50)},${Math.round(to.y * 50)},${Math.round(to.z * 50)}`;
+    const now = performance.now();
+    const c = _sightCache.get(key);
+    if (c && now - c.t < 100) return c.v;
+    if (_sightCache.size > 32) _sightCache.clear();
+    const v = sightBlockedRaw(to);
+    _sightCache.set(key, { t: now, v });
+    return v;
+  }
+  // t188: nearest wall/door hit along the CURRENT aim ray, across all four
+  // rooms — the shared occlusion answer for hover + click picking. (Was
+  // computed TWICE per hover tick — pickSpecial and doPick each raycast all
+  // four rooms' full occluder sets; now once per tick, ~half the raycasts.)
+  function wallDistance() {
+    return Math.min(
       raycaster.intersectObjects(theater.occluders || [], true)[0]?.distance ?? Infinity,
       raycaster.intersectObjects(hall.occluders || [], true)[0]?.distance ?? Infinity,
-      raycaster.intersectObjects(dance.occluders || [], true)[0]?.distance ?? Infinity);
+      raycaster.intersectObjects(dance.occluders || [], true)[0]?.distance ?? Infinity,
+      raycaster.intersectObjects(gamer.occluders || [], true)[0]?.distance ?? Infinity);
+  }
+  function pickSpecial(wallD) {
+    controls.syncCamera();
+    raycaster.setFromCamera(controls.ray, camera);
+    if (wallD == null) wallD = wallDistance();
     const inTheater = controls.state.pos.z < -6.5 && controls.state.pos.x < 5.6;
     // deck vs return-chute: the NEAREST hit wins (a ray at the chute also
     // grazes the pedestal behind it — that must answer 'bin', not 'deck')
@@ -279,20 +362,35 @@ export function createScene(container, theme) {
       if (o) { lastRecord = o.userData.item; return 'record'; }
     }
     if (raycaster.intersectObjects(hall.streetTargets || [], false)[0]?.distance < wallD) return 'streetdoor';
+    // t172: the den's monitors are CLICKABLE — the hit's mesh says which one
+    const gmHit = raycaster.intersectObjects(gamer.monitorTargets || [], false)[0];
+    if (gmHit && gmHit.distance < wallD) return gmHit.object.userData?.monitorKind || null;
     return null;
   }
 
   let portalHovered = false, specialHovered = null;
+  // t188 (the owner's den-stutter report): a STILL aim reuses the last pick —
+  // standing still costs ZERO raycasts (a fresh pick runs at least every
+  // 500 ms regardless, so tips never go stale)
+  const lastAim = { x: NaN, z: NaN, yaw: NaN, pitch: NaN, t: 0 };
   function pickHover(now) {
     if (now - lastRay < 90) return;
     lastRay = now;
+    const st = controls.state;
+    if (now - lastAim.t < 500 && Math.abs(st.pos.x - lastAim.x) < 0.01
+      && Math.abs(st.pos.z - lastAim.z) < 0.01 && Math.abs(st.yaw - lastAim.yaw) < 0.002
+      && Math.abs(st.pitch - lastAim.pitch) < 0.002) return;
+    lastAim.x = st.pos.x; lastAim.z = st.pos.z; lastAim.yaw = st.yaw; lastAim.pitch = st.pitch; lastAim.t = now;
     if (pickPortal()) {          // aiming at the door → support-link tooltip
       if (hoveredPlacement) { hoveredPlacement = null; highlight.visible = false; }
       if (!portalHovered) { portalHovered = true; api.onHover?.(PORTAL_TIP); }
       return;
     }
     if (portalHovered) { portalHovered = false; api.onHover?.(null); }
-    const sp = pickSpecial();
+    controls.syncCamera();                       // one aim per tick — shared below
+    raycaster.setFromCamera(controls.ray, camera);
+    const wallD = wallDistance();
+    const sp = pickSpecial(wallD);
     if (sp) {
       if (hoveredPlacement) { hoveredPlacement = null; highlight.visible = false; }
       const tip = sp === 'deck'
@@ -302,13 +400,16 @@ export function createScene(container, theme) {
           : sp === 'djbooth' ? null   // t121: the booth is quiet on hover too — overlay removed (owner request; same treatment as the jukebox, t85). Click still opens it.
           : sp === 'record' ? { title: `💿 Spin “${(lastRecord?.title || 'that record').slice(0, 30)}”`, sub: 'plays on the jukebox' }
           : sp === 'helpdesk' ? PC_TIP   // t155: the PC is NEW — it gets a tip until everyone knows it's there
+          : sp === 'gamemusic' ? { title: '🎵 Music monitor — YouTube', sub: 'click to browse & play' }   // t172 · t190: the old search-feature name is gone
+          : sp === 'gamesteam' ? { title: '🎮 Steam — game libraries', sub: 'yours + shared' }            // t172
+          : sp === 'gamerdiscord' ? { title: '💬 Discord — the whole gang', sub: 'project server · your DMs · one click' }   // t173
           : sp === 'streetdoor' ? { title: '🧟 Zombie warning, Stay and party', sub: 'the party is inside' }   // t52 — the street door only
           : null;   // t85: the jukebox is quiet on purpose — hover overlay removed (owner request)
       if (specialHovered !== sp) { specialHovered = sp; api.onHover?.(tip); }
       return;
     }
     if (specialHovered) { specialHovered = null; api.onHover?.(null); }
-    const pl = doPick();
+    const pl = doPick(wallD);
     if (pl !== hoveredPlacement) {
       hoveredPlacement = pl;
       if (pl) {
@@ -326,20 +427,26 @@ export function createScene(container, theme) {
   let raf = 0;
   let tvClose = false;                     // hysteresis so the panel doesn't flicker
   const tvFocus = tv.focusPoint || new THREE.Vector3();
+  let lastLoopAt = 0;
   function loop() {
     raf = requestAnimationFrame(loop);
+    const tNow = performance.now();
+    const realMs = lastLoopAt ? (tNow - lastLoopAt) : 16.7;   // t192: the AUTO governor's feed (true frame time)
+    lastLoopAt = tNow;
     // t83: full-screen overlays (front desk, settings) own the CPU — on phones,
     // typing into the account form ran at ~2 fps with the scene rendering behind it.
     if (document.hidden || document.body.classList.contains('overlay-open')) return;
+    gfxTick(realMs);
     const dt = Math.min(clock.getDelta(), 0.05);
     controls.update(dt);
-    tv.update(dt, camera);
+    tv.update(dt, camera, sightBlocked);          // t173: YouTube-on-screen needs the occlusion test
     theater.update(dt, controls.state.pos);
     hall.update(dt, controls.state.pos);              // t47: sliding doors
     const proLv = djPro.getLevels();   // t64: the pro rig drives the floor when it's playing
     dance.update(dt, danceLevelsOverride ?? (proLv.live ? proLv : djAudio.getLevels?.()));   // t52+t54+t64
     jukebox.update?.(dt);
     helpdesk.update?.(dt, camera, controls.state.pos, sightBlocked);   // t160: the PC's live screen needs the camera
+    gamer.update?.(dt, camera, controls.state.pos, sightBlocked);       // t170: the den's RGB clock + Discord monitor
     jukeAudio.update(camera);
     djPro.update(camera);   // t64: pro rig — wing gate, listener, loops, BPM
     if ((hudTick = (hudTick + 1) % 3) === 0) {         // t108: booth laptop = live monitor · t111: ~20fps is plenty (text + VU), and the queue rides along
@@ -376,7 +483,7 @@ export function createScene(container, theme) {
   window.addEventListener('resize', () => {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    applyGfx(); renderer.setSize(container.clientWidth, container.clientHeight);
   });
 
   // ── public API ──
@@ -387,6 +494,7 @@ export function createScene(container, theme) {
     onDeckClick: null,       // clicked the theater deck (payload: carried | null)
     onJukeboxClick: null,    // clicked the jukebox
     onHelpDeskClick: null,   // t155: clicked the help-desk PC
+    onGamerMonitorClick: null,   // t172/t173: clicked a den monitor ('gamerdiscord'|'gamemusic'|'gamesteam')
     onBinClick: null,        // clicked the return bin (payload: carried | null)
     onCarryChange: null,     // picked up / put back a case
     controls, tv, camera,
@@ -500,7 +608,12 @@ export function createScene(container, theme) {
         danceSats: dance.speakerWorld.sats, danceSubs: dance.speakerWorld.subs };   // t60: ear-level check
     },
     danceFakeLevels: (v) => { danceLevelsOverride = v; },   // t54 tests: drive the rig
-    setDancePrefs: (p) => dance.setPrefs?.(p),              // t86: adjustable light engine
+    setDancePrefs: (p) => { lastDancePrefs = p || {}; dance.setPrefs?.(p); },   // t86: adjustable light engine
+    setSteadyLights: (on) => {                               // t186: photosensitive comfort — den + dance floor
+      gamer.setSteadyLights?.(on);
+      dance.setPrefs?.({ ...lastDancePrefs, steady: !!on }); // merge: don't clobber movement/speed
+    },
+    setPartySign: (text) => paintPartySign(text || ''),     // t186: "🎬 NOW HOSTING" above the screen
     setControlPrefs: (p) => controls.setPrefs?.(p),         // t161: look sensitivity + speed tier
     refreshPosters: (items) => {                            // t89: grabber thumbs arriving late
       for (const it of items || []) atlases.refreshPoster(it);
@@ -554,6 +667,7 @@ export function createScene(container, theme) {
       shelf?.applyTheme(t);
       hall.applyTheme?.(t);            // t119: the entry hall re-themes (was build-time only)
       dance.applyTheme?.(t);           // t119: the dance hall + DJ booth area re-theme (walls were hardcoded)
+    gamer.applyTheme?.(t);           // t170: the den follows (desk surface + accents)
       highlight.material.color.set(t.accent);
       fogColor.copy(new THREE.Color(t.wall).multiplyScalar(0.55));
       scene.background = fogColor.clone();
@@ -575,10 +689,38 @@ export function createScene(container, theme) {
     }),
     djPro,   // t64: the booth pro rig (mount/getLevels/info)
     debugStep: (dx, dz) => controls.debugStep(dx, dz),   // t48: walk one REAL step (collision path)
+    setGfx: (mode) => { if (GFX[mode]) { try { localStorage.setItem('vb_gfx', mode); } catch {} applyGfx(); } return renderer.getPixelRatio(); },   // t185: the fps dial
+    gfxState: () => ({ mode: gfxMode(), autoStep: AUTO_STEPS[gov.step], avgMs: gov.avgMs, pixelRatio: renderer.getPixelRatio(), devicePixelRatio: window.devicePixelRatio }),
+    debugGfxFrames: (arr) => { for (const ms of arr) gfxTick(ms); return { step: AUTO_STEPS[gov.step], ratio: renderer.getPixelRatio() }; },   // t192 tests: feed the governor synthetic frame times
     resetToSpawn() { controls.reset(); controls.syncCamera(); },   // t52: anti-stuck — back to the load-in point
     debugPickSpecial: () => pickSpecial(),     // tests: what would the crosshair hit?
+    debugHoverTick: () => { lastRay = 0; pickHover(performance.now()); },   // t190 tests: one deterministic hover pass (fires the onHover tips)
     debugWorldChat: () => helpdesk.debugWorldChat?.(),   // t160 tests: the PC's live-screen state
     debugWorldChatTick: () => { controls.syncCamera(); helpdesk.update(0.016, camera, controls.state.pos, sightBlocked); },   // t160 tests: one deterministic world-screen evaluation (syncs the camera itself — rAF timing isn't guaranteed in the rig)
+  debugRay: (nx, ny) => {           // t170 tests: what does the camera see at this NDC point?
+    controls.syncCamera();
+    raycaster.setFromCamera({ x: nx, y: ny }, camera);
+    const prevFar = raycaster.far; raycaster.far = 80;
+    const hits = raycaster.intersectObjects(scene.children, true).slice(0, 4);
+    raycaster.far = prevFar;
+    return hits.map(h => ({ d: +h.distance.toFixed(2), p: [+h.point.x.toFixed(2), +h.point.y.toFixed(2), +h.point.z.toFixed(2)],
+      mat: h.object.material?.color ? '#' + h.object.material.color.getHexString() : String(h.object.material).slice(0, 30),
+      pos: [+h.object.position.x.toFixed(2), +h.object.position.y.toFixed(2), +h.object.position.z.toFixed(2)] }));
+  },
+  debugCam: () => ({ p: [+camera.position.x.toFixed(3), +camera.position.y.toFixed(3), +camera.position.z.toFixed(3)],
+    q: camera.quaternion.toArray().map(n => +n.toFixed(3)), fov: camera.fov, near: camera.near, far: camera.far,
+    layers: camera.layers.mask }),   // t170 tests: the TRUE render camera
+  debugProject: (x, y, z) => { controls.syncCamera(); const v = new THREE.Vector3(x, y, z).project(camera); return [v.x, v.y, v.z]; },   // t170 tests: world → NDC (pixel probes)
+  gamerInfo: () => gamer.debugGamer(),                 // t170 tests: the den's live state (gates/matrix/spin/hue)
+  debugGamerTick: () => { controls.syncCamera(); gamer.update(0.016, camera, controls.state.pos, sightBlocked); },   // t170 tests: one deterministic evaluation of the den's screens
+  playOnMusicMonitor: (id, title) => gamer.playMusic(id, title),   // t180: the pick opens the media panel (t182: YouTube only)
+  stopMusicMonitor: () => gamer.stopMusic(),
+  noteMusicNow: (id, title) => gamer.noteMusicNow(id, title),   // t194: the embed lane reports what's on — no panel (re)open
+  gamerSetVolume: (v) => gamer.gamerSetVolume?.(v),       // t178: the den's 2.1 zone — the remote's slider
+  gamerToggle: () => gamer.gamerToggle?.(),               // t178: the remote's ⏯ in the den
+  gamerStats: () => gamer.gamerStats?.(),                 // t178: what's on in the den
+  gamerAudioInfo: () => gamer.gamerAudioInfo?.(),         // t178 tests: the 2.1 zone's live state
+  setGamerPreviews: (v) => gamer.setPreviews?.(v),         // t173: ui.js pushes live preview facts
     debugControlInfo: () => controls.debugControlInfo?.(),  // t161 tests: live movement settings
     debugLockInfo: () => controls.debugLockInfo?.(),        // t163 tests: mouse-lock state + menu-release check
     debugLockTick: () => controls.debugLockTick?.(),
@@ -598,6 +740,7 @@ export function createScene(container, theme) {
       if (sp === 'djbooth') { api.onDjClick?.(); return; }              // t47: laptop → DJ menu
       if (sp === 'record') { api.onRecordClick?.(lastRecord || null); return; }   // spin a vinyl
       if (sp === 'streetdoor') { api.onStreetDoorClick?.(); return; }   // locked — toast
+      if (sp === 'gamerdiscord' || sp === 'gamemusic' || sp === 'gamesteam') { api.onGamerMonitorClick?.(sp); return; }   // t172/t173 · t193: the VIZ screen is gone
       const pl = hoveredPlacement || doPick();
       if (pl) api.onClick?.(pl.item);
     },

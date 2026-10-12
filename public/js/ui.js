@@ -7,11 +7,15 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1790983945165';
-import { createCaseView } from './store3d/caseview.js?v=1790983945165';   // the 3D case in the item modal
-import { state } from './state.js?v=1790983945165';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1790983945165';
-import { placeholderDataUrl } from './store3d/textures.js?v=1790983945165';
+import { api } from './api.js?v=1791834263993';
+import { party } from './party.js?v=1791834263993';   // t186: the watch party ("watch with me")
+import { remote as rmt, parseRemoteCode } from './wwremote.js?v=1791834263993';   // t193: remote watch rooms — P2P over public signaling (aliased: the TV remote owns 'remote' below)
+window.__HBparty = party;                             // tests/debug: the party engine handle
+window.__HBremote = rmt;                              // t193: same, for the remote engine
+import { createCaseView } from './store3d/caseview.js?v=1791834263993';   // the 3D case in the item modal
+import { state } from './state.js?v=1791834263993';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1791834263993';
+import { placeholderDataUrl } from './store3d/textures.js?v=1791834263993';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -72,7 +76,11 @@ export function initUI(ctx) {
     $('#sidebar-backdrop').classList.add('hidden');
     $('#sidebar').classList.add('hidden');
   };
-  $('#btn-menu').onclick = openSidebar;
+  $('#btn-menu').onclick = () => {                                  // t186: toggles — ☰ closes an open sidebar too
+    const sb = document.getElementById('sidebar');
+    if (sb && !sb.classList.contains('hidden')) closeSidebar();
+    else openSidebar();
+  };
   $('#btn-sidebar-close').onclick = closeSidebar;
   $('#sidebar-backdrop').onclick = closeSidebar;
 
@@ -107,14 +115,14 @@ export function initUI(ctx) {
 
   // ── settings shell ──
   const TITLES = {
-    look: 'My Theme', shelves: 'My Shelves', profile: 'My Profile',
+    look: 'My Theme', shelves: 'My Shelves', profile: 'My Profile', conn: 'My Connections',
     admin: 'Admin'
   };
   function openSettings(tab) {
     $('#settings-title').textContent = TITLES[tab] || 'Settings';
     $('#settings-body').innerHTML = '';
     ({
-      look: panelLook, shelves: panelShelves, profile: panelProfile,
+      look: panelLook, shelves: panelShelves, profile: panelProfile, conn: panelConn,
       admin: panelAdmin
     }[tab] || panelLook)($('#settings-body'));
     $('#settings').classList.remove('hidden');
@@ -162,7 +170,24 @@ export function initUI(ctx) {
       </div>
       <div class="hint" style="margin:-6px 0 14px">What the screen shows while music, podcasts or radio play — it always wears your theme accent.</div>
 
-      <div class="hint" style="margin:-6px 0 10px">🎵 The dance-floor light controls now live in the <b>DJ booth</b> — open the laptop at the booth in the dance hall.</div>
+      <div class="section-title">Graphics</div>
+      <div class="radio-cards">
+        ${[['auto',     '🤖 Auto',      'matches your machine — recommended'],
+           ['quality',  '✨ Quality',   'sharpest — capped 1.5× pixels'],
+           ['balanced', '⚖️ Balanced', 'renders 1:1 — the sweet spot'],
+           ['perf',     '⚡ Performance', 'lower res, highest fps']]
+          .map(([id, label, sub]) => `
+          <button class="radio-card gfx-card" data-gfx="${id}">${label}<small>${sub}</small></button>`).join('')}
+      </div>
+      <div class="hint" style="margin:-6px 0 14px">Render resolution — Auto watches your frame rate and steps it to keep things smooth; lower it yourself if you'd rather pin it. Applies instantly, remembered per device.</div>
+
+      <div class="section-title">Steady lights</div>
+      <div class="toggle-row">
+        <div><div class="t-label">🕯️ Photosensitive comfort</div>
+        <div class="t-sub">calms every flashing effect — the game room's RGB and the dance floor pulse softly instead of strobing with the music</div></div>
+        <label class="switch"><input type="checkbox" id="a11y-steady" ${((state.prefs.a11y || {}).steady) ? 'checked' : ''}><span class="track"></span></label>
+      </div>
+      <div class="hint" style="margin:-4px 0 14px">For anyone with epilepsy or light sensitivity — the lights stay lit but drift slowly, and beat-driven flashes never fire. Saved to your profile.</div>
 
       <div class="section-title">My TV idle screen</div>
       <div class="radio-cards">
@@ -183,9 +208,22 @@ export function initUI(ctx) {
         </select>
         <div class="hint">Yours only — everyone else's store TV keeps their own idle screen.</div>
       </div>
-      ${state.isAdmin() ? `
-      <div class="hint" style="margin:14px 0 0">🛠️ The <b>store TV's defaults</b> (idle screen for everyone, power, pinned title) now live in <b>Admin → 📺 Store TV</b>.</div>` : ''}
     `;
+    const steadyEl = root.querySelector('#a11y-steady');
+    if (steadyEl) steadyEl.onchange = async () => {
+      ctx.setSteadyLights?.(steadyEl.checked);                    // instant — the room calms right away
+      try { await state.updatePrefs({ a11y: { steady: steadyEl.checked } }); toast(steadyEl.checked ? 'Steady lights on — everything drifts calmly' : 'Steady lights off'); }
+      catch { toast('Could not save the setting', true); }
+    };
+    root.querySelectorAll('.gfx-card').forEach(b => b.onclick = () => {
+      const r = ctx.setGfx?.(b.dataset.gfx);
+      root.querySelectorAll('.gfx-card').forEach(x => x.classList.toggle('active', x.dataset.gfx === b.dataset.gfx));
+      toast(r ? `Graphics: ${b.dataset.gfx === 'auto' ? 'Auto' : b.dataset.gfx === 'quality' ? 'Quality' : b.dataset.gfx === 'balanced' ? 'Balanced' : 'Performance'} (${r.toFixed(2)}×)` : 'Graphics saved');
+    });
+    try {
+      const cur = localStorage.getItem('vb_gfx') || 'auto';
+      root.querySelectorAll('.gfx-card').forEach(x => x.classList.toggle('active', x.dataset.gfx === cur));
+    } catch {}
     const bindColor = (key, input) => {
       input.oninput = () => {
         if (state.boot.locks.theme) return;
@@ -493,6 +531,88 @@ export function initUI(ctx) {
     root.querySelectorAll('.mv-speed').forEach(b => b.classList.toggle('on', b.dataset.tier === cur));
   }
 
+  // ═══════════════ MY CONNECTIONS (t171) — the user's OWN keys ═══════════════
+  // The store owner's accounts are never involved. Each user who wants their
+  // own Steam library pastes their key here; it lives in their account on
+  // THIS server and is only used for them.
+  async function panelConn(root) {
+    root.innerHTML = `<div class="hint">…</div>`;
+    const me = state.boot?.me;                       // same source as every other panel
+    if (!me || me.isGuest) {
+      root.innerHTML = `
+        <div class="section-title">Your own Steam</div>
+        <div class="hint" style="margin:6px 0 10px">Sign in to link <b>your own</b> Steam library — it runs on
+        your key, not the store owner's.</div>
+        <button class="btn accent" id="conn-signin">Sign in / create an account</button>`;
+      root.querySelector('#conn-signin')?.addEventListener('click', () => { openSettings('profile'); });
+      return;
+    }
+    let conn = { steam: { set: false, id: '', share: false } };
+    let srv = { steam: false };            // t175: does the ADMIN's server key already cover Steam
+    try { const r = await api.myConnections(); conn = r.connections || conn; srv = r.server || srv; } catch {}
+    const stLinked = !!(conn.steam?.set || (srv.steam && conn.steam?.id));   // t175: the server key counts
+    const esc2 = esc;
+    root.innerHTML = `
+      <div class="hint" style="margin:0 0 12px">This is <b>your own</b> key — the store owner's accounts are
+      never used for this. It's saved to your account on this Home Binger server and only used for you.</div>
+
+      <div class="section-title">🎮 Steam — your game library on the network</div>
+      <div class="conn-box" style="border:1px solid var(--vb-line,#2a3354);border-radius:12px;padding:12px 14px;margin:8px 0 14px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="st-key" type="password" placeholder="${srv.steam ? 'Steam Web API key — optional (this server covers you)' : 'Steam Web API key'}" style="flex:1;min-width:180px" autocomplete="off">
+          <input id="st-id" placeholder="SteamID64 (17 digits)" style="width:190px" value="${esc2(conn.steam.id || '')}">
+          <button class="btn accent" id="st-save">Save</button>
+          <button class="btn" id="st-test" title="Ask Steam whether this key works">Test</button>
+          <span class="badge" id="st-state">${stLinked ? '✅ Linked' : 'Not linked'}</span>
+        </div>
+        <div class="hint verdict" id="my-st-out" style="margin:6px 0 0;min-height:16px"></div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13.5px">
+          <input type="checkbox" id="st-share" ${conn.steam.share ? 'checked' : ''}>
+          Let others on this network browse my library (they see games + playtime, nothing else)
+        </label>
+        <div class="hint" style="margin-top:8px">${srv.steam
+          ? '<b>✅ The server\u2019s Steam key is already set up</b> — you only need your SteamID64 below (plus Game details: Public on your Steam profile). The key box is optional.<br>'
+          : ''}Free, about 2 minutes:
+        <ol style="margin:6px 0 0 18px;padding:0">
+          <li>Sign into Steam on the web, then open <a href="https://steamcommunity.com/dev" target="_blank" rel="noopener">steamcommunity.com/dev</a> and agree — your key appears instantly</li>
+          <li>In Steam: Profile → Edit Privacy Settings → set <b>Game details</b> to <b>Public</b></li>
+          <li>Your SteamID64 (17 digits) is on your profile page (near the URL)</li>
+        </ol></div>
+      </div>
+      <div class="hint" id="conn-msg" style="min-height:18px"></div>`;
+
+    const msg = (t, bad) => { const el = root.querySelector('#conn-msg'); if (el) { el.textContent = t; el.style.color = bad ? '#ff8a8a' : '#9fe8b0'; } };
+    const myTest = async (source, keyEl, outEl, name) => {   // t178: test YOUR OWN key, verdict right here
+      const key = root.querySelector(keyEl)?.value.trim() || '';
+      const el = root.querySelector(outEl); if (el) el.textContent = '… testing ' + name;
+      try {
+        const r = await api.connectionsTest({ source, key });
+        if (el) el.innerHTML = (r?.ok ? '✅' : '❌') + ' <b>' + esc(name) + '</b> — ' + esc(r?.ok ? (r.info || 'works') : (r.error || 'did not work'));
+      } catch (e) { if (el) el.textContent = '❌ ' + (e.message || 'failed'); }
+    };
+    root.querySelector('#st-test')?.addEventListener('click', () => myTest('steam', '#st-key', '#my-st-out', 'your Steam key'));
+    root.querySelector('#st-save')?.addEventListener('click', async () => {
+      const key = root.querySelector('#st-key').value.trim();
+      const id = root.querySelector('#st-id').value.trim();
+      const share = root.querySelector('#st-share').checked;
+      const payload = { steam: { share } };
+      if (key) payload.steam.key = key;
+      if (id) payload.steam.id = id;
+      try {
+        const r = await api.saveMyConnections(payload);
+        const st = r.connections.steam;
+        const linked = !!(st.set || (srv.steam && st.id));                       // t175: the server key counts
+        root.querySelector('#st-state').textContent = linked ? '✅ Linked' : 'Not linked';
+        root.querySelector('#st-key').value = '';
+        if (!linked && (key || id)) msg(srv.steam
+          ? 'Almost — your SteamID64 (17 digits) is still needed.'
+          : 'Almost — Steam needs BOTH the key and the 17-digit SteamID64.', true);
+        else msg(linked ? (st.share ? 'Steam library linked and shared with the network.' : 'Steam library linked — sharing is off (only you see it).') : 'Steam connection cleared.');
+        refreshGamerPreviews?.();
+      } catch (e) { msg(e.message || 'Could not save', true); }
+    });
+  }
+
   function panelProfile(root) {
     const me = state.me();
     if (!me?.isGuest) {
@@ -656,7 +776,8 @@ export function initUI(ctx) {
           <button class="btn" id="btn-plex-all">✓ All</button>
           <button class="btn" id="btn-plex-none">✕ None</button>
           <button class="btn" id="btn-test-plex">Test Plex</button>
-        </div>
+        
+        <div class="hint verdict" id="plex-test-out" style="margin:6px 0 0;min-height:16px"></div></div>
         <div class="hint" style="margin-top:8px">Unchecked = not shelved. Nothing checked shelves nothing from Plex.</div>
       </div>
 
@@ -680,9 +801,25 @@ export function initUI(ctx) {
           <button class="btn" id="btn-jf-all">✓ All</button>
           <button class="btn" id="btn-jf-none">✕ None</button>
           <button class="btn" id="btn-test-jf">Test Jellyfin</button>
-        </div>
+        
+        <div class="hint verdict" id="jf-test-out" style="margin:6px 0 0;min-height:16px"></div></div>
         <div class="hint" style="margin-top:8px">Unchecked = not shelved.</div>
       </div>
+
+      <div class="section-title" style="margin-top:16px">🔑 Steam — one setup for the whole server</div>
+      <div class="hint" style="margin:-4px 0 10px">Optional but recommended: paste the Steam key here and
+      <b>everyone on this server gets their Steam libraries</b> — no user ever needs their own key.
+      Each person still links just their SteamID64 for their own library (Menu → My Connections).</div>
+      <div class="row2">
+        <div class="field"><label>Steam Web API key</label>
+          <input type="password" id="srv-st-key" placeholder="The server's Steam key" value="${esc(adminCfg.steam?.key || '')}" autocomplete="off">
+          <button class="btn small" id="btn-test-st" style="margin-top:6px">Test this key</button>
+          <div class="hint verdict" id="st-test-out" style="margin:6px 0 0;min-height:16px"></div></div>
+      </div>
+      <div class="hint" style="margin:6px 0 10px">One real call — the verdict lands right under the key it tested.</div>
+      <div class="hint" style="margin:-8px 0 10px">Free, ~2 minutes: sign into Steam on the web, open
+      <a href="https://steamcommunity.com/dev" target="_blank" rel="noopener">steamcommunity.com/dev</a> and agree —
+      the key appears instantly. Until a key is here, users can still add their own in My Connections.</div>
 
       <div class="section-title" style="margin-top:8px">More libraries — another Plex or Jellyfin</div>
       <div class="hint" style="margin:-4px 0 10px">Two servers in the house (or a friend's)? Connect <b>as many as you like</b> — every extra one stacks on the shelves under its own nickname.</div>
@@ -865,20 +1002,32 @@ export function initUI(ctx) {
     root.querySelector('#btn-plex-none').onclick = () => quickPick('plex', false);
     root.querySelector('#btn-jf-all').onclick = () => quickPick('jellyfin', true);
     root.querySelector('#btn-jf-none').onclick = () => quickPick('jellyfin', false);
+    const testLine = (id) => root.querySelector(id);   // t178: the verdict lands RIGHT UNDER the connection
+    const setVerdict = (el, icon, name, text) => {
+      if (el) el.innerHTML = `${icon} <b>${esc(name)}</b> — ${esc(text)}`;
+    };
     const testService = async (service) => {
       const d = draft();
       const conf = service === 'plex'
         ? { url: d.plex.url, token: d.plex.token }
-        : { url: d.jellyfin.url, apiKey: d.jellyfin.apiKey };
-      if (!conf.url) { out.innerHTML = `❌ Enter the ${service === 'plex' ? 'Plex' : 'Jellyfin'} server URL first.`; return; }
-      out.innerHTML = `Testing ${service === 'plex' ? 'Plex' : 'Jellyfin'}…`;
+        : service === 'jellyfin'
+        ? { url: d.jellyfin.url, apiKey: d.jellyfin.apiKey }
+        : service === 'steam'
+        ? { key: root.querySelector('#srv-st-key')?.value.trim() || '' }
+        : {};
+      const names = { plex: 'Plex', jellyfin: 'Jellyfin', steam: 'the Steam key' };   // t186: YouTube is retired
+      const lines = { plex: '#plex-test-out', jellyfin: '#jf-test-out', steam: '#st-test-out' };
+      const el = testLine(lines[service] || '#test-result');
+      if ((service === 'plex' || service === 'jellyfin') && !conf.url) { setVerdict(el, '❌', names[service], `enter the server URL first.`); return; }
+      setVerdict(el, '…', names[service], 'testing…');
       try {
         const r = await api.adminTest({ source: service, ...conf });
-        out.innerHTML = `✅ <b>${esc(r.name)}</b> — ${esc(r.detail)}`;
-      } catch (err) { out.innerHTML = `❌ ${esc(err.message)}`; }
+        setVerdict(el, r?.ok ? '✅' : '❌', names[service] || service, r?.ok ? (r.info || 'works') : (r.error || 'did not work'));
+      } catch (err2) { setVerdict(el, '❌', names[service] || service, err2.message || 'failed'); }
     };
     root.querySelector('#btn-test-plex').onclick = () => testService('plex');
     root.querySelector('#btn-test-jf').onclick = () => testService('jellyfin');
+    root.querySelector('#btn-test-st').onclick = () => testService('steam');          // t177
     // static free-source lists
     const loadStaticLibs = async (source, boxSel, savedList) => {
       const box = root.querySelector(boxSel);
@@ -1244,6 +1393,7 @@ export function initUI(ctx) {
         sections: [...root.querySelectorAll('#plex-libraries input:checked')].map(c => c.value) },
       jellyfin: { url: root.querySelector('#jf-url').value.trim(), apiKey: root.querySelector('#jf-key').value.trim(),
         sections: [...root.querySelectorAll('#jf-libraries input:checked')].map(c => c.value) },
+      steam: { key: root.querySelector('#srv-st-key')?.value.trim() || '' },      // t175 (t186: YouTube retired — nothing to save)
       archive: { sections: keptSections('#archive-libraries', adminCfg.archive?.sections) },   // t125: wipe-guarded
       radio: { sections: keptSections('#radio-libraries', adminCfg.radio?.sections) },         // t125: wipe-guarded
       iptv: { sections: keptSections('#iptv-libraries', adminCfg.iptv?.sections),              // t125: wipe-guarded
@@ -1554,72 +1704,33 @@ export function initUI(ctx) {
 
   async function panelUsers(root) {
     const render = async () => {
-      const { users } = await api.adminUsers();
+      const [usersRes, connRes] = await Promise.all([api.adminUsers(), api.adminConnections().catch(() => ({ connections: [] }))]);
+      const { users } = usersRes;
+      const connBy = {};
+      for (const c of (connRes.connections || [])) connBy[(c.user || '').toLowerCase()] = c;   // t171: link states, never the keys
       root.innerHTML = `
         <div class="section-title">Accounts</div>
-        ${users.map(u => `
+        ${users.map(u => {
+          const c = connBy[u.username.toLowerCase()] || {};
+          const bits = c.steam?.set ? (c.steam.share ? '🎮 Steam (shared)' : '🎮 Steam') : '';
+          return `
           <div class="user-row">
             <span class="u-name">${esc(u.username)}</span>
             ${u.isAdmin ? '<span class="badge admin">ADMIN</span>' : '<span class="badge">user</span>'}
+            ${bits ? `<span class="badge" style="background:rgba(120,200,140,.15);border-color:rgba(120,200,140,.4)">${esc(bits)}</span>` : ''}
             <button class="btn small" data-rename="${u.id}" data-name="${esc(u.username)}">Rename</button>
             <button class="btn small" data-reset="${u.id}" data-name="${esc(u.username)}">Set password</button>
             <button class="btn small" data-admin="${u.id}" data-name="${esc(u.username)}" data-has="${u.isAdmin ? 1 : 0}">${u.isAdmin ? 'Remove admin' : 'Make admin'}</button>
             ${u.isAdmin ? '' : `<button class="btn small" data-libs="${esc(u.username)}">Libraries</button>`}
             <button class="btn small danger" data-del="${u.id}" data-name="${esc(u.username)}">Delete</button>
-          </div>`).join('')}
+          </div>`;}).join('')}
         <div class="hint" style="margin-top:14px">Accounts are <b>self-serve</b> — visitors create their own at the
         front entrance page (the store owner can allow/block new sign-ups in Admin → Policies).
         You can still reset a forgotten password or remove an account here.</div>
         <div id="invite-card"></div>
         <div class="section-title" style="margin-top:18px">On the same Wi-Fi?</div>
         <div class="hint" style="margin:-4px 0 8px">No invite needed — anyone on the same Wi-Fi opens this address in any browser (phones too). Nothing to install.</div>
-        <div id="invite-box"><div class="hint">…</div></div>
-        <div class="section-title" style="margin-top:18px">🖥 Help desk — bug reports</div>
-        <div class="hint" style="margin:-4px 0 8px">The help-desk PC (right of the theater door) opens this Discord
-        invite so anyone can report bugs or ask for help. Paste your server's invite link:</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input id="hd-discord-input" type="url" placeholder="https://discord.gg/…"
-                 style="flex:1;min-width:220px;padding:8px 12px;border-radius:10px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.35);color:var(--vb-ink,#eef1ff);font:inherit">
-          <button class="btn small" id="hd-discord-save">Save invite</button>
-        </div>
-        <div class="hint" style="margin:10px 0 6px">The in-app chat embed shows this Discord channel — the one
-        the invite lands on. Easiest: in Discord, right-click the channel → <b>Copy Link</b> (or Copy Channel ID
-        with Developer Mode on) and paste it here — the link and the bare ID both work:</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input id="hd-channel-input" type="text" placeholder="Channel ID — or its discord.com/channels/… link"
-                 style="flex:1;min-width:220px;padding:8px 12px;border-radius:10px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.35);color:var(--vb-ink,#eef1ff);font:inherit">
-          <button class="btn small" id="hd-channel-save">Save channel</button>
-        </div>`;
-      // t155: save the store's bug-report Discord invite (admin config)
-      const hdInp = root.querySelector('#hd-discord-input');
-      const hdCh = root.querySelector('#hd-channel-input');
-      if (hdInp || hdCh) {
-        try {
-          const cur = await api.adminConfig();
-          if (hdInp) hdInp.value = cur?.config?.community?.discord || '';
-          if (hdCh) hdCh.value = cur?.config?.community?.channelId || '';
-        } catch { /* leave blank — the admin types it */ }
-        if (hdInp) root.querySelector('#hd-discord-save').onclick = async () => {
-          const v = hdInp.value.trim();
-          if (v && !/^https:\/\//i.test(v)) { toast('Invite links start with https://', true); return; }
-          try {
-            await api.adminSaveConfig({ community: { discord: v } });
-            toast(v ? 'Help desk now points at your Discord' : 'Invite cleared');
-          } catch (e) { toast(e.message || 'Could not save', true); }
-        };
-        if (hdCh) root.querySelector('#hd-channel-save').onclick = async () => {
-          // t159b: a pasted discord.com/channels/<server>/<channel> link is
-          // as good as the bare id — no Developer Mode needed
-          const link = /^https?:\/\/(?:ptb\.|canary\.)?discord\.com\/channels\/(?:@me\/)?\d+\/(\d{5,25})/.exec(hdCh.value.trim());
-          const v = link ? link[1] : hdCh.value.trim();
-          if (v && !/^\d{5,25}$/.test(v)) { toast('Paste the channel ID — or right-click the channel in Discord → Copy Link and paste that', true); return; }
-          try {
-            await api.adminSaveConfig({ community: { channelId: v } });
-            if (v) hdCh.value = v;                        // show the normalized id back
-            toast(v ? 'Chat embed saved — the PC shows the channel' : 'Chat embed cleared');
-          } catch (e) { toast(e.message || 'Could not save', true); }
-        };
-      }
+        <div id="invite-box"><div class="hint">…</div></div>`;
       // t81b: INLINE EDITORS — Electron (the desktop exe) does not support
       // window.prompt — it returns null instantly, so prompt-based flows are
       // DEAD in the exe while working in every browser (how it slipped through
@@ -1946,8 +2057,7 @@ export function initUI(ctx) {
            <iframe src="https://wizcord.io/iframe?channelId=${esc(channelId)}" title="Bug reports chat"
              allow="clipboard-write; fullscreen" referrerpolicy="no-referrer"></iframe>
          </div>`
-      : `<div id="hd-chat-fallback">The chat isn't configured yet — the store owner can add the bug-report
-         channel in <b>☰ Menu → Admin → Users</b>.</div>`;
+      : `<div id="hd-chat-fallback">The bug-report chat isn't available right now — try again in a moment.</div>`;   // t169: unreachable in practice (the connection is pinned)
     modal.classList.remove('hidden');
     document.exitPointerLock?.();
     // t159b: Discord's login can't complete INSIDE a frame (Discord refuses
@@ -1978,6 +2088,152 @@ export function initUI(ctx) {
       }, 700);
     };
   }
+  // ═══════════════ t172/t173/t179: THE DEN'S MONITOR PANELS ═══════════════
+  // Click a monitor in the gamer den → its controls. Discord opens the
+  // in-app panel DIRECTLY (t179, the owner's call — the portal popup was a
+  // middleman; the monitor's live canvas still previews the project's
+  // server); music is YouTube (the owner's call — Spotify is gone); Steam shows the
+  // user's library + anyone who shares theirs.
+  function openGamerPanel(kind) {
+    if (kind === 'gamerdiscord') return openDiscordFull();        // t179: straight to the client — t183: the SAME docked panel the theater uses
+    if (kind === 'gamemusic') {
+      // t180: while something IS playing, the monitor opens the PLAYER PANEL
+      // (the owner's Discord-monitor pattern) — the picker only greets an
+      // idle screen. Click again = the panel, always one click away.
+      if (window.__HBMedia?.state?.().service) { window.__HBMedia.focus(); return; }
+      // t184 (the owner's call): an idle click skips the search detour — the
+      // panel IS the YouTube browser, the real site, right away. A plain
+      // browser can't frame youtube.com, so it keeps the in-app picker.
+      if (window.HB_DESKTOP && window.__HBMedia?.open({ service: 'youtube', home: true })) {
+        toast('YouTube is open in the player panel — search and play right there. Esc hides it; \u25A0 stops it.');
+        return;
+      }
+      return openGamerMusic();
+    }
+    if (kind === 'gamesteam') return openGamerSteam();
+  }
+  function openGamerMusic() {
+    const modal = $('#gamer-music-modal'); if (!modal) return;
+    const body = $('#gm-body');
+    modal.classList.remove('hidden');
+    document.exitPointerLock?.();
+    const esc2 = esc;
+    refreshGamerPreviews?.();
+    (async () => {
+      const dbg = window.__VB?.scene?.gamerInfo?.() || {};   // t185b: was debugGamer — a silent misname (always {})
+      const playing = dbg.engine || '';
+      // t186: KEYLESS — the search key is gone with the rest of the YouTube
+      // settings. In the desktop app the button IS the browser (the player
+      // panel, the real site); in a plain browser this modal keeps the Guide
+      // picker, because a web page can't frame youtube.com. Either way there
+      // is nothing to configure anymore.
+      body.innerHTML = `<div id="gm-engine"><div class="hint">…</div></div>`;
+      const engEl = body.querySelector('#gm-engine');
+      const stopNow = () => { window.__VB?.scene?.stopMusicMonitor?.(); modal.classList.add('hidden'); };
+      const paintEngine = () => {
+        engEl.innerHTML = `
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn accent" id="gm-open">Open YouTube</button>
+            ${playing ? '<button class="btn" id="gm-stop">■ Stop</button>' : ''}
+          </div>
+          <div id="gm-now" class="hint" style="margin-top:8px">${playing ? 'Now playing in the player panel — ■ Stop halts it.' : 'It opens in the player panel — the den\u2019s screen shows what\u2019s on.'}</div>`;
+        engEl.querySelector('#gm-open')?.addEventListener('click', () => {
+          modal.classList.add('hidden');
+          if (window.HB_DESKTOP && window.__HBMedia?.open({ service: 'youtube', home: true })) return;
+          window.open('https://www.youtube.com/', '_blank', 'noopener');   // browser fallback — the den's idle click does the same
+        });
+        engEl.querySelector('#gm-stop')?.addEventListener('click', stopNow);
+      };
+      paintEngine();
+    })();
+  }
+  // ═══ t173: the den's preview canvases — ui pushes fresh facts, gamer.js paints ═══
+  async function refreshGamerPreviews() {
+    try {
+      const me = state.boot?.me;                       // same guest gate as every panel
+      let conn = {}, srv = { steam: false };
+      if (me && !me.isGuest) { try { const r = await api.myConnections(); conn = r.connections || {}; srv = r.server || srv; } catch {} }   // guests: the "bring your key" screens
+      let discord = null;
+      try { discord = await api.discordPortal(); } catch {}
+      let steam = null;
+      if (conn.steam?.set || (srv.steam && conn.steam?.id)) {          // t175: server key covers id-only users
+        try {
+          const lib = await api.steamLibrary();
+          steam = { set: true, profile: lib.profile, count: lib.count,
+            top: (lib.games || []).slice(0, 8).map(g => ({ name: g.name, hours: Math.round(g.hours || 0) })) };
+        } catch { steam = { set: true, top: [] }; }
+      }
+      window.__VB?.scene?.setGamerPreviews?.({ discord, music: { always: true }, steam });   // t182/t186: YouTube is keyless now — always ready
+    } catch {}
+  }
+  setTimeout(refreshGamerPreviews, 2500);                                     // first paint after boot
+  setInterval(() => { if (ctx?.playerRoom?.() === 'gamer') refreshGamerPreviews(); }, 45000);   // fresh while you hang out in the den
+
+  function openGamerSteam() {
+    const modal = $('#gamer-steam-modal'); if (!modal) return;
+    const body = $('#gs-body');
+    modal.classList.remove('hidden');
+    document.exitPointerLock?.();
+    const esc2 = esc;
+    (async () => {
+      let conn = { steam: { set: false, share: false } };
+      let srv = { steam: false };                  // t175: the admin's server key
+      try { const r = await api.myConnections(); conn = r.connections || conn; srv = r.server || srv; } catch {}
+      if (!(conn.steam?.set || (srv.steam && conn.steam?.id))) {
+        body.innerHTML = `
+          <div class="hint" style="margin:8px 0 12px">${srv.steam
+            ? 'Add <b>your SteamID64</b> in My Connections and your library shows up here — this server\u2019s Steam key does the rest.'
+            : 'Link <b>your own</b> Steam in My Connections (free key + your SteamID64) and your library shows up here — and on the network if you flip sharing on.'}</div>
+          <button class="btn accent" id="gs-conn">Open My Connections</button>`;
+        body.querySelector('#gs-conn')?.addEventListener('click', () => { modal.classList.add('hidden'); openSettings('conn'); });
+        return;
+      }
+      let shared = [];
+      try { shared = (await api.steamShared()).shared || []; } catch {}
+      body.innerHTML = `
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+          <label class="hint" style="margin:0">Whose library:</label>
+          <select id="gs-who" style="flex:1;min-width:160px">
+            <option value="">Mine</option>
+            ${shared.map(sh => `<option value="${esc2(sh.user)}">${esc2(sh.user)} (shared)</option>`).join('')}
+          </select>
+        </div>
+        <div id="gs-lib" class="gm-list"><div class="hint">Loading…</div></div>
+        <div class="hint" id="gs-err" style="color:#ff8a8a;min-height:16px;margin-top:6px"></div>`;
+      const lib = body.querySelector('#gs-lib'), err = body.querySelector('#gs-err');
+      const load = async (who) => {
+        err.textContent = ''; lib.innerHTML = '<div class="hint">Loading…</div>';
+        try {
+          const r = await api.steamLibrary(who || undefined);
+          lib.innerHTML = `
+            <div class="hint" style="margin:6px 0 2px"><b>${esc2(r.profile)}</b> · ${r.count} games · ${r.totalHours}h played</div>
+            ${(r.games || []).map(g => `
+              <div class="gm-row" data-appid="${esc2(String(g.appid || ''))}">
+                <img src="${esc2(g.art)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+                <div class="gm-meta"><div class="gm-title">${esc2(g.name)}</div><div class="gm-sub">${g.hours}h played${g.lastPlayed ? ' · last ' + new Date(g.lastPlayed).toLocaleDateString() : ''}</div></div>
+                <button class="btn small accent" title="Launch it in Steam on this computer">▶ Play</button>
+              </div>`).join('') || '<div class="hint">No games found.</div>'}`;
+        } catch (e) { lib.innerHTML = ''; err.textContent = e.message || 'Could not load that library'; }
+      };
+      body.querySelector('#gs-who')?.addEventListener('change', (e2) => load(e2.target.value));
+      // t178 (owner: "there is no 'play' button") — ▶ launches the game through
+      // Steam on THIS computer (steam://run/<appid>; Steam offers install if
+      // it's not owned here). The desktop app hands it to the OS; a browser
+      // opens the link the normal way. (body persists across opens — wire once.)
+      if (!body.dataset.playWired) {
+        body.dataset.playWired = '1';
+        body.addEventListener('click', (e2) => {
+          const row = e2.target.closest('.gm-row[data-appid]');
+          if (!row || !row.dataset.appid || !e2.target.closest('button')) return;
+          const u = 'steam://run/' + row.dataset.appid;
+          if (window.HB_DESKTOP) window.open(u);            // main.cjs → the OS → Steam
+          else { try { window.open(u, '_blank'); } catch {} toast('Steam should be asking to open ' + (row.querySelector('.gm-title')?.textContent || 'that game') + '…'); }
+        });
+      }
+      load('');
+    })();
+  }
+
   $('#item-modal').addEventListener('click', (e) => { if (e.target.id === 'item-modal') $('#item-modal').classList.add('hidden'); });
   for (const btn of document.querySelectorAll('.modal-close')) {
     btn.onclick = () => btn.closest('.modal').classList.add('hidden');
@@ -2184,7 +2440,12 @@ export function initUI(ctx) {
   });
 
   // ═══════════════ HELP ═══════════════
-  $('#btn-help').onclick = () => { $('#help-overlay').classList.remove('hidden'); document.exitPointerLock?.(); };
+  $('#btn-help').onclick = () => {   // t186: buttons TOGGLE — ? opens AND closes
+    const ov = $('#help-overlay');
+    const wasOpen = !ov.classList.contains('hidden');
+    ov.classList.toggle('hidden', wasOpen);
+    if (!wasOpen) document.exitPointerLock?.();
+  };
   $('#btn-help-close').onclick = () => $('#help-overlay').classList.add('hidden');
   $('#help-overlay').addEventListener('click', (e) => { if (e.target.id === 'help-overlay') $('#help-overlay').classList.add('hidden'); });
   // t134 (novice pass): Esc closes the help too — every other modal honors it;
@@ -2319,6 +2580,737 @@ export function initUI(ctx) {
   };
 
   // ── TV REMOTE (bottom bar): stop · ±10 s · play/pause · repeat · volume ──
+  // t178 (owner: "open in a UI in HB instead of a new window"): FULL DISCORD
+  // lives in an in-app PANEL — a <webview> of the real web client (DMs,
+  // servers, voice, calls, screen sharing), sharing the app session, sign in
+  // once. t183 (the owner's live test): the panel has ONE mode now — the
+  // DOCKED right column the theater's watch-with-me made. The den used to
+  // open a big centered panel, which STOLE the theater's dock mid-movie
+  // ("opening Discord in the game room breaks the theater's") — so every
+  // entry point opens the SAME docked panel, and it stays in view while you
+  // walk the store. A plain browser can't host Discord (they refuse
+  // embedding) → tab there, panel in the exe. The separate window is still
+  // one click away (Pop out).
+  const openDiscordFull = (force) => {
+    const url = 'https://discord.com/app';
+    if (!window.HB_DESKTOP) {          // browser mode — Discord's no-embedding policy
+      window.open(url, '_blank');
+      toast('Discord opened in a browser tab — the desktop app docks it beside you, and it stays in view while you walk.');
+      return;
+    }
+    let panel = document.getElementById('hb-discord-panel');
+    if (!panel) {
+      panel = document.createElement('div'); panel.id = 'hb-discord-panel'; panel.classList.add('hidden');
+      panel.innerHTML = `
+        <div class="hbd-bar">
+          <span class="hbd-title">💬 Discord — Home Binger</span>
+          <button class="btn small" id="hbd-pop" title="Discord in its own window instead">↗ Pop out</button>
+          <button class="btn small" id="hbd-close" title="Hide (Esc — a voice call keeps running)">✕</button>
+        </div>
+        <webview id="hbd-view" src="${url}" allowpopups></webview>
+        <div class="hbd-edge" id="hbd-edge" title="Drag to resize the dock"></div>`;
+      document.body.appendChild(panel);
+      const closePanel = () => {
+        panel.classList.add('hidden');
+        const fs = document.getElementById('vb-fs-video');
+        if (fs) { fs.style.width = ''; fs.style.right = ''; }
+      };
+      panel._close = closePanel;
+      panel.querySelector('#hbd-close').onclick = closePanel;
+      panel.querySelector('#hbd-pop').onclick = () => { closePanel(); window.open(url, 'hbDiscord', 'width=1200,height=860'); };
+      // ── t179: RESIZABLE — the LEFT EDGE (the dock's only mode since t183).
+      // The width persists across opens; a full-screen movie yields live as
+      // you drag. ──
+      const clampDockW = (w) => Math.round(Math.max(320, Math.min(w, Math.min(1040, window.innerWidth * 0.72))));
+      const applyDockW = (w) => {
+        panel.style.width = w + 'px';
+        const fs = document.getElementById('vb-fs-video');
+        if (fs && !panel.classList.contains('hidden')) fs.style.width = `calc(100vw - ${w}px)`;
+      };
+      const saveSizes = () => {
+        try { localStorage.setItem('hb_discord_dock_w', String(panel.offsetWidth)); } catch {}
+      };
+      panel._restoreSizes = () => {
+        try { applyDockW(clampDockW(+(localStorage.getItem('hb_discord_dock_w') || 432))); } catch {}
+      };
+      panel._applyDockW = applyDockW;
+      panel._clampDockW = clampDockW;
+      const drag = (el, onMove) => {
+        el.addEventListener('mousedown', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const sx = e.clientX, sy = e.clientY;
+          const w0 = panel.offsetWidth, h0 = panel.offsetHeight;
+          const mv = (ev) => onMove(ev.clientX - sx, ev.clientY - sy, w0, h0);
+          const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); saveSizes(); };
+          window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+        });
+      };
+      drag(panel.querySelector('#hbd-edge'), (dx, dy, w0) => applyDockW(clampDockW(w0 - dx)));
+      // Esc closes the panel — and no one else's Esc fires while Discord is
+      // up (capture phase wins). t180: the MEDIA panel outranks it when both
+      // are on screen (the newest surface wins, deterministically).
+      window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || panel.classList.contains('hidden')) return;
+        const mp = document.getElementById('hb-media-panel');
+        if (mp && !mp.classList.contains('hidden')) return;   // media's own handler takes this one
+        e.preventDefault(); e.stopPropagation();
+        closePanel();
+      }, true);
+    }
+    // t183: already open? NEVER disturb it — no morph, no resize, no reload
+    // (this is the fix: the game room used to rebuild the theater's dock).
+    // t186 (the owner's rule: UI buttons CLOSE what they open): the 💬 and
+    // the Discord monitor TOGGLE the dock — open when hidden, hide when up.
+    // t188: a `force` open (the watch-with-me popover's Discord shortcut)
+    // never toggles — a shortcut inside a chooser means OPEN.
+    if (!force && !panel.classList.contains('hidden')) { panel._close?.(); return; }
+    panel.classList.remove('hidden');
+    document.exitPointerLock?.();
+    panel._restoreSizes?.();             // the saved width — and a movie yields to it
+    toast('Discord is docked on the right — chat + voice while you browse, and it stays in view while you walk. (Screen sharing doesn\u2019t work inside the app — a native Watch Party is on the way.) Drag the left edge to resize; Esc or the button again hides it (a call keeps running).');
+  };
+
+  // ═══════════════ t180: THE MEDIA PLAYER PANEL — YouTube, the
+  // Discord way ═══════════════
+  // Two owner live-tests in a row, the den's in-page embeds (the YouTube
+  // iframe) never made a sound — while the
+  // Discord PANEL (a <webview> of the real site) has been flawless on the
+  // same machine. So media gets the same treatment: a real browser context
+  // in an in-app panel, the service's OWN player and login (persisted
+  // partition — sign in once), volume + pause driven from the den's remote.
+  // The center monitor becomes the now-playing screen and the click target,
+  // exactly like the Discord monitor. In a plain browser there is no
+  // <webview>: an <iframe> with the service's official embed takes over.
+  // ═══ t194: THE EMBED LANE — the den plays YouTube ad-free the sanctioned way ═══
+  // The owner's report: the network-layer adblock can't clear the den, because
+  // YouTube now serves many ads from the SAME googlevideo hosts as the video
+  // itself — nothing URL-shaped left to block. The ad-free path that survives
+  // is the OFFICIAL embed player (the exact lane the theater has always used,
+  // and the owner has never seen an ad there). So in the desktop panel: the
+  // site stays for browsing (search, home, channels), but the moment a watch
+  // page opens — click, shorts link, youtu.be paste, playlist — the view swaps
+  // to the official embed of that video. Embed-blocked videos (rare) are
+  // detected (no media element) and fall back to the real watch page once.
+  // (The yt-dlp route a friend suggested — solving YouTube's bot challenges to
+  // pull raw streams — is off the table: it breaks YouTube's terms, and this
+  // is its sanctioned equivalent.)
+  const ytEmbedUrlOf = (raw) => {
+    try {
+      const u = new URL(String(raw));
+      if (!/(^|\.)youtube\.com$/.test(u.hostname) && u.hostname !== 'youtu.be') return '';
+      let id = '', list = '';
+      if (u.hostname === 'youtu.be') { id = u.pathname.slice(1); list = u.searchParams.get('list') || ''; }
+      else if (u.pathname === '/watch') { id = u.searchParams.get('v') || ''; list = u.searchParams.get('list') || ''; }
+      else if (u.pathname.startsWith('/shorts/')) id = u.pathname.split('/')[2] || '';
+      else if (u.pathname.startsWith('/embed/')) return '';      // already the player
+      else if (u.pathname === '/playlist') list = u.searchParams.get('list') || '';
+      else return '';                                            // browse pages stay on the site
+      if (!list && !/^[A-Za-z0-9_-]{6,}$/.test(id)) return '';
+      return list && !id
+        ? `https://www.youtube.com/embed/videoseries?autoplay=1&rel=0&enablejsapi=1&list=${encodeURIComponent(list)}`
+        : `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&enablejsapi=1`
+          + (list ? `&list=${encodeURIComponent(list)}` : '');
+    } catch { return ''; }
+  };
+
+  // t198 (owner: "error 153"): YouTube stopped playing embed URLs loaded as
+  // TOP-LEVEL documents (exactly how the den's panel webview loaded them —
+  // "Video player configuration error 153"), while the same official player
+  // inside a real page plays fine (the theater's iframe never broke). The
+  // den lane now serves this local WRAPPER in the webview: same official
+  // player, mounted the way YouTube expects, plus a script bridge
+  // (window.__hbWrap in public/embedwrap.html) for title/id/pause/volume/errors.
+  const embedWrapUrl = (id, list) => `${location.origin}/embedwrap?v=${encodeURIComponent(id || '')}`
+    + (list ? `&list=${encodeURIComponent(list)}` : '');
+  const MEDIA_SPECS = {
+    youtube: {
+      label: 'YouTube', ic: '▶', color: '#ff5c74',
+      // t184: the site itself — the monitor opens the YouTube BROWSER (search
+      // and browse on the real page; a pick isn't needed anymore)
+      home: 'https://www.youtube.com/',
+      // t194: picks play in the OFFICIAL embed (the ad-free lane) — an
+      // embed-blocked video falls back to the watch page (see toEmbed)
+      desktop: (k, id) => embedWrapUrl(id, ''),        // t198: the wrapper (Error 153 fix) — watchEmbedBoot guards it
+      // watch pages refuse to be iframed — the embed player is the official one
+      browser: (k, id) => `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&enablejsapi=1`,
+    },
+  };
+  const HB_MEDIA_UA = String(navigator.userAgent)
+    .replace(/\bElectron\/[\d.]+\b/g, '').replace(/\bHomeBinger\/[\d.]+\b/g, '')
+    .replace(/\bHome-Binger\/[\d.]+\b/g, '').replace(/\s{2,}/g, ' ').trim();
+  const mediaFindJs = `(function(){function f(r){var e=r.querySelectorAll('video,audio');if(e.length)return e[0];var a=r.querySelectorAll('*');for(var i=0;i<a.length;i++){if(a[i].shadowRoot){var m=f(a[i].shadowRoot);if(m)return m;}}return null}return f(document)})()`;
+  window.__HBMedia = (() => {
+    let panel = null, view = null;
+    let st = { service: '', kind: '', id: '', title: '', artist: '', url: '', paused: false, vol: 0.85, zoneMuted: false, everAudible: false };
+    const desktop = () => !!window.HB_DESKTOP;
+    const clampW = (w) => Math.round(Math.max(340, Math.min(w, window.innerWidth * 0.96)));
+    const clampH = (h) => Math.round(Math.max(280, Math.min(h, window.innerHeight * 0.96)));
+    const saveSizes = () => { try { localStorage.setItem('hb_media_wh', JSON.stringify([panel.offsetWidth, panel.offsetHeight])); } catch {} };
+    function ensurePanel() {
+      if (panel) return;
+      panel = document.createElement('div'); panel.id = 'hb-media-panel'; panel.classList.add('hidden');
+      panel.innerHTML = `
+        <div class="hbm-bar">
+          <span class="hbm-ic" id="hbm-ic">▶</span>
+          <span class="hbm-title" id="hbm-title">Player</span>
+          <span class="hbm-badge" id="hbm-badge" style="display:none" title="The den's sound zone — walk back into the game room">🔇 den zone</span>
+          <input type="range" id="hbm-vol" min="0" max="100" value="85" title="Volume — same as the den's remote">
+          <button class="btn small" id="hbm-ext" title="Open on the site itself">↗</button>
+          <button class="btn small" id="hbm-stop" title="Stop playback (the monitor goes idle)">■</button>
+          <button class="btn small" id="hbm-close" title="Hide — it keeps playing (Esc)">✕</button>
+        </div>
+        <div class="hbm-body" id="hbm-body"></div>
+        <div class="hbm-grip" id="hbm-grip" title="Drag to resize"></div>`;
+      document.body.appendChild(panel);
+      panel._hide = () => {
+        panel.classList.add('hidden');
+        toast('Still playing — click the den\u2019s center screen (or pick another track) to bring the player back. ■ stops it.');
+      };
+      panel._close = panel._hide;                     // Discord-compatible handle (hide ≠ stop)
+      panel.querySelector('#hbm-close').onclick = () => panel._hide();
+      panel.querySelector('#hbm-stop').onclick = () => {
+        const sc = window.__VB?.scene;
+        if (sc?.stopMusicMonitor) sc.stopMusicMonitor(); else stop();
+        toast('Playback stopped — the den\u2019s screen goes back to idle.');
+      };
+      panel.querySelector('#hbm-ext').onclick = () => {
+        if (!st.service) return;
+        const S = MEDIA_SPECS[st.service];
+        // t194: with a video on, ↗ opens its real page on the site — the embed
+        // is our playback lane, not a thing to pop out in a bare window
+        const url = st.kind === 'home' ? (S?.home || st.url)
+          : (st.id ? `https://www.youtube.com/watch?v=${encodeURIComponent(st.id)}` : st.url);
+        window.open(url, 'hbMedia', 'width=1100,height=760');
+      };
+      panel.querySelector('#hbm-vol').addEventListener('input', (e) => {
+        const v = (+e.target.value || 0) / 100;
+        st.vol = v;
+        const sc = window.__VB?.scene;
+        if (sc?.gamerSetVolume) sc.gamerSetVolume(v);          // the den's zone volume is the ONE volume
+        else cmd('volume', Math.round(v * 100));
+      });
+      // t179's proven grip — sizes persist across opens
+      const grip = panel.querySelector('#hbm-grip');
+      grip.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const sx = e.clientX, sy = e.clientY, w0 = panel.offsetWidth, h0 = panel.offsetHeight;
+        const mv = (ev) => { panel.style.width = clampW(w0 + (ev.clientX - sx)) + 'px'; panel.style.height = clampH(h0 + (ev.clientY - sy)) + 'px'; };
+        const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); saveSizes(); };
+        window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+      });
+      panel._restoreSizes = () => {
+        try {
+          const wh = JSON.parse(localStorage.getItem('hb_media_wh') || 'null');
+          if (Array.isArray(wh) && wh.length === 2) { panel.style.width = clampW(+wh[0] || 780) + 'px'; panel.style.height = clampH(+wh[1] || 540) + 'px'; }
+        } catch {}
+      };
+      // Esc hides the panel (playback continues — Discord panel rules)
+      window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || panel.classList.contains('hidden')) return;
+        e.preventDefault(); e.stopPropagation();
+        panel._hide();
+      }, true);
+    }
+    function paintBar() {
+      const S = MEDIA_SPECS[st.service] || { label: 'Player', ic: '▶', color: '#c9d4ea' };
+      const ic = panel.querySelector('#hbm-ic');
+      if (ic) { ic.textContent = S.ic; ic.style.color = S.color; }
+      const tEl = panel.querySelector('#hbm-title');
+      if (tEl) tEl.textContent = (st.title || S.label) + (st.artist ? ' — ' + st.artist : '');
+      const vEl = panel.querySelector('#hbm-vol');
+      if (vEl) vEl.value = String(Math.round((st.vol ?? 0.85) * 100));
+    }
+    function runInView(js) {
+      if (!view || typeof view.executeJavaScript !== 'function') return;   // inert <webview> in a browser — no-op
+      if (!view._domReady) { view._queue = view._queue || []; view._queue.push(js); return; }
+      try { view.executeJavaScript(js, true).catch?.(() => {}); } catch {}   // userGesture:true — our click counts
+    }
+    function flushQueue() { const q = view?._queue || []; view._queue = []; q.forEach(runInView); }
+    // t194: an ASKING version of runInView — returns a promise with the page's
+    // answer (null when the view can't be asked: inert webview, not ready)
+    function askView(js) {
+      if (!view || view.tagName !== 'WEBVIEW' || typeof view.executeJavaScript !== 'function' || !view._domReady) return Promise.resolve(null);
+      try { return view.executeJavaScript(js, true).catch(() => null); } catch { return Promise.resolve(null); }
+    }
+    // t194: THE EMBED LANE — reroute a watch URL to the official embed player
+    const embedFb = new Set();      // ids that refused the embed → the watch page plays them (ads possible)
+    function toEmbed(href) {
+      const em = ytEmbedUrlOf(href);
+      if (!em || !desktop()) return false;
+      const id = em.includes('/videoseries') ? '' : decodeURIComponent(em.split('/embed/')[1].split('?')[0]);
+      const list = new URLSearchParams(em.split('?')[1] || '').get('list') || '';
+      if (id && embedFb.has(id)) return false;                  // known embed-blocked — let the page be
+      st = { ...st, kind: 'embed', id: id || st.id, artist: '',
+        url: id ? `https://www.youtube.com/watch?v=${id}` : st.url, paused: false, everAudible: false };
+      paintBar();
+      const wrap = embedWrapUrl(id, list);
+      setView(wrap);
+      watchEmbedBoot(wrap, id);
+      return true;
+    }
+    // no media element within 9 s → the video refuses embedding → the real
+    // watch page plays it (once per id — the blocker is still armed there)
+    function watchEmbedBoot(em, id) {
+      const t0 = Date.now();
+      const goWatch = () => {
+        st = { ...st, kind: 'play', url: id ? `https://www.youtube.com/watch?v=${id}` : st.url };
+        paintBar();
+        setView(st.url);
+      };
+      const probe = setInterval(() => {
+        if (!view || view.tagName !== 'WEBVIEW' || !st.service || (view.getAttribute('src') || '') !== em) { clearInterval(probe); return; }
+        // t198: the wrapper's bridge — [err, alive]. err ≠ 0 means YouTube
+        // refused the embed (101/150 embed-blocked, the API never arrived);
+        // NB: the old media-element probe PASSED on Error 153's screen (it
+        // mounts a <video> that never plays) — the bridge actually knows.
+        askView(`(function(){try{return window.__hbWrap?JSON.stringify([String(window.__hbWrap.err()),window.__hbWrap.alive()?1:0]):null}catch(e){return null}})()`).then((r) => {
+          if (r == null) { if (Date.now() - t0 > 9000) { clearInterval(probe); if (id) embedFb.add(id); goWatch(); } return; }
+          let err = '', alive = false;
+          try { const a = JSON.parse(r); err = String(a[0]); alive = a[1] === 1; } catch {}
+          if (err && err !== '0') { clearInterval(probe); if (id) embedFb.add(id); goWatch(); return; }   // refused — the watch page plays it
+          if (alive) { clearInterval(probe); return; }                                                   // the player mounted
+          if (Date.now() - t0 > 9000) { clearInterval(probe); if (id) embedFb.add(id); goWatch(); }
+        });
+      }, 1000);
+    }
+    function nudgeAutoplay() {
+      // YouTube: the page autoplays under Electron's no-user-gesture policy —
+      // a belt-and-braces play() in case it didn't.
+      if (st.service === 'youtube') {
+        if (st.kind === 'embed') { askView(`(function(){try{window.__hbWrap.vol(${(st.vol ?? 0.85).toFixed(3)});window.__hbWrap.play();return 1}catch(e){return 0}})()`); return; }
+        runInView(`(function(){var m=${mediaFindJs};if(m&&m.play){m.volume=${(st.vol ?? 0.85).toFixed(3)};try{var p=m.play();p&&p.catch&&p.catch(function(){})}catch(e){}return 1}return 0})()`);
+      }
+    }
+    function killView(v) {          // t182b: mute + pause a webview BEFORE removal — a pulled-off guest
+      if (!v) return;               // stays alive (audio included) until Electron collects it
+      try { if (v.tagName === 'WEBVIEW') {
+        v.setAudioMuted?.(true);
+        v.executeJavaScript?.('try{document.querySelectorAll("video,audio").forEach(function(m){m.pause()})}catch(e){}', true).catch?.(() => {});
+      } } catch {}
+      try { v.remove(); } catch {}
+    }
+    function setView(url) {
+      if (view) killView(view);
+      view = document.createElement(desktop() ? 'webview' : 'iframe');
+      view.id = 'hbm-view';
+      if (desktop()) {
+        view.setAttribute('partition', 'persist:hbmedia');        // logins survive — sign in once, like Discord
+        view.setAttribute('allowpopups', '');
+        try { view.setAttribute('useragent', HB_MEDIA_UA); } catch {}
+        view.addEventListener('dom-ready', () => {
+          view._domReady = true;
+          flushQueue();
+          cmd('volume', Math.round((st.vol ?? 0.85) * 100));
+          if (st.zoneMuted) cmd('mute', true);
+          nudgeAutoplay();
+        });
+        // t194: watch-page navigations become the official embed — full loads
+        // (will-navigate, cancelable) AND youtube.com's SPA transitions
+        // (did-navigate-in-page) so there's barely a flash of the watch page
+        view.addEventListener('will-navigate', (e) => {
+          if (st.service !== 'youtube') return;
+          if (ytEmbedUrlOf(e.url)) { try { e.preventDefault(); } catch {} toEmbed(String(e.url)); }
+        });
+        view.addEventListener('did-navigate-in-page', (e) => {
+          if (st.service !== 'youtube') return;
+          const href = String(e.url || '');
+          const emId = /youtube\.com\/embed\/([A-Za-z0-9_-]+)/.exec(href);   // related-video hop INSIDE the embed
+          if (emId) { if (emId[1] !== st.id) { st = { ...st, id: emId[1], url: `https://www.youtube.com/watch?v=${emId[1]}` }; paintBar(); } return; }
+          toEmbed(href);
+        });
+        view.setAttribute('src', url);
+      } else {
+        view.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+        view.src = url;
+      }
+      panel.querySelector('#hbm-body').appendChild(view);
+    }
+    function open(spec) {
+      const S = MEDIA_SPECS[spec?.service]; if (!S) return false;
+      // t184: HOME mode — the service's own site, no pick. Desktop only: a
+      // plain browser can't frame YouTube, so the caller falls back to its
+      // in-app picker (the official embed still needs a video id).
+      if (spec?.home && !spec?.id) {
+        if (!desktop()) return false;
+        ensurePanel();
+        st = { ...st, service: spec.service, kind: 'home', id: '', title: spec.title || S.label,
+          artist: '', url: S.home, paused: false, everAudible: false };
+        paintBar();
+        setView(S.home);
+        panel._restoreSizes();
+        panel.classList.remove('hidden');
+        document.exitPointerLock?.();
+        return true;
+      }
+      ensurePanel();
+      const url = (desktop() ? S.desktop : S.browser)(spec.kind, spec.id);
+      // t198: a desktop youtube pick rides the EMBED WRAPPER — same lane as a
+      // converted watch page, same fallback if the video refuses embedding
+      const wrapLane = desktop() && url.includes('/embedwrap');
+      st = { ...st, service: spec.service, kind: wrapLane ? 'embed' : (spec.kind || ''), id: spec.id || '', title: spec.title || S.label,
+        artist: spec.artist || '', url, paused: false, everAudible: false };
+      paintBar();
+      setView(url);
+      if (wrapLane) watchEmbedBoot(url, st.id);
+      panel._restoreSizes();
+      panel.classList.remove('hidden');
+      document.exitPointerLock?.();
+      return true;
+    }
+    function stop() {
+      st = { ...st, service: '', kind: '', id: '', title: '', artist: '', url: '', paused: false, zoneMuted: false, everAudible: false };
+      panel?.classList.add('hidden');
+      const b = panel?.querySelector('#hbm-badge');
+      if (b) b.style.display = 'none';
+      killView(view); view = null;
+    }
+    function cmd(op, v) {
+      if (!st.service || !view) return;
+      if (op === 'pause' || op === 'play') st.paused = op === 'pause';
+      if (op === 'volume') st.vol = Math.max(0, Math.min(1, (v || 0) / 100));
+      if (desktop() && view.tagName === 'WEBVIEW') {
+        if (op === 'mute') { try { view.setAudioMuted(!!v); } catch {} return; }
+        // t198: embed-lane views answer through the wrapper's bridge
+        if (st.kind === 'embed') {
+          if (op === 'pause') return askView('(function(){try{window.__hbWrap.pause();return 1}catch(e){return 0}})()');
+          if (op === 'play') return askView('(function(){try{window.__hbWrap.play();return 1}catch(e){return 0}})()');
+          if (op === 'volume') return askView(`(function(){try{window.__hbWrap.vol(${(st.vol).toFixed(3)});return 1}catch(e){return 0}})()`);
+          return;
+        }
+        if (op === 'pause') return runInView(`(function(){var m=${mediaFindJs};if(m){m.pause();return 1}return 0})()`);
+        if (op === 'play') return runInView(`(function(){var m=${mediaFindJs};if(m){try{var p=m.play();p&&p.catch&&p.catch(function(){});}catch(e){}return 1}return 0})()`);
+        if (op === 'volume') return runInView(`(function(){var m=${mediaFindJs};if(m){m.volume=${(st.vol).toFixed(3)};m.muted=false;return 1}return 0})()`);
+        return;
+      }
+      // browser mode: the YT embed answers the iframe-API command protocol
+      if (view.tagName === 'IFRAME' && st.service === 'youtube') {
+        try {
+          const func = op === 'pause' ? 'pauseVideo' : op === 'play' ? 'playVideo' : op === 'volume' ? 'setVolume' : '';
+          if (func) view.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: op === 'volume' ? [Math.round(v || 0)] : [] }), '*');
+        } catch {}
+      }
+    }
+    function setZoneMuted(m) {
+      st.zoneMuted = !!m;
+      const b = panel?.querySelector('#hbm-badge');
+      if (b) b.style.display = st.zoneMuted && st.service ? '' : 'none';
+      if (st.zoneMuted) cmd('mute', true);
+      else { cmd('mute', false); if (st.service) cmd('volume', Math.round((st.vol ?? 0.85) * 100)); }
+    }
+    // webview-only: keep st.paused honest if they pause on the site itself
+    setInterval(() => {
+      try {
+        if (view && view.tagName === 'WEBVIEW' && st.service && typeof view.isCurrentlyAudible === 'function') {
+          const a = view.isCurrentlyAudible();
+          if (a) { st.everAudible = true; st.paused = false; }
+          else if (st.everAudible) st.paused = true;
+        }
+      } catch {}
+    }, 1000);
+    // t194: the embed lane's backstop + now-playing — (a) any watch URL the
+    // navigations missed (SPA edge cases) converts; (b) while the embed plays,
+    // its document.title feeds the bar AND the den's monitor (what's on)
+    setInterval(() => {
+      try {
+        if (!view || view.tagName !== 'WEBVIEW' || st.service !== 'youtube' || !desktop()) return;
+        if (st.kind === 'embed') {
+          askView('(function(){try{return window.__hbWrap?JSON.stringify([window.__hbWrap.title()||"",window.__hbWrap.vid()||""]):null}catch(e){return null}})()').then((r) => {
+            if (r == null || st.kind !== 'embed') return;
+            let title = st.title, vid = '';
+            try { const a = JSON.parse(r); title = String(a[0] || ''); vid = String(a[1] || ''); } catch {}
+            title = title.replace(/\s*-\s*YouTube\s*$/, '') || st.title;
+            if (vid && vid !== st.id) st = { ...st, id: vid, url: `https://www.youtube.com/watch?v=${vid}` };   // a hop inside the player
+            if (title !== st.title || vid) { st = { ...st, title }; paintBar(); }
+            window.__VB?.scene?.noteMusicNow?.(st.id || '?', st.title);
+          });
+        } else if (st.kind !== 'play') {                        // 'play' = the embed-blocked fallback page — hands off
+          askView('(function(){try{return location.href}catch(e){return ""}})()').then((href) => { if (href) toEmbed(String(href)); });
+        }
+      } catch {}
+    }, 1500);
+    return { open, stop, cmd, setZoneMuted, embedUrlFor: ytEmbedUrlOf,
+      hide: () => panel?._hide?.(),
+      focus: () => { if (panel && st.service) { panel.classList.remove('hidden'); return true; } return false; },
+      state: () => ({ ...st, open: !!(panel && !panel.classList.contains('hidden')), tag: view?.tagName || '' }) };
+  })();
+
+  // ═══ t186: WATCH PARTY — "watch with me", the store's own way (Discord
+  // screenshare is impossible in-app; this syncs the theater itself) ═══
+  // ═══ t195: THE WATCH PARTY DOCK — a panel, not a popup. The popover hid
+  // BEHIND the full-screen movie (z-60 under the fs layer's z-80 — the
+  // owner's report). The Discord dock is the pattern that works: z-120,
+  // right side, and a full-screen movie YIELDS width to it. ═══
+  const WWM_PANEL_W = 384;
+  const WATCH_WEB_BASE = 'https://babybluj-wall.github.io/Home-Binger/';   // the published watch page (GitHub Pages — free, no server of ours)
+  function wwmFsYield(open) {
+    const fs = document.getElementById('vb-fs-video');
+    if (fs) fs.style.width = open ? `calc(100vw - ${WWM_PANEL_W}px)` : '';
+  }
+  function closeWatchWithMe() {
+    document.getElementById('wwm-panel')?.remove();
+    document.removeEventListener('keydown', wwmEsc);
+    wwmFsYield(false);
+  }
+  const wwmEsc = (e) => {
+    if (e.key === 'Escape' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) closeWatchWithMe();
+  };
+  function openWatchWithMe() {
+    if (document.getElementById('wwm-panel')) { closeWatchWithMe(); return; }   // buttons TOGGLE
+    const panel = document.createElement('div');
+    panel.id = 'wwm-panel';
+    document.body.appendChild(panel);
+    document.addEventListener('keydown', wwmEsc);
+    paintWwmPanel();
+    wwmFsYield(true);
+    panel.scrollTop = 0;
+  }
+  function copyWatchLink(link) {
+    // t201: a localhost link is useless on a phone (that's the owner's bug) —
+    // if the network address hasn't landed yet, say so instead of copying it
+    if (/\/\/localhost[:/]/.test(link) || /\/\/127\.0\.0\.1[:/]/.test(link)) {
+      toast('Your network address is still loading — try again in a moment', true);
+      return;
+    }
+    navigator.clipboard?.writeText(link).then(
+      () => toast('Link copied — send it to your friend'),
+      () => toast(link, false));   // clipboard blocked → show it so it can be written down
+  }
+  // t201: the "same Wi‑Fi" link must never say localhost — a PHONE cannot
+  // load http://localhost:8181 (that's the phone itself; the owner's report).
+  // One authed call gives the panel everything: the server's LAN address and
+  // whether the public guest page (GitHub Pages) is actually published — the
+  // browser can't ask github.io itself (404s carry no CORS headers), so the
+  // server probes once and caches. A dead everyone-link is how "share with
+  // anyone" quietly became "Tailscale only"; the panel says so until it's fixed.
+  let lanIpCache = null;           // null = not asked yet, '' = none found
+  let pagesOk = null;              // null = not checked yet / unknown
+  function ensureShareIntel() {
+    if (lanIpCache === null) {
+      const tok = (() => { try { return localStorage.getItem('vb_sess'); } catch { return null; } })();
+      fetch('/api/netinfo', tok ? { headers: { authorization: 'Bearer ' + tok } } : {})
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          if (!j) { lanIpCache = ''; return; }
+          lanIpCache = j.lanIp || '';
+          if (typeof j.pagesOk === 'boolean') pagesOk = j.pagesOk;
+          paintWwmPanel();
+        })
+        .catch(() => { lanIpCache = ''; });
+    }
+  }
+
+  function paintWwmPanel() {
+    const panel = document.getElementById('wwm-panel');
+    if (!panel) return;
+    ensureShareIntel();
+    const ps = party.state;
+    const ri = rmt.info();
+    // ── the in-store half (t186 — everyone on THIS server) ──
+    let inStore = '';
+    if (ps?.live && party.role === 'none')
+      inStore = `<button class="btn accent" id="wwm-join" style="width:100%;margin-bottom:8px">🎬 Join ${esc(ps.host || 'the host')} — “${esc(ps.item?.title || '')}”</button>`;
+    else if (!ps?.live)
+      inStore = `<button class="btn accent" id="wwm-host" style="width:100%;margin-bottom:8px">🎬 Watch together — sync this movie for everyone in the theater</button>`;
+    else if (party.role === 'host')
+      inStore = `<div class="hint" style="margin-bottom:8px">🎬 Hosting “${esc(ps.item?.title || '')}” · ${(ps.guests?.length || 0) + 1} watching</div>
+        <button class="btn danger" id="wwm-end" style="width:100%;margin-bottom:8px">⏹ End the watch party</button>`;
+    else if (party.role === 'guest')
+      inStore = `<div class="hint" style="margin-bottom:8px">🎬 Watching with ${esc(ps.host || 'the host')}</div>
+        <button class="btn" id="wwm-leave" style="width:100%;margin-bottom:8px">👋 Leave the watch party</button>`;
+    // ── the anywhere half (t195 — live screen share) ──
+    let remoteSec = '';
+    if (ri.role === 'host') {
+      const webLink = WATCH_WEB_BASE + '#' + ri.code;
+      // t201: localhost is useless on a phone — swap in the machine's LAN address
+      let srvBase = location.origin;
+      if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && lanIpCache)
+        srvBase = location.protocol + '//' + lanIpCache + (location.port ? ':' + location.port : '');
+      const srvLink = srvBase + '/watch/#' + ri.code;
+      const pagesWarn = pagesOk === false
+        ? `<div class="hint" id="wwm-pages-warn" style="margin:0 0 8px;color:#ffb3c0">⚠ The public guest page isn't published yet — in the Home-Binger repo on GitHub: Settings → Pages → Source: “GitHub Actions” (one time). Until then, only the same-Wi‑Fi link works.</div>` : '';
+      remoteSec = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="display:flex;align-items:center;gap:6px;color:#ff5c74;font-weight:700;font-size:13px"><i style="width:9px;height:9px;border-radius:50%;background:#ff3b5c;display:inline-block"></i> LIVE</span>
+        <span class="hint" style="margin:0">${ri.viewerCount} watching · ${esc(ri.qualityLabel)}${ri.audio ? ' · with sound' : ''}</span>
+      </div>
+      <div style="text-align:center;margin-bottom:10px">Room code <b style="font-size:20px;letter-spacing:2px"> ${esc(ri.code)} </b></div>
+      ${pagesWarn}
+      <div class="hint" style="margin:0 0 6px">Link 1 — for ANYONE, anywhere (they just need the internet):</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input id="wwm-web-link" readonly value="${esc(webLink)}" style="flex:1;min-width:0;padding:7px 10px;border-radius:8px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.3);color:inherit;font-size:12px;font-family:ui-monospace,monospace">
+        <button class="btn small" id="wwm-copy-web">Copy</button>
+      </div>
+      <div class="hint" style="margin:0 0 6px">Link 2 — only for people on your Wi‑Fi / network:</div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <input id="wwm-srv-link" readonly value="${esc(srvLink)}" title="Works for friends who can reach this computer's Home Binger server directly — same Wi‑Fi, remote access, or a VPN like Tailscale. If a phone on your Wi‑Fi can't open it, allow Home Binger through Windows Firewall (Private networks)." style="flex:1;min-width:0;padding:7px 10px;border-radius:8px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.3);color:inherit;font-size:12px;font-family:ui-monospace,monospace">
+        <button class="btn small" id="wwm-copy-srv">Copy</button>
+      </div>
+      <div class="hint" style="margin:0 0 10px">In the room: <b>${ri.viewers.length ? esc(ri.viewers.join(', ')) : 'just you so far'}</b></div>
+      <label class="hint" style="display:block;margin:0 0 6px">Picture quality</label>
+      <select id="wwm-quality" style="width:100%;margin-bottom:10px;padding:8px;border-radius:8px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.3);color:inherit">
+        <option value="high" ${ri.quality === 'high' ? 'selected' : ''}>High — 1080p60</option>
+        <option value="balanced" ${ri.quality === 'balanced' ? 'selected' : ''}>Balanced — 900p60</option>
+        <option value="saver" ${ri.quality === 'saver' ? 'selected' : ''}>Saver — 720p30</option>
+      </select>
+      <button class="btn danger" id="wwm-stop" style="width:100%">⏹ Stop sharing</button>
+      <div class="hint" style="margin:10px 0 0">Keep Home Binger visible while sharing — a minimized window stops rendering (the picture freezes). Each viewer uses roughly 1–4 Mbps of your internet UPLOAD, capped by the quality setting (Saver is the gentle pick — phones and thin uplinks); 1–4 viewers is the sweet spot (room cap ${ri.max}).</div>`;
+    } else {
+      remoteSec = `
+      <button class="btn accent" id="wwm-share" style="width:100%;margin-bottom:8px">🌐 Share this Home Binger — live, in any browser</button>
+      <label class="hint" style="display:block;margin:0 0 6px">Picture quality</label>
+      <select id="wwm-quality" style="width:100%;margin-bottom:10px;padding:8px;border-radius:8px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.3);color:inherit">
+        <option value="high">High — 1080p60</option>
+        <option value="balanced" selected>Balanced — 900p60</option>
+        <option value="saver">Saver — 720p30</option>
+      </select>
+      <div class="hint" style="margin:0">Friends open your link in any browser — no Home Binger, no install. They pick a name, you see who's watching. Shares whatever's on your screen: the theater, the store, the den.</div>`;
+    }
+    panel.innerHTML = `
+      <div class="wwm-head">
+        <span>👀 Watch party</span>
+        <button class="btn small" id="wwm-close" title="Hide (Esc)">✕</button>
+      </div>
+      <div class="wwm-body">
+        <div class="hint" style="margin:0 0 8px;text-transform:uppercase;letter-spacing:.8px">In this store — everyone on your server</div>
+        ${inStore}
+        <div style="border-top:1px solid var(--vb-line,#2a3354);margin:6px 0 12px;padding-top:12px">
+          <div class="hint" style="margin:0 0 10px;text-transform:uppercase;letter-spacing:.8px">Anywhere — share your screen, they watch in a browser</div>
+          ${remoteSec}
+        </div>
+        <button class="btn" id="wwm-discord" style="width:100%">💬 Discord — chat &amp; voice beside the movie</button>
+      </div>`;
+    panel.querySelector('#wwm-close')?.addEventListener('click', closeWatchWithMe);
+    panel.querySelector('#wwm-host')?.addEventListener('click', async () => {
+      try { const p = await party.host(); toast(`🎬 Hosting “${p.item?.title || 'the movie'}” — everyone in the theater can join`); paintWwmPanel(); }
+      catch (e) { toast(e.message || 'Could not start the watch party', true); }
+    });
+    panel.querySelector('#wwm-join')?.addEventListener('click', async () => {
+      try { const p = await party.join(); toast(`🎬 Watching “${p.item?.title || 'the movie'}” with ${p.host || 'the host'} — synced`); paintWwmPanel(); }
+      catch (e) { toast(e.message || 'Could not join the watch party', true); }
+    });
+    panel.querySelector('#wwm-end')?.addEventListener('click', async () => { await party.leave(); toast('Watch party ended'); paintWwmPanel(); });
+    panel.querySelector('#wwm-leave')?.addEventListener('click', async () => { await party.leave(); toast('Left the watch party'); paintWwmPanel(); });
+    panel.querySelector('#wwm-discord')?.addEventListener('click', () => { closeWatchWithMe(); openDiscordFull(true); });
+    panel.querySelector('#wwm-share')?.addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true; b.textContent = '🌐 Starting the share…';
+      try {
+        const q = panel.querySelector('#wwm-quality')?.value || 'balanced';
+        const r = await rmt.host(state.me()?.username || '', q);
+        toast(`🌍 Sharing live — room ${r.code}. Send a friend the link.`);
+      } catch (err) { toast(err.message || 'Could not start the share', true); }
+      paintWwmPanel();
+    });
+    panel.querySelector('#wwm-quality')?.addEventListener('change', async (e) => {
+      const ok = await rmt.setQuality(e.target.value);
+      toast(ok ? `Picture set to ${e.target.selectedOptions?.[0]?.textContent || e.target.value}` : 'Could not change the picture mid-share', !ok);
+      paintWwmPanel();
+    });
+    panel.querySelector('#wwm-copy-web')?.addEventListener('click', () => copyWatchLink(panel.querySelector('#wwm-web-link')?.value || ''));
+    panel.querySelector('#wwm-copy-srv')?.addEventListener('click', () => copyWatchLink(panel.querySelector('#wwm-srv-link')?.value || ''));
+    panel.querySelector('#wwm-stop')?.addEventListener('click', () => { rmt.leave(); toast('Stopped sharing'); paintWwmPanel(); });
+  }
+
+  // the marquee bar (party live / my role), painted on every party state
+  party.onUi(() => {
+    const bar = document.getElementById('party-bar');
+    const st = party.state;
+    const inTheater = ctx?.playerRoom?.() === 'theater';
+    const live = !!st?.live;
+    paintPartySign();
+    if (!inTheater || !live) { bar?.classList.add('hidden'); return; }
+    const el = bar || (() => {
+      const b = document.createElement('div');
+      b.id = 'party-bar';
+      b.style.cssText = 'position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:50;'
+        + 'display:flex;gap:10px;align-items:center;background:var(--vb-panel,rgba(10,12,30,.85));'
+        + 'border:1px solid var(--vb-line,#2a3354);border-radius:999px;padding:8px 16px;font-size:13.5px;'
+        + 'box-shadow:0 8px 24px rgba(0,0,0,.4)';
+      document.body.appendChild(b);
+      return b;
+    })();
+    el.classList.remove('hidden');
+    const watching = (st.guests?.length || 0) + 1;
+    if (party.role === 'host')
+      el.innerHTML = `<span>🎬 You're hosting “${esc(st.item?.title || '')}” · ${watching} watching${st.stalled ? ' · ⏳ someone is buffering' : ''}</span>
+        <button class="btn small danger" id="pb-end">End</button>`;
+    else if (party.role === 'guest') {
+      // t200: the stall gate may have picked me — say so, honestly
+      const solo = (st.solo || []).includes(state.me()?.username || '\u0000');
+      const note = st.stallPaused ? ' · ⏸ waiting for a buffer'
+        : (solo ? " · 📶 your connection is struggling — the party plays on, you'll catch up when it steadies" : '');
+      el.innerHTML = `<span>🎬 Watching with ${esc(st.host || 'the host')}${note}</span>
+        <button class="btn small" id="pb-leave">Leave</button>`;
+    }
+    else
+      el.innerHTML = `<span>🎬 ${esc(st.host || 'Someone')} is hosting “${esc(st.item?.title || '')}”</span>
+        <button class="btn small accent" id="pb-join">Join</button>`;
+    el.querySelector('#pb-join')?.addEventListener('click', async () => {
+      try { const p = await party.join(); toast(`🎬 Watching “${p.item?.title || 'the movie'}” with ${p.host || 'the host'} — synced`); }
+      catch (e2) { toast(e2.message || 'Could not join', true); }
+    });
+    el.querySelector('#pb-leave')?.addEventListener('click', async () => { await party.leave(); toast('Left the watch party'); });
+    el.querySelector('#pb-end')?.addEventListener('click', async () => { await party.leave(); toast('Watch party ended'); });
+    paintWwmPanel();
+  });
+
+  // one sign, two parties: in-store wins, remote is the understudy (t193)
+  function paintPartySign() {
+    const ps = party.state;
+    const ri = rmt.info();
+    const inTheater = ctx?.playerRoom?.() === 'theater';
+    let txt = '';
+    if (inTheater) {
+      if (ps?.live) txt = `🎬 NOW HOSTING — ${ps.host}: “${ps.item?.title || ''}”`;
+      else if (ri.live) txt = `🌍 LIVE — sharing Home Binger (${ri.code})`;
+    }
+    window.__VB?.scene?.setPartySign?.(txt);
+  }
+
+  // t195: the sharing status bar — only while the panel is CLOSED (the panel
+  // carries the controls; the bar is the glanceable "you're live")
+  rmt.onUi(() => {
+    paintPartySign();
+    paintWwmPanel();
+    const i = rmt.info();
+    const bar = document.getElementById('rparty-bar');
+    if (!i.live || document.getElementById('wwm-panel')) { bar?.remove(); return; }
+    const el = bar || (() => {
+      const b = document.createElement('div');
+      b.id = 'rparty-bar';
+      b.style.cssText = 'position:fixed;left:50%;bottom:200px;transform:translateX(-50%);z-index:50;'
+        + 'display:flex;gap:10px;align-items:center;background:var(--vb-panel,rgba(10,12,30,.85));'
+        + 'border:1px solid var(--vb-line,#2a3354);border-radius:999px;padding:8px 16px;font-size:13.5px;'
+        + 'box-shadow:0 8px 24px rgba(0,0,0,.4)';
+      document.body.appendChild(b);
+      return b;
+    })();
+    el.innerHTML = `<span>🌍 LIVE — sharing your screen · ${i.viewerCount} watching</span>
+      <button class="btn small" id="rpb-open">Controls</button>`;
+    el.querySelector('#rpb-open')?.addEventListener('click', () => openWatchWithMe());
+  });
+
+  // marquee poll (theater only — non-members have no SSE yet); guests who
+  // walk out of the theater leave the party (the host keeps hosting)
+  let lastRoom = null;
+  setInterval(async () => {
+    const room = ctx?.playerRoom?.() || 'store';
+    if (room !== lastRoom) {
+      lastRoom = room;
+      if (room !== 'theater' && party.role === 'guest') party.leave();
+    }
+    if (room === 'theater' && party.role === 'none') await party.poll();
+    else if (room !== 'theater') document.getElementById('party-bar')?.classList.add('hidden');
+  }, 4000);
+  party.poll();
+  window.addEventListener('beforeunload', () => {                    // no ghost parties
+    try { party.leave(); } catch {}
+    try {   // keepalive: the async leave above may not finish before the tab dies
+      const t = (() => { try { return localStorage.getItem('vb_sess'); } catch { return null; } })();
+      fetch('/api/party/leave' + (t ? '?vb_auth=' + encodeURIComponent(t) : ''), { method: 'POST', keepalive: true });
+    } catch {}
+  });
+
   const remote = $('#tv-remote');
   if (remote) {
     const tvApi = () => ctx.getTv();
@@ -2335,11 +3327,14 @@ export function initUI(ctx) {
     const roomSystem = () => {
       const room = ctx.playerRoom?.() || 'store';
       if (room === 'theater') return 'theater';
+      if (room === 'gamer') return 'gamer';      // t178: the den's 2.1 rig — its own room now
       return 'jukebox';
     };
+    const gamerApi = () => window.__VB?.scene;   // t178: the den's controls
     $('#tv-play').onclick = () => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.togglePlay();
+      else if (s === 'gamer') gamerApi()?.gamerToggle?.();
       else ctx.jukeboxToggle?.();
     };
     $('#tv-prev').onclick = () => {
@@ -2364,6 +3359,7 @@ export function initUI(ctx) {
     };
     $('#tv-stop').onclick = () => {
       const s = roomSystem();
+      if (s === 'gamer') { gamerApi()?.stopMusicMonitor?.(); toast('Game room music stopped.'); return; }
       if (s === 'theater') {
         tvApi()?.stop();
         ctx.setVhsLook?.(false);
@@ -2375,8 +3371,20 @@ export function initUI(ctx) {
     $('#tv-vol').oninput = (e) => {
       const s = roomSystem();
       if (s === 'theater') tvApi()?.setVolume(e.target.value / 100);
+      else if (s === 'gamer') gamerApi()?.gamerSetVolume?.(e.target.value / 100);
       else ctx.jukeboxSetVolume?.(e.target.value / 100);
     };
+    // t173: captions while a video plays ON the theater screen — the fs HUD
+    // is fs-only now, so the remote carries the CC button.
+    $('#tv-cc').onclick = () => { if (roomSystem() === 'theater') tvApi()?.toggleCc?.(); };
+    // t188: Discord and Watch-with-me are SEPARATE buttons (the owner's
+    // call) — 💬 docks the Discord panel, 👀 opens the watch-with-me chooser
+    $('#tv-vc').onclick = () => { if (roomSystem() === 'theater') openWatchWithMe(); };
+    $('#tv-dc').onclick = () => { if (roomSystem() === 'theater') openDiscordFull(); };
+    const fsVc = $('#fs-vc');
+    if (fsVc) fsVc.onclick = () => openWatchWithMe();
+    const fsDc = $('#fs-dc');
+    if (fsDc) fsDc.onclick = () => openDiscordFull();
     // ⛶ true full-screen — the raw video at native resolution (movies only)
     const fsBtn = $('#btn-tv-full');
     if (fsBtn) fsBtn.onclick = () => {
@@ -2440,17 +3448,24 @@ export function initUI(ctx) {
       //    panel is the booth's remote).
       const room = ctx.playerRoom?.() || 'store';
       if (room === 'dance') { remote.classList.add('hidden'); queueEl?.classList.add('hidden'); return; }
-      const sys = room === 'theater' ? 'theater' : 'jukebox';
+      const sys = room === 'theater' ? 'theater' : room === 'gamer' ? 'gamer' : 'jukebox';
       remote.dataset.room = room;
       const roomTag = $('#remote-room');
-      if (roomTag) roomTag.textContent = sys === 'theater' ? '🎬 THEATER' : '🎵 JUKEBOX';
+      if (roomTag) roomTag.textContent = sys === 'theater' ? '🎬 THEATER' : sys === 'gamer' ? '🎮 GAME ROOM' : '🎵 JUKEBOX';
       // t130: the Guide button is THEATER-only; repeat belongs to the decks.
       // (Runs before the show/hide early-return so the bar never shows a
       // button that belongs to the other room.)
       const gBtn = $('#tv-guide');
       if (gBtn) gBtn.style.display = sys === 'theater' ? '' : 'none';
+      const vcBtn = $('#tv-vc');                                   // t176: watch-with-me, theater-only
+      if (vcBtn) vcBtn.style.display = sys === 'theater' ? '' : 'none';
+      const dcBtn = $('#tv-dc');                                   // t188: Discord, its own button, theater-only
+      if (dcBtn) dcBtn.style.display = sys === 'theater' ? '' : 'none';
+      for (const rid of ['#tv-prev', '#tv-next', '#tv-skip-back', '#tv-skip-fwd']) {
+        const el = $(rid); if (el) el.style.display = sys === 'gamer' ? 'none' : '';   // t178: the den's sources take play/stop/volume, not seeks
+      }
       if (repeatBtn) {
-        if (sys === 'theater') repeatBtn.style.display = 'none';
+        if (sys !== 'jukebox') repeatBtn.style.display = 'none';
         else {
           repeatBtn.style.display = '';
           const r = ctx.dj?.jukebox?.repeat || 'off';
@@ -2462,6 +3477,9 @@ export function initUI(ctx) {
       if (sys === 'theater') {
         st = tv.stats();
         show = st.playing && st.kind !== 'card';
+      } else if (sys === 'gamer') {                                 // t178: the den's 2.1 rig
+        st = gamerApi()?.gamerStats?.() || {};
+        show = !!st.playing;
       } else {
         st = ctx.jukeboxStats?.() || {};
         show = !!st.playing;
@@ -2469,7 +3487,7 @@ export function initUI(ctx) {
       remote.classList.toggle('hidden', !show);
       if (!show) { queueEl?.classList.add('hidden'); return; }
       $('#tv-play').textContent = st.paused ? '▶' : '⏸';
-      $('#tv-time').textContent = st.duration
+      $('#tv-time').textContent = sys === 'gamer' ? 'den · 2.1' : st.duration
         ? `${fmt(st.time)} / ${fmt(st.duration)}` : fmt(st.time);
       const vol = Math.round((st.volume ?? 0.85) * 100);
       if (document.activeElement !== $('#tv-vol')) $('#tv-vol').value = vol;
@@ -2477,15 +3495,24 @@ export function initUI(ctx) {
         const fsB = $('#btn-tv-full'); if (fsB) fsB.style.display = '';
         const fsOn = !!tv.fullscreenActive?.();
         if (fsB) { fsB.textContent = fsOn ? '🗗' : '⛶'; fsB.classList.toggle('active', fsOn); }
+        const ccB = $('#tv-cc');
+        if (ccB) {
+          const ci = tv.ccInfo?.() || {};
+          ccB.style.display = ci.available ? '' : 'none';
+          ccB.classList.toggle('cc-on', !!ci.on);
+          ccB.title = ci.on ? 'Turn captions off' : 'Turn captions on';
+        }
         renderQueue(tv, st);
       } else {
         queueEl?.classList.add('hidden');
         const fsB = $('#btn-tv-full'); if (fsB) fsB.style.display = 'none';
+        const ccB = $('#tv-cc'); if (ccB) ccB.style.display = 'none';
       }
     }, 500);
   }
 
   return {
     updateCarry,
-    openDj, toast, openSidebar, closeSidebar, openSettings, closeSettings, showItemModal, openHelpDesk, updateSidebar };
+    openDj, toast, openSidebar, closeSidebar, openSettings, closeSettings, showItemModal, openHelpDesk, openGamerPanel, updateSidebar,
+    openWatchWithMe };   // t195: the Watch Party dock (tests + the share bar's Controls button)
 }
