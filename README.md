@@ -8,7 +8,7 @@
 A self-hosted, walkable 3D video store stocked from your own <b>Plex</b>, <b>Jellyfin</b>, or any folder on your server — with a private movie theater, a neon dance hall, a game room, and <b>watch parties anyone can join from a plain browser link</b>.</p>
 
 <p align="center">
-  <a href="https://github.com/BabyBluJ-wall/Home-Binger/releases"><img src="https://img.shields.io/badge/release-2.0.0-ffd23f?style=flat-square" alt="release 2.0.0"></a>
+  <a href="https://github.com/BabyBluJ-wall/Home-Binger/releases"><img src="https://img.shields.io/badge/release-2.1.0-ffd23f?style=flat-square" alt="release 2.1.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-00e5ff?style=flat-square" alt="license CC BY-NC-SA 4.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20Docker%20%C2%B7%20Node.js-ff5c74?style=flat-square" alt="Windows, Docker, Node.js">
   <a href="https://discord.gg/pB4HKjQGaX"><img src="https://img.shields.io/badge/Discord-join%20the%20store-5865F2?style=flat-square" alt="Discord"></a>
@@ -53,7 +53,7 @@ Four connected spaces under one roof:
 ## 👀 Watch together — three ways
 
 - **In the theater (everyone on your server):** the host clicks **Watch together** and the room follows — gentle drift correction, and the group pauses while someone buffers (a guest whose connection keeps struggling stops holding the room hostage after a few pauses: the party plays on and they catch up when it steadies).
-- **Anywhere (any browser, no install):** **🌐 Share this Home Binger — live** hands you a link and a six-character room code. Friends open it on a phone or laptop, type a name, and watch your screen live with your system's sound — WebRTC with STUN + a free relay fallback, so home routers and cellular work without a VPN. Up to six viewers, your choice of quality (capped, so a share can't overdrive a thin uplink), and honest live stats on their end. If a chat app mangles the link, they just type the code.
+- **Anywhere (any browser, no install):** **🌐 Share this Home Binger — live** hands you a link and a six-character room code. Friends open it on a phone or laptop, type a name, and watch your screen live with your system's sound — WebRTC with STUN + a free relay fallback, so home routers and cellular work without a VPN. Up to six viewers, four quality tiers — Saver 720p30 up to **Ultra 1440p60**, each bitrate-capped (2–20 Mbps) so it can't overdrive a thin uplink — and honest live stats on their end. If a chat app mangles the link, they just type the code.
 - **App-to-app:** friends running their own Home Binger sync theater screens directly, peer-to-peer.
 
 <p align="center"><img src="docs/watch-party.png" alt="The Watch-with-me panel beside the store — LIVE with a room code, the anyone link and the same-Wi-Fi link with copy buttons, viewer roster and quality picker" width="880"></p>
@@ -70,7 +70,7 @@ Four connected spaces under one roof:
 
 ---
 
-## ✨ What's new in 2.0
+## ✨ What's new
 
 - **🎮 The game room** — the battle station, the glass tower, three working monitors, the angel-demon sign.
 - **🎵 The music station** — YouTube in the player panel, keyless; Steam library sharing server-wide (one key, Test buttons that say exactly what's wrong).
@@ -144,7 +144,7 @@ Movies shelve as VHS sleeves and DVD cases, TV as per-episode DVD sets grouped b
 
 Measured, not guessed: the whole 3D app draws about **0.4–0.6 GB of memory** (store idle → game room with panels open), even with software rendering — a 4 GB machine runs it, and 8 GB makes everything roomy. Three honest notes: **GPU drivers matter more than GPU power** (broken drivers fall back to software rendering — it works, but the start screen can take 30–60 s), the heaviest moments are the DJ booth and high-bitrate video, and the **Settings → Graphics dial** on Auto steps the render resolution down on weaker machines all by itself.
 
-**Hosting a watch party** is the one genuinely demanding job: your PC captures and encodes its screen while running the store. Any GPU with hardware video encoding (Intel HD 530+ / 6th-gen and up, or any dedicated card) shrugs at it; a 2015 dual-core without that will want **Saver** quality (720p30). Budget **~1.2–4.5 Mbps of upload per viewer** (that's what the quality caps are for). Watching as a guest works on anything that plays YouTube.
+**Hosting a watch party** is the one genuinely demanding job: your PC captures and encodes its screen while running the store. Any GPU with hardware video encoding (Intel HD 530+ / 6th-gen and up, or any dedicated card) shrugs at it; a 2015 dual-core without that will want **Saver** quality (720p30). Budget **~2–20 Mbps of upload per viewer** depending on the tier (Saver ≈ 2 · Balanced ≈ 6 · High ≈ 12 · Ultra ≈ 20). Watching as a guest works on anything that plays YouTube.
 
 Node/browser mode: the same table, but the browser carries the graphics — any current Chrome, Edge, or Firefox with WebGL2. Port **8181** (the exe politely takes 8182+ if it's busy).
 

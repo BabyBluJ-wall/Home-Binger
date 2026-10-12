@@ -8,12 +8,12 @@
 //       art streams in behind the loading bar
 //    4. "Enter the store" → pointer-lock first-person browsing
 // ─────────────────────────────────────────────────────────────────────────────
-import { state } from './state.js?v=1791834263993';
-import { api } from './api.js?v=1791834263993';
-import { initUI } from './ui.js?v=1791834263993';
-import { createScene } from './store3d/scene.js?v=1791834263993';
-import { STORE, SUPPORT } from './store3d/config.js?v=1791834263993';
-import { initGuide, guideInfo, openGuide } from './guide.js?v=1791834263993';   // t123: the TV Guide
+import { state } from './state.js?v=1791847308316';
+import { api } from './api.js?v=1791847308316';
+import { initUI } from './ui.js?v=1791847308316';
+import { createScene } from './store3d/scene.js?v=1791847308316';
+import { STORE, SUPPORT } from './store3d/config.js?v=1791847308316';
+import { initGuide, guideInfo, openGuide } from './guide.js?v=1791847308316';   // t123: the TV Guide
 
 // ── store branding (config.js → STORE) drives the start screen ──
 {

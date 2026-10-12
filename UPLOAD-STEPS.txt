@@ -1,4 +1,4 @@
-PUTTING HOME BINGER 2.0 ON GITHUB (about 10 minutes, free)
+PUTTING HOME BINGER 2.1 ON GITHUB (about 10 minutes, free)
 ===========================================================
 
 You have: this zip = the complete, ready-to-commit source for this
@@ -7,16 +7,16 @@ media, and builds — nothing to configure.)
 
 WHERE THINGS STAND RIGHT NOW
 ----------------------------
-The repo's latest public release is "v1.15" (2026-10-03). Publishing
-v2.0 as a REGULAR release (pre-release box NOT ticked) makes the
+The repo's latest public release is "2.0-beta" (2026-10-12). Publishing
+v2.1 as a REGULAR release (pre-release box NOT ticked) makes the
 "new version out" notice appear for everyone still on 1.15, 1.10.1,
-1.10 and older — that is the point of this release. This is the big
-one: the game room, watch parties, keyless music, and a version number
-that finally makes sense.
+1.10 and older — that is the point of this release. 2.0 brought the game room,
+watch parties and keyless music; 2.1 sharpens the watch-party picture
+(raised quality ceilings + the Ultra tier).
 
 THE VERSION SCHEME (owner's call, 2026-10-12)
 ---------------------------------------------
-  2.0      this release
+  2.1      this release
   2.x      updates and bug fixes (tag them v2.1, v2.2, …)
   3.0      the library megaproject, when it lands
 The app reads its own version from package.json — the sidebar badge
@@ -27,15 +27,15 @@ EVERY UPDATE — three drags
 --------------------------
 1. On github.com, open your repo → "Add file" → "Upload files" → drag
    EVERYTHING from inside this zip in (matching files get replaced).
-   Commit message: a one-liner like "2.0".
+   Commit message: a one-liner like "2.1".
    (First push of this release also fires the "Watch page" workflow —
    that publishes the browser guest page for watch parties. It's
    already enabled: Settings → Pages → Source "GitHub Actions".)
 2. Releases (right column) → "Draft a new release".
-3. Tag: v2.0           <- plain "v" + the version number, no extra letters
-   Title: Home Binger 2.0
-   Notes: paste RELEASE-NOTES-v2.0.md (it's in this zip, repo root).
-   Drag the exe zip (HomeBinger-2.0.0.zip) into "Attach binaries",
+3. Tag: v2.1           <- plain "v" + the version number, no extra letters
+   Title: Home Binger 2.1
+   Notes: paste RELEASE-NOTES-v2.1.md (it's in this zip, repo root).
+   Drag the exe zip (HomeBinger-2.1.0.zip) into "Attach binaries",
    then Publish. Do NOT tick "Set as a pre-release" — the app's update
    notice only looks at regular releases.
 

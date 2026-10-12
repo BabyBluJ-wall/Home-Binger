@@ -22,9 +22,12 @@
 //      data channel beside it carries names, roster, pings, and the end.
 //    · hb://<code> deep links: the app opens the room in the default
 //      browser (the page is served by the friend's own HB at /watch/).
-//    · Quality: High 1080p60 · Balanced 900p60 (default) · Saver 720p30 —
-//      each tier capped (4.5 / 3 / 1.2 Mb/s) so it can't overdrive a thin
-//      uplink; a re-capture re-calls every guest with the fresh stream.
+//    · Quality: Ultra (up to 1440p60) · High 1080p60 · Balanced 900p60
+//      (default) · Saver 720p30 — each tier bitrate-capped (20 / 12 / 6 /
+//      2 Mb/s). t205 raised the ceilings: the real-world latency proved
+//      links have headroom the old conservative caps (4.5/3/1.2) wouldn't
+//      spend — the guest's adaptive jitter buffer + congestion control
+//      still protect thin links, so the caps only stop silly-high bursts.
 //    · Honest limits (shown in the panel): each viewer costs the host
 //      ~3–5 Mbps of UPLOAD (1–4 viewers is the sweet spot, hard cap 6),
 //      and a MINIMIZED Home Binger stops rendering — keep it visible.
@@ -49,9 +52,10 @@ const ICE_SERVERS = [
 ];
 
 const QUALITY = {
-  high:     { w: 1920, h: 1080, fps: 60, cap: 4500000, label: 'High — 1080p60' },
-  balanced: { w: 1600, h: 900,  fps: 60, cap: 3000000, label: 'Balanced — 900p60' },
-  saver:    { w: 1280, h: 720,  fps: 30, cap: 1200000, label: 'Saver — 720p30' },
+  ultra:    { w: 2560, h: 1440, fps: 60, cap: 20000000, label: 'Ultra — up to 1440p60' },
+  high:     { w: 1920, h: 1080, fps: 60, cap: 12000000, label: 'High — 1080p60' },
+  balanced: { w: 1600, h: 900,  fps: 60, cap: 6000000,  label: 'Balanced — 900p60' },
+  saver:    { w: 1280, h: 720,  fps: 30, cap: 2000000,  label: 'Saver — 720p30' },
 };
 
 let role = 'none';            // 'none' | 'host'   (guests live in /watch/, not the app)

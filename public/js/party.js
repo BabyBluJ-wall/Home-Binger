@@ -19,7 +19,7 @@
 //  only ever read + follow. tv.js stays byte-identical — everything here
 //  drives the EXISTING public surface (scene.playItem / tv.mediaEl()).
 // ─────────────────────────────────────────────────────────────────────────────
-import { api } from './api.js?v=1791834263993';
+import { api } from './api.js?v=1791847308316';
 
 const DEADZONE = 0.10;        // s — inside this, do nothing
 const NUDGE_LIMIT = 1.5;      // s — beyond this, hard seek

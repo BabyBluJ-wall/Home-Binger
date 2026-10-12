@@ -19,8 +19,9 @@ WILL IT RUN ON MY MACHINE?
     dip during playback there. The store and theater run everywhere.
   • HOSTING a watch party is the biggest job (capture + encode while
     the store runs): any Intel HD 530+ or dedicated GPU handles it, and
-    budget roughly 1.2–4.5 Mbps of UPLOAD per viewer (pick Saver on
-    thin links). Watching a party as a guest: anything goes.
+    budget roughly 2–20 Mbps of UPLOAD per viewer depending on the
+    quality setting (Saver ≈ 2 · Balanced ≈ 6 · High ≈ 12 · Ultra ≈ 20;
+    pick Saver on thin links). Watching as a guest: anything goes.
 
 PICK YOUR PATH
 ──────────────

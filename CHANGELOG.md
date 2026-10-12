@@ -1,5 +1,27 @@
 # Home Binger — Change Log
 
+## 2026-10-13 — 2.1.0 (build 34): watch-party quality — the Ultra tier
+
+The owner's real-world test: a remote guest in Tennessee watched with
+hardly any delay — but the picture was fuzzy. Diagnosis: the buffering
+insurance from build 30 had become the bottleneck. The default share
+was Balanced = 900p at a 3 Mbps cap, and the caps refused to spend the
+headroom the link clearly had.
+
+- **Ceilings raised, honest math kept:** Saver 1.2 → **2 Mb/s** ·
+  Balanced 3 → **6** · High 4.5 → **12**, and a new **Ultra — up to
+  1440p60 at 20 Mb/s** tier tops the menu. The guest's adaptive jitter
+  buffer and WebRTC congestion control still protect thin links — the
+  caps only stop silly-high bursts, so the buffering fix stays fixed.
+- Ultra captures at the window's native resolution (a window smaller
+  than 1440p simply shares its own pixels — no upscale, no waste); it
+  shines when the app fills a 1440p+ monitor.
+- The share panel lists all four tiers with the honest per-viewer
+  upload cost (≈2 · 6 · 12 · 20 Mb/s), and the README/START-HERE
+  requirement numbers match.
+
+## 2026-10-12 — 2.0.0 (build 33): the version graduation
+
 ## 2026-10-12 — 2.0.0 (build 33): the version graduation
 
 The owner's call, and the end of a confusing line: the work labeled

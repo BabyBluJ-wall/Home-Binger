@@ -8,19 +8,19 @@
 //      scene.onItemClick = fn   scene.onHover = fn
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT, TUNING } from './config.js?v=1791834263993';
-import { buildRoom, buildTheater, buildJukebox, buildHelpDesk } from './room.js?v=1791834263993';
-import { buildHall } from './hall.js?v=1791834263993';
-import { buildDance } from './dance.js?v=1791834263993';   // t170: cache-bump (hall/exterior/gamer touched)
-import { buildGamer } from './gamer.js?v=1791834263993';
-import { buildExterior } from './exterior.js?v=1791834263993';   // the world outside the door
-import { buildSignage } from './signage.js?v=1791834263993';
-import { createDjPro } from './djpro.js?v=1791834263993';
-import { buildTV } from './tv.js?v=1791834263993';
-import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1791834263993';
-import { PosterAtlases } from './atlas.js?v=1791834263993';
-import { createControls } from './controls.js?v=1791834263993';
-import { createJukeAudio } from './jukeaudio.js?v=1791834263993';
+import { LAYOUT, TUNING } from './config.js?v=1791847308316';
+import { buildRoom, buildTheater, buildJukebox, buildHelpDesk } from './room.js?v=1791847308316';
+import { buildHall } from './hall.js?v=1791847308316';
+import { buildDance } from './dance.js?v=1791847308316';   // t170: cache-bump (hall/exterior/gamer touched)
+import { buildGamer } from './gamer.js?v=1791847308316';
+import { buildExterior } from './exterior.js?v=1791847308316';   // the world outside the door
+import { buildSignage } from './signage.js?v=1791847308316';
+import { createDjPro } from './djpro.js?v=1791847308316';
+import { buildTV } from './tv.js?v=1791847308316';
+import { computeFaces, assignItems, buildShelfGroup, shelfColliders, browseOrder } from './shelves.js?v=1791847308316';
+import { PosterAtlases } from './atlas.js?v=1791847308316';
+import { createControls } from './controls.js?v=1791847308316';
+import { createJukeAudio } from './jukeaudio.js?v=1791847308316';
 
 export function createScene(container, theme) {
   // ── renderer ──

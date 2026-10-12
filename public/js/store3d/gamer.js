@@ -19,7 +19,7 @@
 //  brick veneer used to float 3cm inside the room).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1791834263993';
+import { LAYOUT } from './config.js?v=1791847308316';
 // t180: no YT iframe API here anymore — the den plays through the media panel
 // (ui.js). The theater keeps its own createYtPlayer.
 

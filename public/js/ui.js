@@ -7,15 +7,15 @@
 //    Server (Plex/Jellyfin) · Store TV · Users · Policies (locks & defaults)
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { api } from './api.js?v=1791834263993';
-import { party } from './party.js?v=1791834263993';   // t186: the watch party ("watch with me")
-import { remote as rmt, parseRemoteCode } from './wwremote.js?v=1791834263993';   // t193: remote watch rooms — P2P over public signaling (aliased: the TV remote owns 'remote' below)
+import { api } from './api.js?v=1791847308316';
+import { party } from './party.js?v=1791847308316';   // t186: the watch party ("watch with me")
+import { remote as rmt, parseRemoteCode } from './wwremote.js?v=1791847308316';   // t193: remote watch rooms — P2P over public signaling (aliased: the TV remote owns 'remote' below)
 window.__HBparty = party;                             // tests/debug: the party engine handle
 window.__HBremote = rmt;                              // t193: same, for the remote engine
-import { createCaseView } from './store3d/caseview.js?v=1791834263993';   // the 3D case in the item modal
-import { state } from './state.js?v=1791834263993';
-import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1791834263993';
-import { placeholderDataUrl } from './store3d/textures.js?v=1791834263993';
+import { createCaseView } from './store3d/caseview.js?v=1791847308316';   // the 3D case in the item modal
+import { state } from './state.js?v=1791847308316';
+import { SORT_MODES, SHELF_STYLES } from './store3d/config.js?v=1791847308316';
+import { placeholderDataUrl } from './store3d/textures.js?v=1791847308316';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -3148,17 +3148,19 @@ export function initUI(ctx) {
       <div class="hint" style="margin:0 0 10px">In the room: <b>${ri.viewers.length ? esc(ri.viewers.join(', ')) : 'just you so far'}</b></div>
       <label class="hint" style="display:block;margin:0 0 6px">Picture quality</label>
       <select id="wwm-quality" style="width:100%;margin-bottom:10px;padding:8px;border-radius:8px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.3);color:inherit">
+        <option value="ultra" ${ri.quality === 'ultra' ? 'selected' : ''}>Ultra — up to 1440p60 (sharpest)</option>
         <option value="high" ${ri.quality === 'high' ? 'selected' : ''}>High — 1080p60</option>
         <option value="balanced" ${ri.quality === 'balanced' ? 'selected' : ''}>Balanced — 900p60</option>
         <option value="saver" ${ri.quality === 'saver' ? 'selected' : ''}>Saver — 720p30</option>
       </select>
       <button class="btn danger" id="wwm-stop" style="width:100%">⏹ Stop sharing</button>
-      <div class="hint" style="margin:10px 0 0">Keep Home Binger visible while sharing — a minimized window stops rendering (the picture freezes). Each viewer uses roughly 1–4 Mbps of your internet UPLOAD, capped by the quality setting (Saver is the gentle pick — phones and thin uplinks); 1–4 viewers is the sweet spot (room cap ${ri.max}).</div>`;
+      <div class="hint" style="margin:10px 0 0">Keep Home Binger visible while sharing — a minimized window stops rendering (the picture freezes). Each viewer's cost follows the setting — Saver ≈ 2 · Balanced ≈ 6 · High ≈ 12 · Ultra ≈ 20 Mbps of your internet UPLOAD (the stream adapts down automatically on thin links); 1–4 viewers is the sweet spot (room cap ${ri.max}). Ultra shines when the app window fills a 1440p+ monitor.</div>`;
     } else {
       remoteSec = `
       <button class="btn accent" id="wwm-share" style="width:100%;margin-bottom:8px">🌐 Share this Home Binger — live, in any browser</button>
       <label class="hint" style="display:block;margin:0 0 6px">Picture quality</label>
       <select id="wwm-quality" style="width:100%;margin-bottom:10px;padding:8px;border-radius:8px;border:1px solid var(--vb-line,#2a3354);background:rgba(0,0,0,.3);color:inherit">
+        <option value="ultra">Ultra — up to 1440p60 (sharpest)</option>
         <option value="high">High — 1080p60</option>
         <option value="balanced" selected>Balanced — 900p60</option>
         <option value="saver">Saver — 720p30</option>

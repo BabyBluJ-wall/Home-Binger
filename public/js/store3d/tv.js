@@ -17,11 +17,11 @@
 //  (or ⏹ Stop) controls it.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1791834263993';   // t123: live TV (HLS) on the big screen
-import { createYtPlayer } from '/js/yt.js?v=1791834263993';   // t152: pasted YouTube links play on the big screen
-import { LAYOUT } from './config.js?v=1791834263993';
-import { signTexture, hashString } from './textures.js?v=1791834263993';
-import { computeTheaterSpeakers } from './room.js?v=1791834263993';   // 8.2 layout (shared with the room mesh)
+import { attachStream, detachStream, isHlsItem } from '/js/hlsplay.js?v=1791847308316';   // t123: live TV (HLS) on the big screen
+import { createYtPlayer } from '/js/yt.js?v=1791847308316';   // t152: pasted YouTube links play on the big screen
+import { LAYOUT } from './config.js?v=1791847308316';
+import { signTexture, hashString } from './textures.js?v=1791847308316';
+import { computeTheaterSpeakers } from './room.js?v=1791847308316';   // 8.2 layout (shared with the room mesh)
 
 const TW = 512, TH = 288;   // screen canvas LOGICAL resolution (drawing code)
 const SS = 3.75;            // supersample: device canvas = TW×SS × TH×SS = 1920×1080.

@@ -9,7 +9,7 @@
 //  that wall + door). The future library will wrap around that room.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from '/vendor/three.module.js';
-import { LAYOUT } from './config.js?v=1791834263993';
+import { LAYOUT } from './config.js?v=1791847308316';
 // t119: hex mixer (same recipe as room.js) — the hall ceiling derives from the theme wall
 function mixHex(a, b, k) {
   const pa = /^#?([0-9a-f]{6})$/i.exec(String(a || '')), pb = /^#?([0-9a-f]{6})$/i.exec(String(b || ''));
