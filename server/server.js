@@ -58,6 +58,8 @@ function serveStatic(req, res, pathname) {
 
   if (filePath === PUBLIC_DIR || pathname === '/') filePath = path.join(PUBLIC_DIR, 'index.html');
   if (pathname === '/m') filePath = path.join(PUBLIC_DIR, 'm.html');   // t123: Simple Mode (the phone list client)
+  if (pathname === '/watch' || pathname === '/watch/') filePath = path.join(PUBLIC_DIR, 'watch', 'index.html');   // t195: the browser watch page (self-contained; also published to GitHub Pages)
+  if (pathname === '/embedwrap' || pathname === '/embedwrap/') filePath = path.join(PUBLIC_DIR, 'embedwrap.html');   // t198: the den's embed wrapper — a real page around the official player (Error 153 fix)
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     // SPA-style fallback → index.html (keeps deep links working behind proxies)
     filePath = path.join(PUBLIC_DIR, 'index.html');

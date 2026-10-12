@@ -222,6 +222,12 @@ export function writePrefs(key, incoming) {
         ? incoming.controls.base
         : (current.controls?.base || 'walk')
     },
+    // t186: photosensitive comfort — steady lights follow the profile
+    a11y: {
+      steady: incoming.a11y !== undefined
+        ? incoming.a11y.steady === true
+        : (current.a11y?.steady === true)
+    },
     updatedAt: Date.now()
   };
   setProfile(key, next);

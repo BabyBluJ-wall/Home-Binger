@@ -85,6 +85,27 @@ async function fetchEpg(url) {
   return { at: now, byChannel };
 }
 
+// t185: the Guide must never WAIT on a dead mirror. The snapshot path races
+// each still-uncached source against a short deadline and serves without it
+// (its channels keep the honest ● LIVE line; the background warm fills it in).
+export function loadEpgFast(url, deadlineMs = 8000) {
+  const hit = epgCache.get(url);
+  if (hit && ((hit.byChannel && Date.now() - hit.at < EPG_TTL)
+    || (hit.failedAt && Date.now() - hit.failedAt < EPG_FAIL_BACKOFF))) {
+    return hit.byChannel ? Promise.resolve(hit) : Promise.reject(hit.err);
+  }
+  return Promise.race([
+    loadEpg(url),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('EPG source slow — served without it')), deadlineMs))
+  ]);
+}
+
+// t185: prefetch every known source in the background — by the time a Guide
+// opens, the data is local. Returns when all settle; never throws.
+export function warmEpg(urls) {
+  return Promise.allSettled([...new Set(urls || [])].map(u => loadEpg(u)));
+}
+
 export async function loadEpg(url) {
   const hit = epgCache.get(url);
   if (hit) {

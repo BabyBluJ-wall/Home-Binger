@@ -149,21 +149,16 @@ export function loadConfig() {
   try { loaded = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { /* first run */ }
   // Deep-merge saved values over defaults so new keys appear after upgrades.
   config = deepMerge(defaultConfig(), loaded, true);
-  // t159b: swap a retired default channel id for the invite's real target
-  // (b2r5 saved the wrong one — the embed showed the wrong chat)
-  if (RETIRED_CHANNEL_IDS.includes(config.community?.channelId))
-    config.community.channelId = defaultConfig().community.channelId;
-  // t167 (owner: "set the discord chat globally — for anyone and everyone
-  // that downloads and uses it"): the store's own Discord ships as the
-  // factory default, so installs that saved an EMPTY community (or pre-t155
-  // configs) heal to it on load. A deliberately different server still wins.
-  if (!config.community?.discord || !config.community?.channelId) {
-    const def = defaultConfig().community;
-    config.community = {
-      discord: config.community?.discord || def.discord,
-      channelId: config.community?.channelId || def.channelId
-    };
-  }
+  // t169 (owner: "remove the option to change the discord connection info —
+  // i get all the bug reports as the main one working on the project"): the
+  // bug-report chat is PINNED to the project's own Discord for every
+  // install, always — healed to the factory values on every load, and the
+  // admin API no longer accepts community changes (routes/api.js).
+  config.community = defaultConfig().community;
+  // t186: the YouTube key is GONE — the player panel browses the real site.
+  // Any youtube block still on an older install's disk never loads (and the
+  // next save rewrites the file without it).
+  delete config.youtube;
   // t62: migrate the single-path grabber to multi-spot (path → spots[0])
   if (config.local && config.local.path && !(Array.isArray(config.local.spots) && config.local.spots.length))
     config.local.spots = [config.local.path];

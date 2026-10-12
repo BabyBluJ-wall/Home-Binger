@@ -23,6 +23,7 @@
 //    DELETE  /api/admin/users/:id    delete user
 // ─────────────────────────────────────────────────────────────────────────────
 import crypto from 'node:crypto';
+import os from 'node:os';
 import {
   getConfig, saveConfig, deepMerge, defaultConfig, defaultPrefs, normalizeChannelId, RETIRED_CHANNEL_IDS
 } from '../lib/store.js';
@@ -33,11 +34,38 @@ import {
   getLibrary, findItem, posterUrlFor, streamUrlFor, libraryStatus, invalidateCache, librarySections, userView, defaultView, ADAPTERS, sourceConfig
 } from '../lib/library.js';
 import { proxyImage, proxyVideo, streamLocalFile } from '../lib/proxy.js';
+import {
+  createParty, endParty, partyState, hostUpdate, joinParty, leaveParty,
+  reportStall, subscribeParty, partyTime
+} from '../lib/party.js';   // t186: watch party (the theater's "watch with me")
 import { localAdapter } from '../lib/adapters/local.js';   // t61: mime lookup for disk streams
+
+// t201: is the public guest page actually published? (Keep in sync with
+// WATCH_WEB_BASE in public/js/ui.js.) A dead everyone-link is how "share
+// with anyone" quietly became "Tailscale only" — the panel warns until the
+// owner flips GitHub Pages on. Probed once, cached 15 min; null = unknown
+// (offline server) — never guess.
+const WATCH_PAGES_URL = 'https://babybluj-wall.github.io/Home-Binger/';
+let pagesProbe = { at: 0, ok: null };
+async function pagesOkCached() {
+  if (Date.now() - pagesProbe.at < 15 * 60 * 1000) return pagesProbe.ok;
+  pagesProbe.at = Date.now();                     // marks in-flight as fresh too
+  try {
+    const r = await fetch(WATCH_PAGES_URL, { redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    pagesProbe.ok = r.ok;
+  } catch { pagesProbe.ok = null; }               // no internet / blocked — say nothing
+  return pagesProbe.ok;
+}
 import { friendAdapter, findShareEntry, friendSourceIds, shareableWith, sectionKeyOf, newCode } from '../lib/friends.js';   // t97: HB↔HB
 import fs from 'node:fs';                                 // t66: grabber spot validation
 import path from 'node:path';                             // t89: thumb cache dir
 import { DATA_DIR } from '../lib/store.js';                // t89: grabbed-file case art
+import {
+  sanitizeConnections,
+  publicConnections,
+  fetchSteamLibrary,
+  steamKeyCheck
+} from '../lib/connections.js';   // t171: per-user keys · t177: key checks · t186: YouTube keys are GONE (the panel browses the real site)
 import { readCoverArt } from '../lib/tagmeta.js';         // t151: album covers embedded in the file tags
 import { CATALOG_SECTIONS } from '../lib/adapters/archive.js';
 import { GENRES as RADIO_GENRES } from '../lib/adapters/radio.js';
@@ -137,6 +165,7 @@ function maskConfig(cfg) {
   const safe = JSON.parse(JSON.stringify(cfg));
   if (safe.plex?.token) safe.plex.token = MASK;
   if (safe.jellyfin?.apiKey) safe.jellyfin.apiKey = MASK;
+  if (safe.steam?.key) safe.steam.key = MASK;                         // t175
   if (Array.isArray(safe.instances)) {                     // t87: extra connections mask too
     for (const i of safe.instances) {
       if (i?.token) i.token = MASK;
@@ -145,6 +174,11 @@ function maskConfig(cfg) {
   }
   return safe;
 }
+
+// ── a tiny public-info cache ─────────────────────────────────────────────────
+const pubCache = new Map();             // 60s — Discord portal counts etc.
+function cacheGetPub(k) { const e = pubCache.get(k); return e && Date.now() - e.at < 60 * 1000 ? e.value : undefined; }
+function cacheSetPub(k, v) { pubCache.set(k, { at: Date.now(), value: v }); }
 
 // ── t123: PER-USER LIBRARY ACCESS — derivation + guards ──────────────────────
 // The libraryAccess map (config) is the single source of truth:
@@ -199,7 +233,8 @@ export async function handleApi(req, res, pathname) {
         controls: {
           look: Number.isFinite(+prefs.controls?.look) ? Math.min(3, Math.max(0.25, +prefs.controls.look)) : 0.55,   // t165: default 0.55×
           base: ['walk', 'jog', 'run'].includes(prefs.controls?.base) ? prefs.controls.base : 'walk'
-        }
+        },
+        a11y: { steady: prefs.a11y?.steady === true }   // t186: photosensitive comfort — steady lights, per profile
       };
       const status = await libraryStatus();
       const tvTitle = await resolveTvTitle(cfg).catch(() => null);
@@ -429,6 +464,9 @@ export async function handleApi(req, res, pathname) {
           base: ['walk', 'jog', 'run'].includes(c.base) ? c.base : (prev.base || 'walk')
         };
       }
+      if (body.a11y) {   // t186: photosensitive comfort — steady lights follow the profile
+        prefs.a11y = { steady: body.a11y.steady === true };
+      }
       // personal shelf map (unitId → sectionKey; '' entries clear mappings)
       if (body.shelves && !cfg.locks.shelves) {
         prefs.shelves = sanitizeShelfMap({ ...(prefs.shelves || {}), ...body.shelves });
@@ -503,6 +541,113 @@ export async function handleApi(req, res, pathname) {
       return ok(res, { ok: true, username: name });
     }
 
+    // ── t171: PER-USER connections (Steam library) ──────────
+    // The owner's accounts are never involved: each user stores their own
+    // keys in their own account; the server only ever uses a key on behalf
+    // of the user it belongs to.
+    if (pathname === '/api/connections/me') {
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in to connect your own Steam');
+      if (method === 'GET') {
+        const cfg = getConfig();                     // t175: which halves the ADMIN's keys already cover
+        return ok(res, { connections: publicConnections(user.connections),
+          server: { steam: !!cfg.steam?.key } });   // t186: the YouTube key is gone — the panel browses the real site
+      }
+      if (method === 'PUT') {
+        const body = await readBody(req);
+        user.connections = sanitizeConnections(user.connections, body.connections || body);
+        (await import('../lib/store.js')).saveDb();
+        return ok(res, { ok: true, connections: publicConnections(user.connections) });
+      }
+    }
+    if (method === 'POST' && pathname === '/api/connections/test') {     // t178: test YOUR OWN key, right where you paste it
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in first');
+      const body = await readBody(req);
+      const src = String(body.source || '');
+      if (src === 'steam') {
+        const key = (body.key && body.key !== MASK) ? String(body.key).trim() : (user.connections?.steam?.key || '');
+        if (!key) return ok(res, { ok: false, error: 'No Steam key of your own yet — paste one above (or type one and test before saving). The store\'s key, if any, is tested in Admin → Servers.' });
+        return ok(res, await steamKeyCheck(key));
+      }
+      return fail(res, 400, 'Unknown source');   // t186: 'youtube' is retired — nothing to test
+    }
+    if (method === 'GET' && pathname === '/api/connections') {          // admin: the network's link states (no raw keys)
+      if (!requireAdmin(req, res)) return true;
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      return ok(res, { connections: db.users.map(u => ({ user: u.username, ...publicConnections(u.connections) })) });
+    }
+    if (method === 'GET' && pathname === '/api/steam/shared') {          // t172: whose libraries can I browse?
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in first');
+      const store = await import('../lib/store.js');
+      const db = store.getDb();
+      return ok(res, { shared: db.users
+        .filter(u => u.id !== user.id && u.connections?.steam?.id && u.connections?.steam?.share
+          && (u.connections?.steam?.key || getConfig().steam?.key))
+        .map(u => ({ user: u.username })) });
+    }
+    if (method === 'GET' && pathname === '/api/steam/library') {
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in first');
+      let target = user;
+      const store = await import('../lib/store.js');
+      let who = '';
+      try { who = new URL(req.url, 'http://x').searchParams.get('user') || ''; } catch {}
+      if (who) {
+        const t = store.getDb().users.find(u => u.username.toLowerCase() === String(who).toLowerCase());
+        if (!t) return fail(res, 404, 'No such user');
+        if (t.id !== user.id && !t.connections?.steam?.share)
+          return fail(res, 403, 'That library is not shared');
+        target = t;
+      }
+      const kc = target.connections?.steam;
+      const skey = kc?.key || getConfig().steam?.key || user.connections?.steam?.key;   // t175: server key covers key-less users
+      if (!skey || !kc?.id)
+        return fail(res, 400, 'Add a SteamID64 in Menu → My Connections first (the server\u2019s Steam key does the rest — or link your own key).');
+      const r = await fetchSteamLibrary(skey, kc.id);
+      if (!r.ok) return json(res, r.status, { error: r.error, setup: !!r.setup });
+      return ok(res, { user: target.username, ...r.data, cached: !!r.cached });
+    }
+
+    // ── t173: the GAME ROOM's Discord portal — public project-server facts ──
+    // (online + member counts from the invite, live names/channels when the
+    // owner has the server widget on). No auth: it's the same info the invite
+    // page shows. The user's OWN Discord opens by link — nothing private is
+    // ever read by this app.
+    if (method === 'GET' && pathname === '/api/discord/portal') {
+      const store = await import('../lib/store.js');
+      const cfg = store.getConfig();
+      const invite = (cfg.community?.discord || '').replace(/^.*discord\.gg\//, '').split(/[/?#]/)[0] || 'rbq2m9zZBs';
+      const ck = 'discordportal:' + invite;
+      const hit = cacheGetPub(ck);
+      if (hit) return ok(res, { ...hit, cached: true });
+      let out = { invite: 'https://discord.gg/' + invite, guildName: '', online: 0, members: 0, widgetOk: false, onlineNames: [] };
+      try {
+        const r = await fetch('https://discord.com/api/v10/invites/' + invite + '?with_counts=true', { headers: { 'User-Agent': 'HomeBinger (bug-report desk)' } });
+        if (r.status === 200) {
+          const j = await r.json();
+          out.guildName = j.guild?.name || '';
+          out.online = j.approximate_presence_count || 0;
+          out.members = j.approximate_member_count || 0;
+          const gid = j.guild?.id;
+          if (gid) {   // the widget is optional (Server Settings → Widget) — names when it's on
+            try {
+              const w = await fetch('https://discord.com/api/guilds/' + gid + '/widget.json', { headers: { 'User-Agent': 'HomeBinger (bug-report desk)' } });
+              if (w.status === 200) {
+                const wj = await w.json();
+                out.widgetOk = true;
+                out.onlineNames = (wj.members || []).slice(0, 12).map(m => m.username || m.nick || '').filter(Boolean);
+              }
+            } catch { /* widget is a bonus, never a failure */ }
+          }
+        }
+      } catch { /* offline — zeros are fine */ }
+      cacheSetPub(ck, out);
+      return ok(res, out);
+    }
+
     if (method === 'POST' && pathname === '/api/account/password') {
       const user = getSessionUser(req);
       if (!user) return fail(res, 401, 'Not logged in');
@@ -541,6 +686,10 @@ export async function handleApi(req, res, pathname) {
     if (method === 'GET' && pathname.startsWith('/img/')) {
       const _gp = pathname.split('/').map(decodeURIComponent);
       const source = _gp[2], key = _gp.slice(3).join('/');   // key may contain '/'
+      // t185: a SINGLE-segment /img/<file> (no source/key) is not a poster —
+      // it's one of the app's own images (public/img/…, e.g. the den's owner
+      // logo). Hand back to the static file server.
+      if (!_gp[3]) return false;
       {   // t123: per-user access guard — posters of hidden libraries 404
         const denied = deniedSectionsFor(req);
         if (denied) {
@@ -612,6 +761,71 @@ export async function handleApi(req, res, pathname) {
       const cfg = getConfig();
       const title = await resolveTvTitle(cfg).catch(() => null);
       return ok(res, { enabled: cfg.tv.enabled, idleMode: cfg.tv.mode, title });
+    }
+
+    // ═══ t186: WATCH PARTY — the theater's "watch with me" (Discord
+    // screenshare is impossible in-app; this is the store's own answer).
+    // Host-single-writer + SSE events + shared clock; see lib/party.js. ═══
+    if (pathname === '/api/party/time' && method === 'GET')
+      return ok(res, partyTime());                        // the shared clock (no auth — it's a clock)
+    // ═══ t201: the LAN address — the share panel's "same Wi‑Fi" link must
+    // never say localhost (a PHONE cannot load http://localhost:8181 — that's
+    // the phone itself). Authed: the host is always signed in. Also carries
+    // pagesOk — whether the public guest page is actually published, probed
+    // server-side (GitHub Pages 404s send no CORS headers, so the browser
+    // can't ask itself) and cached 15 min. ═══
+    if (pathname === '/api/netinfo' && method === 'GET') {
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in first.');
+      const flat = [].concat(...Object.values(os.networkInterfaces()))
+        .filter(i => i && i.family === 'IPv4' && !i.internal);
+      const lanIp = (flat.find(i => !i.address.startsWith('169.254.')) || flat[0] || {}).address || null;
+      return ok(res, { lanIp, pagesOk: await pagesOkCached() });
+    }
+    if (pathname === '/api/party' && method === 'GET')
+      return ok(res, partyState());                       // the marquee read (join/leave needs a login)
+    if (pathname === '/api/party' && method === 'DELETE') {
+      const user = getSessionUser(req);
+      const r = endParty(user);
+      return r.ok ? ok(res, r) : fail(res, 403, r.error);
+    }
+    if (pathname === '/api/party' && method === 'POST') {  // HOST creates (item = what's on the theater TV)
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in to host a watch party');
+      const body = await readBody(req);
+      const r = createParty(user, body.item);
+      return r.ok ? ok(res, r) : fail(res, 400, r.error);
+    }
+    if (pathname === '/api/party/join' && method === 'POST') {
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in to join the watch party');
+      const r = joinParty(user);
+      return r.ok ? ok(res, r) : fail(res, 400, r.error);
+    }
+    if (pathname === '/api/party/leave' && method === 'POST') {
+      const user = getSessionUser(req);
+      if (!user) return ok(res, { ok: true });            // idempotent goodbye
+      return ok(res, leaveParty(user));
+    }
+    if (pathname === '/api/party/host' && method === 'POST') {   // the single writer's heartbeat
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in first');
+      const body = await readBody(req);
+      const r = hostUpdate(user, body);
+      return r.ok ? ok(res, r) : fail(res, 403, r.error);
+    }
+    if (pathname === '/api/party/stall' && method === 'POST') {  // a guest buffered — the group waits
+      const user = getSessionUser(req);
+      if (!user) return fail(res, 401, 'Sign in first');
+      const body = await readBody(req);
+      const r = reportStall(user, body.on === true);
+      return r.ok ? ok(res, r) : fail(res, 403, r.error);
+    }
+    if (pathname === '/api/party/events' && method === 'GET') {  // SSE — one per party client
+      const user = getSessionUser(req);                   // ?vb_auth=<token> (EventSource can't send headers)
+      if (!user) return fail(res, 401, 'Sign in first');
+      subscribeParty(req, res, user);
+      return true;                                        // response stays open (chunked)
     }
 
     // ▶ PLAY a shelf item on the in-store TV: /api/play/<source>/<key>
@@ -825,26 +1039,9 @@ export async function handleApi(req, res, pathname) {
 
       // Whitelist-merge each section; masked secrets mean "keep current".
       const next = deepMerge(defaultConfig(), cfg);
-      // t155: the help-desk PC — the store's bug-report Discord invite
-      // (shown in the store; empty = the PC points at the owner instead)
-      if (incoming.community && typeof incoming.community === 'object') {
-        // t159: per-key merge — saving the invite must not wipe the channel id
-        // (and vice versa). Absent keys keep their current value.
-        next.community = { ...(cfg.community || {}) };
-        if (typeof incoming.community.discord === 'string')
-          next.community.discord = /^https?:\/\//i.test(incoming.community.discord.trim())
-            ? incoming.community.discord.trim().slice(0, 300)
-            : (cfg.community?.discord || defaultConfig().community.discord);   // t167: empty never blanks the GLOBAL chat
-        if (typeof incoming.community.channelId === 'string') {
-          // t159b: channel LINKS paste fine (discord.com/channels/… → the
-          // id), and a retired default id is swapped for the invite's real
-          // target so installs saved by b2r5 self-heal on their next save
-          let nc = normalizeChannelId(incoming.community.channelId);
-          if (RETIRED_CHANNEL_IDS.includes(nc)) nc = defaultConfig().community.channelId;
-          if (!nc) nc = cfg.community?.channelId || defaultConfig().community.channelId;   // t167: empty never blanks the GLOBAL chat
-          next.community.channelId = nc;
-        }
-      }
+      // t169: community is intentionally NOT writable — the bug-report
+      // Discord is pinned to the project's own server (store.js pins it
+      // on every load)
       // t96: version-notice controls (check kill-switch + feed URL override)
       if (incoming.version && typeof incoming.version === 'object') {
         next.version = {
@@ -873,6 +1070,16 @@ export async function handleApi(req, res, pathname) {
         if (incoming.jellyfin.apiKey !== undefined && incoming.jellyfin.apiKey !== null && incoming.jellyfin.apiKey !== MASK)
           next.jellyfin.apiKey = String(incoming.jellyfin.apiKey).trim();
         if (Array.isArray(incoming.jellyfin.sections)) next.jellyfin.sections = incoming.jellyfin.sections.map(String);
+      }
+      if (next.spotify) delete next.spotify;   // t182c: Spotify is gone — never carry old keys forward
+      if (next.youtube) delete next.youtube;  // t186: the YouTube key is gone too — the panel browses the real site; stale keys never carry forward
+      // t175/t186: the ADMIN's server-wide Steam key — one setup and every
+      // user gets their Steam library (each person still links their own
+      // SteamID64; personal keys remain an optional override)
+      if (incoming.steam && typeof incoming.steam === 'object') {
+        next.steam = next.steam || { key: '' };
+        if (incoming.steam.key !== undefined && incoming.steam.key !== null && incoming.steam.key !== MASK)
+          next.steam.key = String(incoming.steam.key).trim().slice(0, 100);
       }
       // free add-on sources — sections/feeds are opt-in ([] = off)
       if (incoming.archive) {
@@ -1097,6 +1304,14 @@ export async function handleApi(req, res, pathname) {
         if (!/^https?:\/\//.test(url)) return fail(res, 400, 'Enter the friend store address first');
         try { return ok(res, await friendAdapter.test({ url, token })); }
         catch (e) { return fail(res, 400, e.message); }
+      }
+      // t177: one-click key diagnosis for the den's per-server keys.
+      // Draft values win; MASK means "use what's saved".
+      const src = String(body.source || '');
+      if (src === 'steam') {
+        const key = (body.key && body.key !== MASK) ? String(body.key).trim() : (getConfig().steam?.key || '');
+        if (!key) return ok(res, { ok: false, error: 'No Steam key yet — paste one above and Save (or type one and test before saving).' });
+        return ok(res, await steamKeyCheck(key));
       }
       const sc = sourceConfig(String(body.source || ''));
       if (!sc?.adapter?.test) return fail(res, 400, 'Unknown source');

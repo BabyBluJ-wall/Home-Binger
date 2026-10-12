@@ -26,7 +26,7 @@ for (const f of ['README.md', 'LICENSE', 'CHANGELOG.md', 'START-HERE.txt', 'STAR
 // t93: the README's preview screenshots (docs/*.png) ride in the exe too —
 // without them the image links in the bundled README are dead.
 fs.mkdirSync(path.join(STAGE, 'docs'), { recursive: true });
-for (const img of ['og-home-binger.png', 'store-entrance.png', 'theater.png', 'dance-hall.png'])
+for (const img of ['og-home-binger.png', 'store-entrance.png', 'theater.png', 'dance-hall.png', 'game-room.png', 'watch-party.png', 'media-panel.png', 'settings.png'])   // t199: the README's refreshed gallery
   fs.cpSync(path.join(ROOT, 'docs', img), path.join(STAGE, 'docs', img));
 // t135: the 1.10.0 "what's new" gallery — the bundled README links these
 // (guarded: a clone without the gallery must still build, not crash)
@@ -47,7 +47,11 @@ fs.writeFileSync(path.join(STAGE, 'package.json'), JSON.stringify(pkg, null, 2))
 // ── package: Wine-free assembly from the official Electron win32 zip ──
 // (electron-packager needs Wine on non-Windows build machines just to stamp
 //  cosmetic exe metadata; hand-assembly produces the same app without it.)
-const EV = '33.2.1';
+// t179: castlabs ELECTRON WITH WIDEVINE — the Spotify Web Playback SDK
+// streams through the browser's DRM (EME), which plain Electron doesn't ship.
+// The castlabs build (+wvcus) fetches Google's Widevine CDM on first launch
+// through the component updater, so Spotify finally PLAYS in the app.
+const EV = '44.5.1+wvcus';
 const zip = fs.readdirSync(path.join(process.env.HOME || '/', '.cache', 'electron'), { withFileTypes: true })
   .flatMap(d => fs.existsSync(path.join(process.env.HOME || '/', '.cache', 'electron', d.name))
     ? fs.readdirSync(path.join(process.env.HOME || '/', '.cache', 'electron', d.name)).map(f => path.join(process.env.HOME || '/', '.cache', 'electron', d.name, f))
@@ -58,6 +62,7 @@ const DEST = path.join(OUT, 'HomeBinger-win32-x64');
 fs.mkdirSync(DEST, { recursive: true });
 execFileSync('unzip', ['-q', '-o', zip, '-d', DEST], { stdio: 'inherit' });
 fs.renameSync(path.join(DEST, 'electron.exe'), path.join(DEST, 'HomeBinger.exe'));
+fs.rmSync(path.join(DEST, 'electron.exe.sig'), { force: true });   // t179: stale after the icon edit — the CDM doesn't need it
 // t80: brand the exe with the HB logo (pure-JS resource edit — no Wine needed)
 try { const { setExeIcon } = await import('./set-exe-icon.mjs'); await setExeIcon(path.join(DEST, 'HomeBinger.exe')); }
 catch (e) { console.log('icon: skipped (' + e.message + ')'); }

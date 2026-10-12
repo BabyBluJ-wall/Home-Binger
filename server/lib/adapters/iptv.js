@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { getSecret } from '../store.js';
-import { loadEpg, nowNext } from './epg.js';   // t139: real program data (XMLTV)
+import { loadEpg, loadEpgFast, warmEpg, nowNext } from './epg.js';   // t139: real program data (XMLTV) · t185: fast-serve + background warm
 
 const API_BASE = 'https://iptv-org.github.io/api';
 const CACHE_TTL = 10 * 60 * 1000;
@@ -280,6 +280,7 @@ const KNOWN_EPG = new Map([
   ['https://raw.githubusercontent.com/BuddyChewChew/tubi-scraper/refs/heads/main/tubi_playlist.m3u', 'https://raw.githubusercontent.com/BuddyChewChew/tubi-scraper/refs/heads/main/tubi_epg.xml'],
 ]);
 const epgIndex = [];            // rebuilt on every library() build: { key, channelId, epgUrl }
+let epgWarmAt = 0, epgWarmTimer = null;   // t185: the background EPG warmer
 let epgSnap = null;             // { at, epg } — computed view, cached 60s
 
 // The Guide calls this on open: { at, epg: { [itemKey]: { now:{t,s,e,ep,d}, next:{t,s,e} } } }
@@ -300,26 +301,36 @@ export async function epgSnapshot(at = 0) {
       bySource.get(it.epgUrl).push(it);
     }
     const epg = {};
+    let complete = true;                       // t185: a slow source serves LATE, not never
     await Promise.all([...bySource.entries()].map(async ([url, items]) => {
       let data;
-      try { data = await loadEpg(url); }
-      catch (e) { console.warn(`[iptv] EPG ${url} failed: ${e.message}`); return; }
+      try { data = await loadEpgFast(url); }
+      catch (e) {
+        if (!/slow/.test(e.message || '')) console.warn(`[iptv] EPG ${url} failed: ${e.message}`);
+        complete = false;                      // its channels keep the honest ● LIVE line
+        return;
+      }
       for (const { key, channelId } of items) {
         const nn = nowNext(data.byChannel.get(channelId), t || undefined);
         if (nn) epg[key] = nn;
       }
     }));
+    epg.__complete = complete;                 // the caller caches only complete snapshots
     return epg;
   };
   if (!slice) {
     if (epgSnap && Date.now() - epgSnap.at < 60000) return epgSnap;
     const epg = await build(0);
-    epgSnap = { at: Date.now(), epg };
-    return epgSnap;
+    const wasComplete = epg.__complete !== false;
+    delete epg.__complete;
+    if (wasComplete) epgSnap = { at: Date.now(), epg };   // partials never pin — the next ask picks up what warmed
+    return { at: Date.now(), epg };
   }
   // a future (or barely-past) slice — recomputed per call from the 6h XML
   // cache (cheap: ~a thousand nowNext lookups) so no second cache is needed
-  return { at: realNow, sel: slice, epg: await build(slice) };
+  const epg = await build(slice);
+  delete epg.__complete;
+  return { at: realNow, sel: slice, epg };
 }
 
 // t144: the last dedupe pass — /api/library surfaces it so the admin can SEE
@@ -341,6 +352,7 @@ export const iptvAdapter = {
     const packs = packsOf(cfg);            // t138: provider packs (any .m3u; the t137 single URL folds in)
     epgIndex.length = 0;                  // t139: rebuilt below as pack items assemble
     epgSnap = null;                       // …and the EPG view recomputes on next request
+    epgWarmAt = 0;                        // t185: re-warm on the next tick
     if (!wanted.size && !packs.length) return [];
     let out = [];
     let channels = [], streams = [], langMap = null;
@@ -471,6 +483,20 @@ export const iptvAdapter = {
     if (epgIndex.length) {
       const keep = new Set(out.map(i => i.key));
       for (let i = epgIndex.length - 1; i >= 0; i--) if (!keep.has(epgIndex[i].key)) epgIndex.splice(i, 1);
+    }
+    // t185: warm every EPG source in the BACKGROUND the moment the library
+    // builds (and re-warm every 5h, before the 6h TTL lapses) — a Guide open
+    // then reads warm local data instead of racing the internet.
+    if (epgIndex.length) {
+      epgWarmAt = Date.now();
+      warmEpg([...new Set(epgIndex.map(i => i.epgUrl))]);
+      if (!epgWarmTimer) {                              // re-warm every 5h, before the 6h TTL lapses
+        epgWarmTimer = setInterval(() => {
+          if (epgIndex.length && Date.now() - epgWarmAt > 4.5 * 3600e3)
+            warmEpg([...new Set(epgIndex.map(i => i.epgUrl))]);
+        }, 10 * 60e3);
+        epgWarmTimer.unref?.();
+      }
     }
     // stable, browsable order: group, then CURATED FIRST, then name (t125: with
     // the unverified tier on, the officially-free channels keep the front rows —
